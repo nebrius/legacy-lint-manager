@@ -1,1 +1,43 @@
-console.log('Hello from legacy-lint-manager!');
+#!/usr/bin/env node
+
+import { Command } from '@commander-js/extra-typings';
+
+import { legacyExistingErrors } from './legacyExistingErrors.js';
+import { DEFAULT_PRAGMA } from './types.js';
+import { validate } from './validate.js';
+
+const DEFAULT_DATABASE_FILE = 'lint-legacies.json';
+
+function addCommonOptions<Args extends unknown[]>(command: Command<Args>) {
+  return command
+    .option(
+      '--database-file <file>',
+      'path to the legacies database file',
+      DEFAULT_DATABASE_FILE
+    )
+    .option(
+      '--pragma <pragma>',
+      'comment pragma used to mark legacied lint errors',
+      DEFAULT_PRAGMA
+    );
+}
+
+const program = new Command()
+  .name('legacy-lint-manager')
+  .description(
+    'A tool for enabling ESLint/Oxlint rules on codebases with legacy errors'
+  );
+
+addCommonOptions(program.command('validate'))
+  .description('Validate that legacied lint errors are still accurate')
+  .action((options) => {
+    validate(options);
+  });
+
+addCommonOptions(program.command('legacy-errors'))
+  .description('Mark existing lint errors as legacied')
+  .action((options) => {
+    legacyExistingErrors(options);
+  });
+
+program.parse();

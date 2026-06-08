@@ -14,13 +14,19 @@
   "author": "Bryan Hughes <bryan@nebri.us>",
   "type": "module",
   "main": "dist/api.js",
+  "bin": {
+    "legacy-lint-manager": "dist/cli.js"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc && chmod +x dist/cli.js",
     "lint": "TIMING=1 eslint --report-unused-disable-directives \"**/*.{ts,tsx,mts,js,jsx,mjs}\"",
     "lint:fix": "eslint --fix \"**/*.{js,jsx,mjs,ts,tsx,mts}\"",
+    "start": "node dist/cli.js",
     "test": "vitest run"
   },
   "dependencies": {
+    "@commander-js/extra-typings": "15.0.0",
+    "commander": "15.0.0",
     "undici-types": "6.21.0"
   },
   "devDependencies": {
