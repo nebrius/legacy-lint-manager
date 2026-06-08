@@ -1,0 +1,42 @@
+{
+  "name": "legacy-lint-manager",
+  "version": "1.0.0",
+  "description": "A tool for enabling ESLint/Oxlint rules on codebases with legacy errors ",
+  "homepage": "https://github.com/nebrius/legacy-lint-manager#readme",
+  "bugs": {
+    "url": "https://github.com/nebrius/legacy-lint-manager/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nebrius/legacy-lint-manager.git"
+  },
+  "license": "MIT",
+  "author": "Bryan Hughes <bryan@nebri.us>",
+  "type": "module",
+  "main": "dist/api.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "TIMING=1 eslint --report-unused-disable-directives \"**/*.{ts,tsx,mts,js,jsx,mjs}\"",
+    "lint:fix": "eslint --fix \"**/*.{js,jsx,mjs,ts,tsx,mts}\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "undici-types": "6.21.0"
+  },
+  "devDependencies": {
+    "@eslint/config-helpers": "^0.6.0",
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^22.19.19",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.6",
+    "eslint-plugin-simple-import-sort": "^13.0.0",
+    "globals": "^17.6.0",
+    "import-integrity-lint": "^1.1.1",
+    "typescript-eslint": "^8.60.1",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "eslint": ">=9.0.0"
+  }
+}
