@@ -13,6 +13,7 @@
       ],
       "program": "${workspaceFolder}/dist/cli.js",
       "args": ["validate"],
+      "preLaunchTask": "npm: build",
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js"
       ]

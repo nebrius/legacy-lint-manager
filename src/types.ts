@@ -6,3 +6,10 @@ export type CommonOptions = {
   databaseFile: string;
   rootDir: string;
 };
+
+export type Comment = {
+  rules: string[];
+  comment?: string;
+  file: string;
+  line: number;
+};
