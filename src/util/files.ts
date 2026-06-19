@@ -31,6 +31,9 @@ export function getFileList(rootDir: string) {
         ],
       });
     }
+
+    // If we reach the root of the repo, stop looking for more ignore files
+    // since git wouldn't include them either
     if (contents.includes('.git')) {
       break;
     }
@@ -46,19 +49,14 @@ export function getFileList(rootDir: string) {
   const filteredFilesList: string[] = [];
   outer: for (const file of potentialFilesList) {
     for (const ignore of ignoreFiles) {
-      const relativePath = relative(ignore.path, file);
+      const relativePath = relative(dirname(ignore.path), file);
       if (relativePath.startsWith('..') || relativePath === '') {
         // This file is either outside the directory where the ignore file is,
         // or is the ignore file itself (represented by ''), so the ignore file
         // doesn't apply to it
         continue;
       }
-      if (
-        ignore.ignores.some((ig) => {
-          console.log(ignore.path, file);
-          return ig.ignores(relativePath);
-        })
-      ) {
+      if (ignore.ignores.some((ig) => ig.ignores(relativePath))) {
         continue outer;
       }
     }
