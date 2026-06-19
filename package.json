@@ -25,11 +25,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@commander-js/extra-typings": "15.0.0",
-    "commander": "15.0.0",
-    "ignore": "7.0.5",
-    "oxc": "1.0.1",
-    "typebox": "1.2.8"
+    "@commander-js/extra-typings": "^15.0.0",
+    "commander": "^15.0.0",
+    "ignore": "^7.0.5",
+    "oxc-parser": "^0.135.0",
+    "typebox": "^1.2.8"
   },
   "devDependencies": {
     "@eslint/config-helpers": "^0.6.0",
