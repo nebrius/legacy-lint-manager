@@ -1,7 +1,7 @@
 {
   "name": "legacy-lint-manager",
   "version": "1.0.0",
-  "description": "A tool for enabling ESLint/Oxlint rules on codebases with legacy errors ",
+  "description": "A monorepo-aware tool for enabling ESLint/Oxlint rules on codebases with legacy errors",
   "homepage": "https://github.com/nebrius/legacy-lint-manager#readme",
   "bugs": {
     "url": "https://github.com/nebrius/legacy-lint-manager/issues"
@@ -27,7 +27,8 @@
   "dependencies": {
     "@commander-js/extra-typings": "15.0.0",
     "commander": "15.0.0",
-    "undici-types": "6.21.0"
+    "ignore": "7.0.5",
+    "typebox": "1.2.8"
   },
   "devDependencies": {
     "@eslint/config-helpers": "^0.6.0",

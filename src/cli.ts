@@ -8,7 +8,7 @@ import { validate } from './validate.js';
 
 const DEFAULT_DATABASE_FILE = 'lint-legacies.json';
 
-function addCommonOptions<Args extends unknown[]>(command: Command<Args>) {
+function addCommonOptions(command: Command) {
   return command
     .option(
       '--database-file <file>',
@@ -19,6 +19,11 @@ function addCommonOptions<Args extends unknown[]>(command: Command<Args>) {
       '--pragma <pragma>',
       'comment pragma used to mark legacied lint errors',
       DEFAULT_PRAGMA
+    )
+    .option(
+      '--root-dir <dir>',
+      'root directory to search for files',
+      process.cwd()
     );
 }
 
