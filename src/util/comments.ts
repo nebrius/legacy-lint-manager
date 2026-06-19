@@ -1,3 +1,5 @@
+import { parseSync } from 'oxc-parser';
+
 import type { Comment } from '../types.js';
 
 // Note: these entries MUST be specified from longest to shortest
@@ -19,40 +21,22 @@ export function getFileComments({
   filePath: string;
   fileContents: string;
 }) {
-  const lines = fileContents.split('\n');
-  const comments: Comment[] = [];
-  let currentBlockComment = '';
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.includes('//')) {
-      const parsedComment = parseCommentText(line.split('//')[1].trim());
-      if (parsedComment) {
-        comments.push({
-          ...parsedComment,
-          file: filePath,
-          line: i + 1,
-        });
-      }
-    } else if (line.includes('/*')) {
-      currentBlockComment = line.split('/*')[1].trim();
-    } else if (line.includes('*/')) {
-      currentBlockComment += ' ' + line.split('*/')[0].trim();
-      const parsedComment = parseCommentText(currentBlockComment);
-      if (parsedComment) {
-        comments.push({
-          ...parsedComment,
-          file: filePath,
-          line: i + 1,
-        });
-      }
-      currentBlockComment = '';
-    } else if (currentBlockComment) {
-      // We normalize multi-line comments into a single line form to make later
-      // processing easier
-      currentBlockComment += ' ' + line.trim();
+  const { comments } = parseSync(filePath, fileContents);
+  const commentsList: Comment[] = [];
+  for (const comment of comments) {
+    const parsedComment = parseCommentText(
+      comment.value.trim().replaceAll('\n', ' ')
+    );
+    if (parsedComment) {
+      const line = fileContents.slice(0, comment.start).split('\n').length;
+      commentsList.push({
+        ...parsedComment,
+        file: filePath,
+        line,
+      });
     }
   }
-  return comments;
+  return commentsList;
 }
 
 function parseCommentText(
@@ -62,9 +46,16 @@ function parseCommentText(
   let prefixFound = false;
   for (const prefix of DISABLE_PREFIXES) {
     if (text.startsWith(prefix)) {
-      text = text.substring(prefix.length).trim();
-      prefixFound = true;
-      break;
+      const strippedText = text.substring(prefix.length);
+
+      // We have to make sure that the first character in the remaining test is
+      // a whitespace character or the string is empty (representing disabling
+      // all rules), otherwise it's not a real disable comment
+      if (strippedText.match(/^\s/) || strippedText.length === 0) {
+        text = strippedText.trim();
+        prefixFound = true;
+        break;
+      }
     }
   }
 
@@ -73,10 +64,19 @@ function parseCommentText(
     return undefined;
   }
 
-  // Split the comment into rules and optional comment
-  const commentParts = text.split('--');
-  const rules = commentParts[0].split(',').map((rule) => rule.trim());
+  // Split the comment into rules and optional comment. If a comment has a
+  // second '--' after the first comment separator, then that second one is part
+  // of the comment and not a second separator.
+  const commentIndex = text.indexOf('--');
+  const commentParts =
+    commentIndex !== -1
+      ? [text.slice(0, commentIndex), text.slice(commentIndex + 2)]
+      : [text];
+  const rules = commentParts[0]
+    .split(',')
+    .map((rule) => rule.trim())
+    .filter((rule) => rule.length > 0);
   const comment = commentParts[1]?.trim();
 
-  return { rules, comment };
+  return { rules, disabledAll: rules.length === 0, comment };
 }

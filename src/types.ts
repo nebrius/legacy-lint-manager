@@ -9,6 +9,7 @@ export type CommonOptions = {
 
 export type Comment = {
   rules: string[];
+  disabledAll: boolean;
   comment?: string;
   file: string;
   line: number;
