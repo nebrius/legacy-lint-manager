@@ -12,7 +12,7 @@
         "<node_internals>/**"
       ],
       "program": "${workspaceFolder}/dist/cli.js",
-      "args": ["validate"],
+      "args": ["validate", "--verbose"],
       "preLaunchTask": "npm: build",
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js"

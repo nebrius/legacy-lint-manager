@@ -24,7 +24,8 @@ function addCommonOptions(command: Command) {
       '--root-dir <dir>',
       'root directory to search for files',
       process.cwd()
-    );
+    )
+    .option('--verbose', 'enable verbose logging', false);
 }
 
 const program = new Command()
