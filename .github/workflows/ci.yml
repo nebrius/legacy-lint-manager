@@ -23,8 +23,9 @@ jobs:
       - name: Run lint
         run: npm run lint
       - name: Run Jest tests
-        run: npm test
-      # - name: Upload coverage reports to Codecov
-      #   uses: codecov/codecov-action@aa56896cf108bd10b5eb883cd1d24196da57f695 # v5.5.4
-      #   with:
-      #     token: ${{ secrets.CODECOV_TOKEN }}
+        run: npm test -- --coverage
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: nebrius/legacy-lint-manager

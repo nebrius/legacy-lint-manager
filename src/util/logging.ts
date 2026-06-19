@@ -1,6 +1,6 @@
-export function warn(msg: string) {
-  console.warn(`[Warn]: ${msg}`);
-}
+// export function warn(msg: string) {
+//   console.warn(`[Warn]: ${msg}`);
+// }
 
 let verboseEnabled = false;
 export function setVerbose(verbose: boolean) {
