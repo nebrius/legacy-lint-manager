@@ -28,11 +28,10 @@ export function getFileComments({
       comment.value.trim().replaceAll('\n', ' ')
     );
     if (parsedComment) {
-      const line = fileContents.slice(0, comment.start).split('\n').length;
       commentsList.push({
         ...parsedComment,
         file: filePath,
-        line,
+        line: fileContents.slice(0, comment.start).split('\n').length,
       });
     }
   }
@@ -75,6 +74,9 @@ function parseCommentText(
   const rules = commentParts[0]
     .split(',')
     .map((rule) => rule.trim())
+    // In the case of a disable without a specific list of rules (aka disable
+    // all), the rules array will contain a single empty string that we need to
+    // filter out here
     .filter((rule) => rule.length > 0);
   const comment = commentParts[1]?.trim();
 

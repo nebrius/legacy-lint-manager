@@ -28,6 +28,7 @@
     "@commander-js/extra-typings": "^15.0.0",
     "commander": "^15.0.0",
     "ignore": "^7.0.5",
+    "nanoid": "5.1.11",
     "oxc-parser": "^0.135.0",
     "typebox": "^1.2.8"
   },

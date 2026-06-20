@@ -3,14 +3,13 @@ import { readFileSync } from 'node:fs';
 import type { CommonOptions } from './types.js';
 import { getFileComments } from './util/comments.js';
 import { getFileList } from './util/files.js';
-import { setVerbose } from './util/logging.js';
-import { time } from './util/time.js';
+import { setVerbose, time } from './util/logging.js';
 
 export function validate(options: CommonOptions) {
   setVerbose(options.verbose);
-  const files = time('getFileList', () => getFileList(options.rootDir));
+  const files = time('Get file list', () => getFileList(options.rootDir));
 
-  time('getFileComments', () => {
+  time('Get file comments', () => {
     for (const file of files) {
       const comments = getFileComments({
         filePath: file,
