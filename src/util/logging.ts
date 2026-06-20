@@ -7,7 +7,7 @@ export function setVerbose(verbose: boolean) {
   verboseEnabled = verbose;
 }
 
-export function debug(msg: string) {
+function debug(msg: string) {
   if (verboseEnabled) {
     console.debug(`[Debug]: ${msg}`);
   }

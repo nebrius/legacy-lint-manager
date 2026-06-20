@@ -42,7 +42,7 @@
     "eslint-plugin-prettier": "^5.5.6",
     "eslint-plugin-simple-import-sort": "^13.0.0",
     "globals": "^17.6.0",
-    "import-integrity-lint": "^1.1.1",
+    "import-integrity-lint": "^1.1.2",
     "typescript-eslint": "^8.60.1",
     "vitest": "^3.2.4"
   },
