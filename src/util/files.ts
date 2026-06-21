@@ -50,12 +50,6 @@ export function getFileList(rootDir: string) {
   outer: for (const file of potentialFilesList) {
     for (const ignore of ignoreFiles) {
       const relativePath = relative(dirname(ignore.path), file);
-      if (relativePath.startsWith('..') || relativePath === '') {
-        // This file is either outside the directory where the ignore file is,
-        // or is the ignore file itself (represented by ''), so the ignore file
-        // doesn't apply to it
-        continue;
-      }
       if (ignore.ignores.some((ig) => ig.ignores(relativePath))) {
         continue outer;
       }
