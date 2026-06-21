@@ -1,12 +1,18 @@
 import { readFileSync } from 'node:fs';
 
-import type { CommonOptions, LegacyComment, ValidationError } from './types.js';
-import { getFileComments, parseDisableComment } from './util/comments.js';
-import { getFileList } from './util/files.js';
-import { setVerbose, time } from './util/logging.js';
+import type {
+  CommonOptions,
+  LegacyComment,
+  ValidationError,
+} from '../types.js';
+import { loadDatabase } from '../util/db.js';
+import { getFileList } from '../util/files.js';
+import { setVerbose, time } from '../util/logging.js';
+import { getFileComments, parseDisableComment } from './comments.js';
 
 export function validate(options: CommonOptions) {
   setVerbose(options.verbose);
+  const database = loadDatabase(options.databaseFile);
   const files = time('Get file list', () => getFileList(options.rootDir));
 
   const legacyComments: LegacyComment[] = [];

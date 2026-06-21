@@ -1,2 +1,2 @@
-export { validate } from './validate.js';
-export { legacyExistingErrors } from './legacyExistingErrors.js';
+export { validate } from './validate/validate.js';
+export { legacyExistingErrors } from './legacy/legacyExistingErrors.js';

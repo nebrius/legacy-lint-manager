@@ -2,6 +2,10 @@
 //   console.warn(`[Warn]: ${msg}`);
 // }
 
+export function error(msg: string) {
+  console.error(`[Error]: ${msg}`);
+}
+
 let verboseEnabled = false;
 export function setVerbose(verbose: boolean) {
   verboseEnabled = verbose;

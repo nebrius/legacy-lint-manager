@@ -2,9 +2,9 @@
 
 import { Command } from '@commander-js/extra-typings';
 
-import { legacyExistingErrors } from './legacyExistingErrors.js';
+import { legacyExistingErrors } from './legacy/legacyExistingErrors.js';
 import { DEFAULT_PRAGMA } from './types.js';
-import { validate } from './validate.js';
+import { validate } from './validate/validate.js';
 
 const DEFAULT_DATABASE_FILE = 'lint-legacies.json';
 
