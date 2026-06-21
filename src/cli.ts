@@ -36,6 +36,7 @@ const program = new Command()
 
 addCommonOptions(program.command('validate'))
   .description('Validate that legacied lint errors are still accurate')
+  .option('--update', 'update the database', false)
   .action((options) => {
     validate(options);
   });

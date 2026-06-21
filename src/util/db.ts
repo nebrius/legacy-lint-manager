@@ -32,6 +32,7 @@ export class Database {
       throw new Error(errorMessage);
     }
     this.database = databaseContents;
+    this.database.ids = this.database.ids.sort();
   }
 
   public getIds() {

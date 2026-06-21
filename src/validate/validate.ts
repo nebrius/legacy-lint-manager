@@ -5,14 +5,15 @@ import type {
   LegacyComment,
   ValidationError,
 } from '../types.js';
-import { loadDatabase } from '../util/db.js';
+import { Database } from '../util/db.js';
 import { getFileList } from '../util/files.js';
-import { setVerbose, time } from '../util/logging.js';
+import { error, info, setVerbose, time } from '../util/logging.js';
 import { getFileComments, parseDisableComment } from './comments.js';
+import { validateIds } from './ids.js';
 
-export function validate(options: CommonOptions) {
+export function validate(options: CommonOptions & { update: boolean }) {
   setVerbose(options.verbose);
-  const database = loadDatabase(options.databaseFile);
+  const database = new Database(options.databaseFile);
   const files = time('Get file list', () => getFileList(options.rootDir));
 
   const legacyComments: LegacyComment[] = [];
@@ -36,18 +37,35 @@ export function validate(options: CommonOptions) {
     }
   });
 
-  // Validate there are no duplicate IDs
-  const ids = new Set<string>();
-  for (const comment of legacyComments) {
-    if (ids.has(comment.id)) {
-      validationErrors.push({
-        message: `Duplicate ID: ${comment.id}`,
-        file: comment.file,
-        line: comment.line,
-      });
+  const results = time('Validate IDs', () =>
+    validateIds({
+      database,
+      validationErrors,
+      legacyComments,
+    })
+  );
+
+  if (validationErrors.length > 0) {
+    error('Validation errors:');
+    for (const validationError of validationErrors) {
+      error(`${validationError.file}:${validationError.line.toString()}`);
+      error(`  ${validationError.message}`);
     }
-    ids.add(comment.id);
+    process.exit(1);
   }
 
-  console.log(legacyComments);
+  // Check if there were any unused IDs. Unused IDs are legacied errors listed
+  // in the DB that couldn't be found in code, aka errors that were fixed
+  if (results.unusedIds.length > 0) {
+    if (options.update) {
+      info('Legacied lint errors were fixed, updating database...');
+      database.setIds(results.usedIds.sort());
+      database.saveDatabase();
+    } else {
+      error(
+        'Legacied lint errors were fixed, good job! Run with --update to update the database.'
+      );
+      process.exit(1);
+    }
+  }
 }

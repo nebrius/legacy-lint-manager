@@ -22,6 +22,11 @@ describe('Database', () => {
       expect(database.getIds()).toEqual([]);
     });
 
+    it('sorts the ids when loading the database file', () => {
+      const database = new Database(databasePath('unsorted-ids.json'));
+      expect(database.getIds()).toEqual(['a1b2c3d4', 'm5x9q2w1', 'z9y8x7w6']);
+    });
+
     describe('with an invalid database file', () => {
       it('appends the single validation error inline when ids contains a non-string', () => {
         expect(() => new Database(databasePath('non-string-ids.json'))).toThrow(
@@ -57,10 +62,10 @@ describe('Database', () => {
   });
 
   describe('setIds', () => {
-    it('replaces the ids returned by getIds', () => {
+    it('replaces the ids returned by getIds without re-sorting them', () => {
       const database = new Database(databasePath('valid.json'));
-      database.setIds(['new1', 'new2']);
-      expect(database.getIds()).toEqual(['new1', 'new2']);
+      database.setIds(['zebra', 'apple']);
+      expect(database.getIds()).toEqual(['zebra', 'apple']);
     });
 
     it('can clear all ids', () => {
