@@ -132,5 +132,5 @@ docs/.vitepress/cache
 
 .DS_Store
 
-__test__
+__tests__
 src
