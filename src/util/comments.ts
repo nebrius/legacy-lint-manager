@@ -31,7 +31,7 @@ export function getFileComments({
       commentsList.push({
         ...parsedComment,
         file: filePath,
-        line: fileContents.slice(0, comment.start).split('\n').length,
+        line: fileContents.slice(0, comment.end).split('\n').length,
       });
     }
   }

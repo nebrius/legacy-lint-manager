@@ -47,10 +47,12 @@ export function parseResults(results: unknown): LintErrors {
         // Guaranteed to exist due to the has check above
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const fileEntry = lintErrors.get(filePath)!;
-        if (!fileEntry.has(message.line)) {
-          fileEntry.set(message.line, []);
+        // We want line numbers to be 0-indexed, not 1-indexed
+        const line = message.line - 1;
+        if (!fileEntry.has(line)) {
+          fileEntry.set(line, []);
         }
-        fileEntry.get(message.line)?.push(message.ruleId);
+        fileEntry.get(line)?.push(message.ruleId);
       }
     }
     return lintErrors;
@@ -68,7 +70,8 @@ export function parseResults(results: unknown): LintErrors {
       let lineNumber: number | undefined;
       for (const label of diagnostic.labels) {
         if (Value.Check(SpanSchema, label)) {
-          lineNumber = label.span.line;
+          // We want line numbers to be 0-indexed, not 1-indexed
+          lineNumber = label.span.line - 1;
         }
       }
 

@@ -1,3 +1,4 @@
+// eslint-disable-next-line simple-import-sort/imports
 import { readFileSync } from 'node:fs';
 
 import type {
@@ -8,7 +9,7 @@ import type {
 import { Database } from '../util/db.js';
 import { getFileList } from '../util/files.js';
 import { error, info, setVerbose, time } from '../util/logging.js';
-import { getFileComments, parseDisableComment } from './comments.js';
+import { getFileComments, parseDisableComment } from '../util/comments.js';
 import { validateIds } from './ids.js';
 
 export function validate(options: CommonOptions & { update: boolean }) {

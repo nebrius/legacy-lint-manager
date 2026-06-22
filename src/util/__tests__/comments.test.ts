@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Comment, ValidationError } from '../../types.js';
 import { DEFAULT_PRAGMA } from '../../types.js';
-import { getFileComments, parseDisableComment } from '../comments.js';
+import { getFileComments, parseDisableComment } from '../../util/comments.js';
 
 function parse(fileContents: string, filePath = 'test.ts') {
   return getFileComments({ filePath, fileContents });
@@ -249,12 +249,12 @@ describe('Comment parsing', () => {
       expect(result[0].disabledAll).toBe(false);
     });
 
-    it('records a multi-line block comment at its opening line', () => {
+    it('records a multi-line block comment at its closing line', () => {
       const contents = [
         '/* eslint-disable no-console,',
         '   no-debugger */',
       ].join('\n');
-      expect(parse(contents)[0].line).toBe(1);
+      expect(parse(contents)[0].line).toBe(2);
     });
   });
 
