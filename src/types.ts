@@ -29,4 +29,7 @@ export type ValidationError = {
 };
 
 // Mapping from file path to line number to rules
-export type LintErrors = Map<string, Map<number, string[]>>;
+export type LintErrors = {
+  type: 'oxlint' | 'eslint';
+  errors: Map<string, Map<number, string[]>>;
+};

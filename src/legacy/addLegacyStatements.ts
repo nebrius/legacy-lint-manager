@@ -3,8 +3,9 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import type { LintErrors } from '../types.js';
 import { getFileComments } from '../util/comments.js';
 
-export function addLegacyStatements(lintErrors: LintErrors) {
-  for (const [filePath, fileErrors] of lintErrors) {
+export function addLegacyStatements(pragma: string, lintErrors: LintErrors) {
+  const disablePreamble = `${lintErrors.type}-disable-next-line`;
+  for (const [filePath, fileErrors] of lintErrors.errors) {
     // Get comments so we can check if we need to add to an existing disable
     const fileContents = readFileSync(filePath, 'utf-8');
     const fileContentsByLine = fileContents.split('\n');
@@ -34,7 +35,7 @@ export function addLegacyStatements(lintErrors: LintErrors) {
             new Set([...fileComment.rules, ...rules])
           );
           fileContentsByLine[line - 1] =
-            `// eslint-disable-next-line ${combinedRules.join(', ')}`;
+            `// ${disablePreamble} ${combinedRules.join(', ')} -- ${pragma}`;
           continue outer;
         }
       }
@@ -42,7 +43,7 @@ export function addLegacyStatements(lintErrors: LintErrors) {
       fileContentsByLine.splice(
         line,
         0,
-        `// eslint-disable-next-line ${rules.join(', ')}`
+        `// ${disablePreamble} ${rules.join(', ')} -- ${pragma}`
       );
     }
 

@@ -36,17 +36,21 @@ const SpanSchema = TypeBox.Object({
 const OXLINT_CODE_REGEX = /^(.*?)\((.*?)\)$/;
 
 export function parseResults(results: unknown): LintErrors {
-  if (Value.Check(EslintSchema, results)) {
-    const lintErrors: LintErrors = new Map();
+  // We check if this is an array before calling Value check as a performance
+  // optimization for Oxlint. Since Oxlint is an object, not an array, we can
+  // skip verifying the entire results object (which may be large) against
+  // ESLint's schema
+  if (Array.isArray(results) && Value.Check(EslintSchema, results)) {
+    const lintErrors: LintErrors = { type: 'eslint', errors: new Map() };
     for (const file of results) {
       const { filePath } = file;
       for (const message of file.messages) {
-        if (!lintErrors.has(filePath)) {
-          lintErrors.set(filePath, new Map());
+        if (!lintErrors.errors.has(filePath)) {
+          lintErrors.errors.set(filePath, new Map());
         }
         // Guaranteed to exist due to the has check above
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const fileEntry = lintErrors.get(filePath)!;
+        const fileEntry = lintErrors.errors.get(filePath)!;
         // We want line numbers to be 0-indexed, not 1-indexed
         const line = message.line - 1;
         if (!fileEntry.has(line)) {
@@ -58,7 +62,7 @@ export function parseResults(results: unknown): LintErrors {
     return lintErrors;
   }
   if (Value.Check(OxlintSchema, results)) {
-    const lintErrors: LintErrors = new Map();
+    const lintErrors: LintErrors = { type: 'oxlint', errors: new Map() };
     for (const diagnostic of results.diagnostics) {
       // A missing code means that an error happened before Oxlint was able to
       // lint the file, such as a syntax error. We don't care about these cases.
@@ -87,12 +91,12 @@ export function parseResults(results: unknown): LintErrors {
       }
 
       // Save the lint error
-      if (!lintErrors.has(diagnostic.filename)) {
-        lintErrors.set(diagnostic.filename, new Map());
+      if (!lintErrors.errors.has(diagnostic.filename)) {
+        lintErrors.errors.set(diagnostic.filename, new Map());
       }
       // Guaranteed to exist due to the has check above
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const fileEntry = lintErrors.get(diagnostic.filename)!;
+      const fileEntry = lintErrors.errors.get(diagnostic.filename)!;
       if (!fileEntry.has(lineNumber)) {
         fileEntry.set(lineNumber, []);
       }
