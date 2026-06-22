@@ -19,8 +19,10 @@
   },
   "scripts": {
     "build": "tsc && chmod +x dist/cli.js",
-    "lint": "TIMING=1 eslint --report-unused-disable-directives \"**/*.{ts,tsx,mts,js,jsx,mjs}\"",
-    "lint:fix": "eslint --fix \"**/*.{js,jsx,mjs,ts,tsx,mts}\"",
+    "lint": "npm run lint:eslint && npm run lint:oxlint",
+    "lint:eslint": "TIMING=1 eslint --report-unused-disable-directives \"**/*.{ts,tsx,mts,js,jsx,mjs}\"",
+    "lint:eslint:fix": "eslint --fix \"**/*.{js,jsx,mjs,ts,tsx,mts}\"",
+    "lint:oxlint": "oxlint --type-aware",
     "start": "node dist/cli.js",
     "test": "vitest run"
   },
@@ -43,6 +45,9 @@
     "eslint-plugin-simple-import-sort": "^13.0.0",
     "globals": "^17.6.0",
     "import-integrity-lint": "^1.1.2",
+    "oxlint": "1.70.0",
+    "oxlint-tsgolint": "0.23.0",
+    "typescript": "6.0.3",
     "typescript-eslint": "^8.60.1",
     "vitest": "^3.2.4"
   },

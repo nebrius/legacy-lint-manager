@@ -13,7 +13,11 @@ const ROOT_DIR = import.meta.dirname;
 
 export default defineConfig([
   includeIgnoreFile(join(ROOT_DIR, '.gitignore')),
-  globalIgnores(['src/**/__tests__/**/project/**/*', 'vitest.config.ts']),
+  globalIgnores([
+    'src/**/__tests__/**/project/**/*',
+    'vitest.config.ts',
+    'oxlint.config.ts',
+  ]),
   {
     files: ['**/*.{js,mjs,jsx,ts,tsx,mts}'],
     languageOptions: {
