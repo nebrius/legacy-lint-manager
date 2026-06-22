@@ -33,3 +33,5 @@ export type LintErrors = {
   type: 'oxlint' | 'eslint';
   errors: Map<string, Map<number, string[]>>;
 };
+
+export type LineContext = 'js' | 'jsx';

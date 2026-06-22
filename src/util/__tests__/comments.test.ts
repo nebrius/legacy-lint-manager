@@ -5,7 +5,7 @@ import { DEFAULT_PRAGMA } from '../../types.js';
 import { getFileComments, parseDisableComment } from '../../util/comments.js';
 
 function parse(fileContents: string, filePath = 'test.ts') {
-  return getFileComments({ filePath, fileContents });
+  return getFileComments({ filePath, fileContents }).comments;
 }
 
 describe('Comment parsing', () => {

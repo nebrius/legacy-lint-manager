@@ -25,7 +25,7 @@ export function validate(options: CommonOptions & { update: boolean }) {
         filePath: file,
         fileContents: readFileSync(file, 'utf-8'),
       });
-      for (const comment of comments) {
+      for (const comment of comments.comments) {
         const parsedDisableComment = parseDisableComment({
           comment,
           validationErrors,

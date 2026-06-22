@@ -21,7 +21,7 @@ export function getFileComments({
   filePath: string;
   fileContents: string;
 }) {
-  const { comments } = parseSync(filePath, fileContents);
+  const { comments, program } = parseSync(filePath, fileContents);
   const commentsList: Comment[] = [];
   for (const comment of comments) {
     const parsedComment = parseCommentText(
@@ -35,7 +35,7 @@ export function getFileComments({
       });
     }
   }
-  return commentsList;
+  return { comments: commentsList, program };
 }
 
 function parseCommentText(

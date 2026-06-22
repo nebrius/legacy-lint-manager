@@ -1,18 +1,20 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
-import type { LintErrors } from '../types.js';
+import type { LineContext, LintErrors } from '../types.js';
 import { getFileComments } from '../util/comments.js';
+import { InternalError } from '../util/error.js';
+import { getFileContexts } from './getFileContexts.js';
 
 export function addLegacyStatements(pragma: string, lintErrors: LintErrors) {
-  const disablePreamble = `${lintErrors.type}-disable-next-line`;
   for (const [filePath, fileErrors] of lintErrors.errors) {
     // Get comments so we can check if we need to add to an existing disable
     const fileContents = readFileSync(filePath, 'utf-8');
     const fileContentsByLine = fileContents.split('\n');
-    const fileComments = getFileComments({
+    const { comments: fileComments, program } = getFileComments({
       filePath,
       fileContents,
     });
+    const lineContexts = getFileContexts(program, fileContents);
 
     // Sort lines in reverse order so we can reverse iterate over the file
     const sortedFileErrors = Array.from(fileErrors.entries()).sort(
@@ -34,8 +36,14 @@ export function addLegacyStatements(pragma: string, lintErrors: LintErrors) {
           const combinedRules = Array.from(
             new Set([...fileComment.rules, ...rules])
           );
-          fileContentsByLine[line - 1] =
-            `// ${disablePreamble} ${combinedRules.join(', ')} -- ${pragma}`;
+          // TODO: need to account for multiline comments
+          fileContentsByLine[line - 1] = computeDisableComment({
+            type: lintErrors.type,
+            rules: combinedRules,
+            pragma,
+            line,
+            lineContexts,
+          });
           continue outer;
         }
       }
@@ -43,11 +51,42 @@ export function addLegacyStatements(pragma: string, lintErrors: LintErrors) {
       fileContentsByLine.splice(
         line,
         0,
-        `// ${disablePreamble} ${rules.join(', ')} -- ${pragma}`
+        computeDisableComment({
+          type: lintErrors.type,
+          rules,
+          pragma,
+          line,
+          lineContexts,
+        })
       );
     }
 
     // Save the file
     writeFileSync(filePath, fileContentsByLine.join('\n'));
+  }
+}
+
+function computeDisableComment({
+  type,
+  rules,
+  pragma,
+  line,
+  lineContexts,
+}: {
+  type: 'eslint' | 'oxlint';
+  rules: string[];
+  pragma: string;
+  line: number;
+  lineContexts: LineContext[];
+}) {
+  const context = lineContexts[line] as LineContext | undefined;
+  if (!context) {
+    throw new InternalError('Line context not found');
+  }
+  const innerComment = `${type}-disable-next-line ${rules.join(', ')} -- ${pragma}`;
+  if (context === 'jsx') {
+    return `{/* ${innerComment} */}`;
+  } else {
+    return `// ${innerComment}`;
   }
 }
