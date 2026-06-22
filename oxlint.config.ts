@@ -27,6 +27,7 @@ export default {
 
     // TypeScript rules matching eslint.config.mjs
     'typescript/consistent-type-imports': 'error',
+    'typescript/no-explicit-any': 'error',
     'typescript/no-unsafe-enum-comparison': 'off',
 
     ...importIntegrityPlugin.configs.recommended.rules,

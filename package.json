@@ -20,7 +20,7 @@
   "scripts": {
     "build": "tsc && chmod +x dist/cli.js",
     "lint": "npm run lint:eslint && npm run lint:oxlint",
-    "lint:eslint": "TIMING=1 eslint --report-unused-disable-directives \"**/*.{ts,tsx,mts,js,jsx,mjs}\"",
+    "lint:eslint": "eslint --report-unused-disable-directives \"**/*.{ts,tsx,mts,js,jsx,mjs}\"",
     "lint:eslint:fix": "eslint --fix \"**/*.{js,jsx,mjs,ts,tsx,mts}\"",
     "lint:oxlint": "oxlint --type-aware",
     "start": "node dist/cli.js",

@@ -7,13 +7,41 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "Debug Validate CLI",
+      "name": "Validate",
       "skipFiles": [
         "<node_internals>/**"
       ],
       "program": "${workspaceFolder}/dist/cli.js",
       "args": ["validate", "--verbose"],
       "preLaunchTask": "npm: build",
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ]
+    },
+    {
+      "type": "node-terminal",
+      "request": "launch",
+      "name": "Legacy (ESLint)",
+      "command": "npx eslint \"**/*.{ts,tsx,mts,js,jsx,mjs}\" --format=json | node dist/cli.js legacy-errors --verbose",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "npm: build",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ]
+    },
+    {
+      "type": "node-terminal",
+      "request": "launch",
+      "name": "Legacy (Oxlint)",
+      "command": "npx oxlint --type-aware --format=json | node dist/cli.js legacy-errors --verbose",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "npm: build",
+      "skipFiles": [
+        "<node_internals>/**"
+      ],
       "outFiles": [
         "${workspaceFolder}/dist/**/*.js"
       ]

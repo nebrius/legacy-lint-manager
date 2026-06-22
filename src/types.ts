@@ -28,8 +28,5 @@ export type ValidationError = {
   line: number;
 };
 
-export type LintError = {
-  rules: string[];
-  file: string;
-  line: number;
-};
+// Mapping from file path to line number to rules
+export type LintErrors = Map<string, Map<number, string[]>>;
