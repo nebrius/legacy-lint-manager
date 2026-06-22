@@ -27,3 +27,9 @@ export type ValidationError = {
   file: string;
   line: number;
 };
+
+export type LintError = {
+  rules: string[];
+  file: string;
+  line: number;
+};
