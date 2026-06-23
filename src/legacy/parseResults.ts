@@ -79,7 +79,7 @@ export function parseResults(results: unknown): LintErrors {
         }
       }
 
-      /* v8 ignore next */
+      /* v8 ignore start */
       if (lineNumber === undefined) {
         // This shouldn't be possible in practice
         const prettyError = JSON.stringify(diagnostic, null, 2)
@@ -89,6 +89,7 @@ export function parseResults(results: unknown): LintErrors {
           `Could not determine line number for diagnostic:\n  ${prettyError}`
         );
       }
+      /* v8 ignore stop */
 
       // Save the lint error
       if (!lintErrors.errors.has(diagnostic.filename)) {
@@ -101,13 +102,14 @@ export function parseResults(results: unknown): LintErrors {
         fileEntry.set(lineNumber, []);
       }
       const codeParts = OXLINT_CODE_REGEX.exec(diagnostic.code);
-      /* v8 ignore next */
+      /* v8 ignore start */
       if (!codeParts) {
         // This shouldn't be possible in practice
         throw new InternalError(
           `Could not parse diagnostic code ${diagnostic.code}`
         );
       }
+      /* v8 ignore stop */
       fileEntry.get(lineNumber)?.push(codeParts[1] + '/' + codeParts[2]);
     }
     return lintErrors;
