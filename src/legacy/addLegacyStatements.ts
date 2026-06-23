@@ -1,8 +1,11 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
+import { nanoid } from 'nanoid';
+
 import type { LineContext, LintErrors } from '../types.js';
 import { getFileComments } from '../util/comments.js';
 import { InternalError } from '../util/error.js';
+import { parseDisableComment } from '../validate/parseDisableComment.js';
 import { getFileContexts } from './getFileContexts.js';
 
 export function addLegacyStatements({
@@ -37,23 +40,36 @@ export function addLegacyStatements({
       // First, check if there is already a disable comment for this line, in
       // which case we need to replace it.
       for (const fileComment of fileComments) {
-        // Note: file comment lines are 1-indexed, so we actually do want to
-        // compare lines directly, even though conceptually we're comparing
-        // with the line before.
-        if (fileComment.endLine === line) {
-          // Combine the existing disables with the new rules that need to be
-          // disabled
-          const combinedRules = Array.from(
-            new Set([...fileComment.rules, ...rules])
-          );
-          // TODO: need to account for multiline comments
-          fileContentsByLine[line - 1] = computeDisableComment({
-            type: lintErrors.type,
-            rules: combinedRules,
+        // Note: eslint-disable-line directives are on the same line and so are
+        // not caught by this logic. That is on purpose, because a legacy
+        // comment never uses eslint-disable-line and can coexist with the line
+        // we will be adding
+        if (fileComment.endLine === line - 1) {
+          // Parse the comment to see if this is a previously existing legacy
+          // comment, or if it's just a standard disable comment
+          const parsedComment = parseDisableComment({
+            comment: fileComment,
             pragma,
-            line,
-            lineContexts,
+
+            // We don't care about validation errors here, since we're just
+            // checking if this is a legacy comment or not
+            validationErrors: [],
           });
+          fileContentsByLine.splice(
+            fileComment.startLine,
+            fileComment.endLine - fileComment.startLine + 1,
+            computeDisableComment({
+              type: lintErrors.type,
+              existingRules: fileComment.rules,
+              newRules: rules,
+              pragma,
+              line,
+              lineContexts,
+
+              // TODO: need to figure out a way to detect global collisions
+              id: parsedComment?.id ?? nanoid(8),
+            })
+          );
           continue outer;
         }
       }
@@ -63,10 +79,12 @@ export function addLegacyStatements({
         0,
         computeDisableComment({
           type: lintErrors.type,
-          rules,
+          existingRules: [],
+          newRules: rules,
           pragma,
           line,
           lineContexts,
+          id: nanoid(8),
         })
       );
     }
@@ -78,22 +96,27 @@ export function addLegacyStatements({
 
 function computeDisableComment({
   type,
-  rules,
+  existingRules,
+  newRules,
   pragma,
   line,
   lineContexts,
+  id,
 }: {
   type: 'eslint' | 'oxlint';
-  rules: string[];
+  existingRules: string[];
+  newRules: string[];
   pragma: string;
   line: number;
   lineContexts: LineContext[];
+  id: string;
 }) {
+  const combinedRules = Array.from(new Set([...existingRules, ...newRules]));
   const context = lineContexts[line] as LineContext | undefined;
   if (!context) {
     throw new InternalError('Line context not found');
   }
-  const innerComment = `${type}-disable-next-line ${rules.join(', ')} -- ${pragma}`;
+  const innerComment = `${type}-disable-next-line ${combinedRules.join(', ')} -- ${pragma} (${newRules.join(', ')}) ${id}`;
   if (context === 'jsx') {
     return `{/* ${innerComment} */}`;
   } else {

@@ -114,7 +114,5 @@ export function parseResults(results: unknown): LintErrors {
     }
     return lintErrors;
   }
-  throw new Error(
-    'Could not parse piped results. Did you remember to add --forma=json when piping the output?'
-  );
+  throw new Error('Could not parse piped results');
 }

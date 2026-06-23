@@ -6,5 +6,12 @@ export async function readResults() {
     // Chunk will always be a string since we set its encoding above
     rawInput += chunk as string;
   }
-  return JSON.parse(rawInput) as unknown;
+  try {
+    return JSON.parse(rawInput) as unknown;
+  } catch (error) {
+    console.error(
+      'Could not parse piped results. Did you remember to add --format=json when piping the output?'
+    );
+    throw error;
+  }
 }
