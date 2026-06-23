@@ -79,7 +79,7 @@ export function parseResults(results: unknown): LintErrors {
         }
       }
 
-      /* istanbul ignore next */
+      /* v8 ignore next */
       if (lineNumber === undefined) {
         // This shouldn't be possible in practice
         const prettyError = JSON.stringify(diagnostic, null, 2)
@@ -101,7 +101,7 @@ export function parseResults(results: unknown): LintErrors {
         fileEntry.set(lineNumber, []);
       }
       const codeParts = OXLINT_CODE_REGEX.exec(diagnostic.code);
-      /* istanbul ignore next */
+      /* v8 ignore next */
       if (!codeParts) {
         // This shouldn't be possible in practice
         throw new InternalError(

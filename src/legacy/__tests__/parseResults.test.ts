@@ -168,12 +168,25 @@ describe('parseResults', () => {
         ]),
       });
     });
+
+    it('captures warnings (severity 1) the same as errors', () => {
+      // The parser does not filter on severity, so a warning is recorded just
+      // like an error. (Whether warnings should instead be excluded is a
+      // separate, source-side decision.)
+      const results = [
+        {
+          filePath: 'w.ts',
+          messages: [{ ruleId: 'no-console', line: 2, severity: 1 }],
+        },
+      ];
+      expect(parseResults(results)).toEqual({
+        type: 'eslint',
+        errors: new Map([['w.ts', new Map([[1, ['no-console']]])]]),
+      });
+    });
   });
 
   describe('Oxlint output', () => {
-    // The happy-path tests below use `span.line >= 2` on purpose; the
-    // first-line case is covered separately by the failing TDD test at the
-    // end of this block (see the guard bug noted there).
     it('normalizes a single diagnostic and converts the 1-indexed line to 0-indexed', () => {
       const results = oxlintResults([
         oxlintDiagnostic('eslint(no-debugger)', 'test.js', [spanLabel(5)]),
@@ -309,8 +322,7 @@ describe('parseResults', () => {
       });
     });
 
-    // Drives out the first-line guard bug in parseResults: a line-1 Oxlint
-    // error normalizes to index 0, but `if (!lineNumber)` throws on 0 today.
+    // Boundary: a line-1 (1-indexed) error must normalize to index 0.
     it('normalizes an Oxlint error on the first line to index 0', () => {
       const results = oxlintResults([
         oxlintDiagnostic('eslint(no-debugger)', 'test.js', [spanLabel(1)]),
@@ -318,6 +330,21 @@ describe('parseResults', () => {
       expect(parseResults(results)).toEqual({
         type: 'oxlint',
         errors: new Map([['test.js', new Map([[0, ['eslint/no-debugger']]])]]),
+      });
+    });
+
+    it('captures warnings (severity "warning") the same as errors', () => {
+      // Severity is never consulted; a warning is recorded like any other
+      // diagnostic.
+      const results = oxlintResults([
+        {
+          ...oxlintDiagnostic('eslint(no-console)', 'w.ts', [spanLabel(2)]),
+          severity: 'warning',
+        },
+      ]);
+      expect(parseResults(results)).toEqual({
+        type: 'oxlint',
+        errors: new Map([['w.ts', new Map([[1, ['eslint/no-console']]])]]),
       });
     });
   });
@@ -371,6 +398,48 @@ describe('parseResults', () => {
       expect(() => parseResults(results)).toThrow(
         'Could not parse piped results'
       );
+    });
+
+    it('throws for an ESLint message whose ruleId is null (fatal parse error)', () => {
+      // Real `eslint --format=json` emits `ruleId: null` for a file that fails
+      // to parse. The schema requires a string ruleId, so the whole batch is
+      // rejected and parsing throws. This is the accepted behavior, and is
+      // asymmetric with the Oxlint branch, which instead skips its no-code
+      // (pre-lint error) diagnostics.
+      const results = [
+        { filePath: 'a.ts', messages: [{ ruleId: null, line: 1 }] },
+      ];
+      expect(() => parseResults(results)).toThrow(
+        'Could not parse piped results'
+      );
+    });
+
+    it('throws when an ESLint message is missing its ruleId', () => {
+      const results = [{ filePath: 'a.ts', messages: [{ line: 1 }] }];
+      expect(() => parseResults(results)).toThrow(
+        'Could not parse piped results'
+      );
+    });
+
+    it('throws when an Oxlint diagnostic is missing its labels', () => {
+      const results = {
+        diagnostics: [
+          { message: 'm', code: 'eslint(no-console)', filename: 'a.ts' },
+        ],
+      };
+      expect(() => parseResults(results)).toThrow(
+        'Could not parse piped results'
+      );
+    });
+
+    it('throws when Oxlint diagnostics is not an array', () => {
+      expect(() => parseResults({ diagnostics: 'nope' })).toThrow(
+        'Could not parse piped results'
+      );
+    });
+
+    it('throws for a boolean', () => {
+      expect(() => parseResults(true)).toThrow('Could not parse piped results');
     });
   });
 });
