@@ -17,6 +17,7 @@ function makeComment(overrides: Partial<Comment> = {}): Comment {
     file: 'test.ts',
     startLine: 1,
     endLine: 1,
+    type: 'next-line',
     ...overrides,
   };
 }
@@ -126,14 +127,14 @@ describe('parseDisableComment', () => {
         expect(validationErrors).toEqual([]);
       });
 
-      it('accepts an id containing mixed-case letters and digits', () => {
+      it('accepts an id containing mixed-case letters, digits, and underscores/dashes', () => {
         const validationErrors: ValidationError[] = [];
         const result = parseDisableComment({
-          comment: makeComment({ comment: legacy('no-console', 'Ab12Cd34') }),
+          comment: makeComment({ comment: legacy('no-console', 'Ab2_Cd-4') }),
           pragma,
           validationErrors,
         });
-        expect(result?.id).toBe('Ab12Cd34');
+        expect(result?.id).toBe('Ab2_Cd-4');
         expect(validationErrors).toEqual([]);
       });
 
@@ -200,7 +201,7 @@ describe('parseDisableComment', () => {
       });
 
       it('flags an id containing non-alphanumeric characters', () => {
-        expectMalformed(legacy('no-console', 'a1b2-3d4'));
+        expectMalformed(legacy('no-console', 'a1b2%3d4'));
       });
 
       it('flags a comment missing the parentheses around the rules', () => {

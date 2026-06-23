@@ -5,13 +5,13 @@ import type { Comment } from '../types.js';
 // Note: these entries MUST be specified from longest to shortest
 // to ensure proper prefix matching. If not, we might only strip out
 // "eslint-disable" when we actually need to strip "eslint-disable-next-line".
-const DISABLE_PREFIXES = [
-  'eslint-disable-next-line',
-  'eslint-disable-line',
-  'eslint-disable',
-  'oxlint-disable-next-line',
-  'oxlint-disable-line',
-  'oxlint-disable',
+const DISABLE_PREFIXES: [string, Comment['type']][] = [
+  ['eslint-disable-next-line', 'next-line'],
+  ['eslint-disable-line', 'same-line'],
+  ['eslint-disable', 'block'],
+  ['oxlint-disable-next-line', 'next-line'],
+  ['oxlint-disable-line', 'same-line'],
+  ['oxlint-disable', 'block'],
 ];
 
 export function getFileComments({
@@ -58,8 +58,8 @@ function parseCommentText(
   text: string
 ): Omit<Comment, 'file' | 'startLine' | 'endLine'> | undefined {
   // Strip out the disable prefix, if this comment is indeed a disable comment
-  let prefixFound = false;
-  for (const prefix of DISABLE_PREFIXES) {
+  let prefixType: Comment['type'] | undefined;
+  for (const [prefix, type] of DISABLE_PREFIXES) {
     if (text.startsWith(prefix)) {
       const strippedText = text.substring(prefix.length);
 
@@ -68,14 +68,14 @@ function parseCommentText(
       // all rules), otherwise it's not a real disable comment
       if (strippedText.match(/^\s/) || strippedText.length === 0) {
         text = strippedText.trim();
-        prefixFound = true;
+        prefixType = type;
         break;
       }
     }
   }
 
   // If no disable prefix was found, this isn't a valid ESLint/Oxlint comment
-  if (!prefixFound) {
+  if (!prefixType) {
     return undefined;
   }
 
@@ -96,7 +96,7 @@ function parseCommentText(
     .filter((rule) => rule.length > 0);
   const comment = commentParts[1]?.trim();
 
-  return { rules, disabledAll: rules.length === 0, comment };
+  return { type: prefixType, rules, disabledAll: rules.length === 0, comment };
 }
 
 export function getLineFromIndex({

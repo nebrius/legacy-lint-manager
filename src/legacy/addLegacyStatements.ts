@@ -40,11 +40,15 @@ export function addLegacyStatements({
       // First, check if there is already a disable comment for this line, in
       // which case we need to replace it.
       for (const fileComment of fileComments) {
-        // Note: eslint-disable-line directives are on the same line and so are
-        // not caught by this logic. That is on purpose, because a legacy
-        // comment never uses eslint-disable-line and can coexist with the line
-        // we will be adding
-        if (fileComment.endLine === line - 1) {
+        if (
+          fileComment.endLine === line - 1 &&
+          // Make sure this is a disable-next-line comment, because those are
+          // the only type of comments that a) can be a legacy comment (and thus
+          // need to be merged) and b) must live immediately before the line
+          // they disable. Block comments and same-line comments can coexist
+          // with separate legacy disable blocks, so we don't need to merge them
+          fileComment.type === 'next-line'
+        ) {
           // Parse the comment to see if this is a previously existing legacy
           // comment, or if it's just a standard disable comment
           const parsedComment = parseDisableComment({

@@ -17,6 +17,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'same-line',
         },
       ]);
     });
@@ -30,6 +31,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'same-line',
         },
       ]);
     });
@@ -45,6 +47,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'same-line',
         },
       ]);
     });
@@ -58,6 +61,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'same-line',
         },
       ]);
     });
@@ -71,6 +75,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'block',
         },
       ]);
     });
@@ -84,6 +89,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'next-line',
         },
       ]);
     });
@@ -97,6 +103,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'next-line',
         },
       ]);
     });
@@ -110,6 +117,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'same-line',
         },
       ]);
     });
@@ -123,6 +131,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'block',
         },
       ]);
     });
@@ -136,6 +145,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'same-line',
         },
       ]);
     });
@@ -151,6 +161,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'same-line',
         },
       ]);
     });
@@ -166,6 +177,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'same-line',
         },
       ]);
     });
@@ -198,6 +210,7 @@ describe('Comment parsing', () => {
           file: 'src/foo/bar.ts',
           startLine: 0,
           endLine: 0,
+          type: 'same-line',
         },
         {
           rules: ['no-debugger'],
@@ -206,6 +219,7 @@ describe('Comment parsing', () => {
           file: 'src/foo/bar.ts',
           startLine: 2,
           endLine: 2,
+          type: 'next-line',
         },
       ]);
     });
@@ -221,6 +235,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'block',
         },
       ]);
     });
@@ -234,6 +249,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'block',
         },
       ]);
     });
@@ -249,6 +265,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          type: 'block',
         },
       ]);
     });
@@ -262,6 +279,7 @@ describe('Comment parsing', () => {
       expect(result).toHaveLength(1);
       expect(result[0].rules).toEqual(['no-console', 'no-debugger']);
       expect(result[0].disabledAll).toBe(false);
+      expect(result[0].type).toBe('block');
     });
 
     it('records a multi-line block comment spanning its start and closing lines', () => {
@@ -272,6 +290,7 @@ describe('Comment parsing', () => {
       const comment = parse(contents)[0];
       expect(comment.startLine).toBe(0);
       expect(comment.endLine).toBe(1);
+      expect(comment.type).toBe('block');
     });
   });
 

@@ -8,6 +8,7 @@ export type CommonOptions = {
 };
 
 export type Comment = {
+  type: 'next-line' | 'same-line' | 'block';
   rules: string[];
   disabledAll: boolean;
   comment?: string;

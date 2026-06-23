@@ -16,7 +16,7 @@ export function parseDisableComment({
   }
 
   // Since legacy comments are generated, we can be strict about whitespace
-  const parts = new RegExp(`^${pragma} \\((.*)\\) ([a-zA-Z0-9]{8})$`);
+  const parts = new RegExp(`^${pragma} \\((.*)\\) ([a-zA-Z0-9_-]{8})$`);
   const match = comment.comment.match(parts);
   if (!match) {
     validationErrors.push({
