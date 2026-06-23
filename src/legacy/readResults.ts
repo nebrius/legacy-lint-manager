@@ -1,4 +1,4 @@
-export async function streamResults() {
+export async function readResults() {
   let rawInput = '';
   process.stdin.setEncoding('utf-8');
   process.stdin.resume();

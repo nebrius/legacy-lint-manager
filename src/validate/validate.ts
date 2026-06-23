@@ -16,11 +16,11 @@ import { parseDisableComment } from './parseDisableComment.js';
 export function validate(options: CommonOptions & { update: boolean }) {
   setVerbose(options.verbose);
   const database = new Database(options.databaseFile);
-  const files = time('Get file list', () => getFileList(options.rootDir));
+  const files = time('Getting file list', () => getFileList(options.rootDir));
 
   const legacyComments: LegacyComment[] = [];
   const validationErrors: ValidationError[] = [];
-  time('Get file comments', () => {
+  time('Getting file comments', () => {
     for (const file of files) {
       const comments = getFileComments({
         filePath: file,
@@ -39,7 +39,7 @@ export function validate(options: CommonOptions & { update: boolean }) {
     }
   });
 
-  const results = time('Validate IDs', () =>
+  const results = time('Validating IDs', () =>
     validateIds({
       database,
       validationErrors,
