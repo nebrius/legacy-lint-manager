@@ -80,7 +80,7 @@ export function parseResults(results: unknown): LintErrors {
       }
 
       /* istanbul ignore next */
-      if (!lineNumber) {
+      if (lineNumber === undefined) {
         // This shouldn't be possible in practice
         const prettyError = JSON.stringify(diagnostic, null, 2)
           .split('\n')
