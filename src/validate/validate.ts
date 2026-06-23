@@ -9,8 +9,9 @@ import type {
 import { Database } from '../util/db.js';
 import { getFileList } from '../util/files.js';
 import { error, info, setVerbose, time } from '../util/logging.js';
-import { getFileComments, parseDisableComment } from '../util/comments.js';
+import { getFileComments } from '../util/comments.js';
 import { validateIds } from './ids.js';
+import { parseDisableComment } from './parseDisableComment.js';
 
 export function validate(options: CommonOptions & { update: boolean }) {
   setVerbose(options.verbose);

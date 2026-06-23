@@ -2,9 +2,10 @@ import type { Span } from 'oxc-parser';
 import { type Program, Visitor } from 'oxc-parser';
 
 import type { LineContext } from '../types.js';
+import { getLineFromIndex } from '../util/comments.js';
 import { InternalError } from '../util/error.js';
 
-export function getFileContexts(program: Program, fileContents: string) {
+export function getFileContexts(program: Program, lineStartMapping: number[]) {
   // We always start in a JS context
   const stack: Array<LineContext> = ['js'];
 
@@ -15,28 +16,15 @@ export function getFileContexts(program: Program, fileContents: string) {
   const rawFileContexts = new Map<number, Array<LineContext>>();
   rawFileContexts.set(0, ['js']);
 
-  // Compute a mapping of line number (0-indexed) to file offsets
-  const lineStartMapping = [0]; // line 0 always maps to position 0
-  for (let i = 0; i < fileContents.length; i++) {
-    if (fileContents[i] === '\n') {
-      lineStartMapping.push(i);
-    }
-  }
-
-  function getLineNumber(index: number) {
-    let line = 0;
-    while (lineStartMapping[line] < index) {
-      line++;
-    }
-    return line;
-  }
-
   function enterContext(node: Span, context: LineContext) {
     stack.push(context);
     if (stack.length && stack[stack.length] === context) {
       return;
     }
-    const line = getLineNumber(node.start);
+    const line = getLineFromIndex({
+      index: node.start,
+      lineStartMapping,
+    });
     if (!rawFileContexts.has(line)) {
       rawFileContexts.set(line, []);
     }
@@ -57,7 +45,10 @@ export function getFileContexts(program: Program, fileContents: string) {
       return;
     }
 
-    const line = getLineNumber(node.end);
+    const line = getLineFromIndex({
+      index: node.end,
+      lineStartMapping,
+    });
     if (!rawFileContexts.has(line)) {
       rawFileContexts.set(line, []);
     }

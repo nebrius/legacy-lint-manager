@@ -1,6 +1,6 @@
 import { parseSync } from 'oxc-parser';
 
-import type { Comment, LegacyComment, ValidationError } from '../types.js';
+import type { Comment } from '../types.js';
 
 // Note: these entries MUST be specified from longest to shortest
 // to ensure proper prefix matching. If not, we might only strip out
@@ -22,6 +22,15 @@ export function getFileComments({
   fileContents: string;
 }) {
   const { comments, program } = parseSync(filePath, fileContents);
+
+  // Compute a mapping of line number (0-indexed) to file offsets
+  const lineStartMapping = [0]; // line 0 always maps to position 0
+  for (let i = 0; i < fileContents.length; i++) {
+    if (fileContents[i] === '\n') {
+      lineStartMapping.push(i + 1);
+    }
+  }
+
   const commentsList: Comment[] = [];
   for (const comment of comments) {
     const parsedComment = parseCommentText(
@@ -31,16 +40,23 @@ export function getFileComments({
       commentsList.push({
         ...parsedComment,
         file: filePath,
-        line: fileContents.slice(0, comment.end).split('\n').length,
+        startLine: getLineFromIndex({
+          index: comment.start,
+          lineStartMapping,
+        }),
+        endLine: getLineFromIndex({
+          index: comment.end,
+          lineStartMapping,
+        }),
       });
     }
   }
-  return { comments: commentsList, program };
+  return { comments: commentsList, program, lineStartMapping };
 }
 
 function parseCommentText(
   text: string
-): Omit<Comment, 'file' | 'line'> | undefined {
+): Omit<Comment, 'file' | 'startLine' | 'endLine'> | undefined {
   // Strip out the disable prefix, if this comment is indeed a disable comment
   let prefixFound = false;
   for (const prefix of DISABLE_PREFIXES) {
@@ -83,40 +99,24 @@ function parseCommentText(
   return { rules, disabledAll: rules.length === 0, comment };
 }
 
-export function parseDisableComment({
-  comment,
-  pragma,
-  validationErrors,
+export function getLineFromIndex({
+  index,
+  lineStartMapping,
 }: {
-  comment: Comment;
-  pragma: string;
-  validationErrors: ValidationError[];
-}): LegacyComment | undefined {
-  // If this is a regular ESLint/Oxlint disable comment and not a legacy pragma,
-  // then ignore it.
-  if (!comment.comment?.startsWith(pragma)) {
-    return undefined;
+  index: number;
+  lineStartMapping: number[];
+}) {
+  let line = 0;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  while (true) {
+    if (
+      // Check if this index is between this line and the next, or is the last line
+      (lineStartMapping[line] <= index && lineStartMapping[line + 1] > index) ||
+      !Object.prototype.hasOwnProperty.call(lineStartMapping, line + 1)
+    ) {
+      break;
+    }
+    line++;
   }
-
-  // Since legacy comments are generated, we can be strict about whitespace
-  const parts = new RegExp(`^${pragma} \\((.*)\\) ([a-zA-Z0-9]{8})$`);
-  const match = comment.comment.match(parts);
-  if (!match) {
-    validationErrors.push({
-      message: `Malformed legacy comment: ${comment.comment}`,
-      file: comment.file,
-      line: comment.line,
-    });
-    return undefined;
-  }
-
-  const rules = match[1].split(',').map((rule) => rule.trim());
-  const id = match[2];
-
-  return {
-    file: comment.file,
-    line: comment.line,
-    rules,
-    id,
-  };
+  return line;
 }

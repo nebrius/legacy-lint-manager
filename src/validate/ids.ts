@@ -25,7 +25,7 @@ export function validateIds({
         validationErrors.push({
           message: `Duplicate legacy ID "${comment.id}". Each legacy ID can only be used once.`,
           file: comment.file,
-          line: comment.line,
+          line: comment.startLine,
         });
       } else {
         databaseMap.set(comment.id, true);
@@ -34,7 +34,7 @@ export function validateIds({
       validationErrors.push({
         message: `Unregistered legacy error. New errors cannot be legacied.`,
         file: comment.file,
-        line: comment.line,
+        line: comment.startLine,
       });
     }
   }

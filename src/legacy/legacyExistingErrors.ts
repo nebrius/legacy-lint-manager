@@ -9,6 +9,9 @@ export async function legacyExistingErrors(options: CommonOptions) {
   const results = await time('Reading results', streamResults);
   const linterrors = time('Parse results', () => parseResults(results));
   time('Adding legacy statements', () => {
-    addLegacyStatements(options.pragma, linterrors);
+    addLegacyStatements({
+      pragma: options.pragma,
+      lintErrors: linterrors,
+    });
   });
 }

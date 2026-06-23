@@ -5,16 +5,26 @@ import { getFileComments } from '../util/comments.js';
 import { InternalError } from '../util/error.js';
 import { getFileContexts } from './getFileContexts.js';
 
-export function addLegacyStatements(pragma: string, lintErrors: LintErrors) {
+export function addLegacyStatements({
+  pragma,
+  lintErrors,
+}: {
+  pragma: string;
+  lintErrors: LintErrors;
+}) {
   for (const [filePath, fileErrors] of lintErrors.errors) {
     // Get comments so we can check if we need to add to an existing disable
     const fileContents = readFileSync(filePath, 'utf-8');
     const fileContentsByLine = fileContents.split('\n');
-    const { comments: fileComments, program } = getFileComments({
+    const {
+      comments: fileComments,
+      program,
+      lineStartMapping,
+    } = getFileComments({
       filePath,
       fileContents,
     });
-    const lineContexts = getFileContexts(program, fileContents);
+    const lineContexts = getFileContexts(program, lineStartMapping);
 
     // Sort lines in reverse order so we can reverse iterate over the file
     const sortedFileErrors = Array.from(fileErrors.entries()).sort(
@@ -30,7 +40,7 @@ export function addLegacyStatements(pragma: string, lintErrors: LintErrors) {
         // Note: file comment lines are 1-indexed, so we actually do want to
         // compare lines directly, even though conceptually we're comparing
         // with the line before.
-        if (fileComment.line === line) {
+        if (fileComment.endLine === line) {
           // Combine the existing disables with the new rules that need to be
           // disabled
           const combinedRules = Array.from(

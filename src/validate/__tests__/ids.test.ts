@@ -11,7 +11,8 @@ function makeDatabase(ids: string[]): Database {
 function makeLegacy(overrides: Partial<LegacyComment> = {}): LegacyComment {
   return {
     file: 'test.ts',
-    line: 1,
+    startLine: 1,
+    endLine: 1,
     rules: ['no-console'],
     id: 'a1b2c3d4',
     ...overrides,
@@ -69,7 +70,12 @@ describe('validateIds', () => {
         database: makeDatabase(['id1']),
         validationErrors,
         legacyComments: [
-          makeLegacy({ id: 'unknown', file: 'src/a.ts', line: 12 }),
+          makeLegacy({
+            id: 'unknown',
+            file: 'src/a.ts',
+            startLine: 12,
+            endLine: 12,
+          }),
         ],
       });
       expect(validationErrors).toEqual([
@@ -92,8 +98,8 @@ describe('validateIds', () => {
         database: makeDatabase(['dup', 'other']),
         validationErrors,
         legacyComments: [
-          makeLegacy({ id: 'dup', file: 'a.ts', line: 1 }),
-          makeLegacy({ id: 'dup', file: 'b.ts', line: 2 }),
+          makeLegacy({ id: 'dup', file: 'a.ts', startLine: 1, endLine: 1 }),
+          makeLegacy({ id: 'dup', file: 'b.ts', startLine: 2, endLine: 2 }),
         ],
       });
       expect(validationErrors).toEqual([
@@ -114,9 +120,9 @@ describe('validateIds', () => {
         database: makeDatabase(['dup']),
         validationErrors,
         legacyComments: [
-          makeLegacy({ id: 'dup', file: 'a.ts', line: 1 }),
-          makeLegacy({ id: 'dup', file: 'b.ts', line: 2 }),
-          makeLegacy({ id: 'dup', file: 'c.ts', line: 3 }),
+          makeLegacy({ id: 'dup', file: 'a.ts', startLine: 1, endLine: 1 }),
+          makeLegacy({ id: 'dup', file: 'b.ts', startLine: 2, endLine: 2 }),
+          makeLegacy({ id: 'dup', file: 'c.ts', startLine: 3, endLine: 3 }),
         ],
       });
       expect(validationErrors).toEqual([
@@ -143,10 +149,10 @@ describe('validateIds', () => {
         database: makeDatabase(['dup', 'unused', 'used']),
         validationErrors,
         legacyComments: [
-          makeLegacy({ id: 'used', file: 'a.ts', line: 1 }),
-          makeLegacy({ id: 'dup', file: 'b.ts', line: 2 }),
-          makeLegacy({ id: 'dup', file: 'c.ts', line: 3 }),
-          makeLegacy({ id: 'ghost', file: 'd.ts', line: 4 }),
+          makeLegacy({ id: 'used', file: 'a.ts', startLine: 1, endLine: 1 }),
+          makeLegacy({ id: 'dup', file: 'b.ts', startLine: 2, endLine: 2 }),
+          makeLegacy({ id: 'dup', file: 'c.ts', startLine: 3, endLine: 3 }),
+          makeLegacy({ id: 'ghost', file: 'd.ts', startLine: 4, endLine: 4 }),
         ],
       });
       expect(result).toEqual({
@@ -175,7 +181,9 @@ describe('validateIds', () => {
       validateIds({
         database: makeDatabase(['id1']),
         validationErrors,
-        legacyComments: [makeLegacy({ id: 'ghost', file: 'y.ts', line: 10 })],
+        legacyComments: [
+          makeLegacy({ id: 'ghost', file: 'y.ts', startLine: 10, endLine: 10 }),
+        ],
       });
       expect(validationErrors).toEqual([
         { message: 'pre-existing', file: 'x.ts', line: 9 },

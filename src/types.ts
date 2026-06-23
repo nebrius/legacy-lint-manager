@@ -12,12 +12,14 @@ export type Comment = {
   disabledAll: boolean;
   comment?: string;
   file: string;
-  line: number;
+  startLine: number;
+  endLine: number;
 };
 
 export type LegacyComment = {
   file: string;
-  line: number;
+  startLine: number;
+  endLine: number;
   rules: string[];
   id: string;
 };
