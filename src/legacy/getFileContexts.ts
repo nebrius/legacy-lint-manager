@@ -57,7 +57,13 @@ export function getFileContexts(program: Program, lineStartMapping: number[]) {
 
   const visitor = new Visitor({
     JSXOpeningElement(node) {
+      // Self-closing elements may split across multiple lines where we may
+      // need to add a disable comment, so we still enter and exit both
       enterContext(node, 'jsx');
+      if (node.selfClosing) {
+        exitContext(node, 'jsx');
+        return;
+      }
     },
     JSXClosingElement(node) {
       exitContext(node, 'jsx');
@@ -79,14 +85,29 @@ export function getFileContexts(program: Program, lineStartMapping: number[]) {
   });
   visitor.visit(program);
 
+  // Flatten and deduplicate the rawFileContents
+  const flattenedRawFileContexts: Array<{
+    line: number;
+    context: LineContext;
+  }> = [];
+  for (const [line, contexts] of rawFileContexts) {
+    const lastContext = contexts.at(-1);
+    if (!lastContext) {
+      throw new InternalError(
+        `Raw file context is unexpectedly empty at line ${line.toString()}`
+      );
+    }
+    if (flattenedRawFileContexts.at(-1)?.context !== lastContext) {
+      flattenedRawFileContexts.push({ line, context: lastContext });
+    }
+  }
+
+  // Build the final fileContexts array
   const fileContexts: LineContext[] = [];
   let currentContextLine = 0;
   let currentContext: LineContext = 'js';
-  for (const [line, contexts] of rawFileContexts) {
-    const nextContext = contexts.pop();
-    if (!nextContext) {
-      throw new InternalError(`Raw file context is unexpectedly undefined`);
-    }
+  for (const { line, context } of flattenedRawFileContexts) {
+    const nextContext = context;
     for (; currentContextLine < line; currentContextLine++) {
       fileContexts[currentContextLine] = currentContext;
     }
