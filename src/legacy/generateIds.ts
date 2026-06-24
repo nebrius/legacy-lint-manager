@@ -20,5 +20,5 @@ export function generateId(previousId?: string) {
 }
 
 export function getIds() {
-  return Array.from(idSet);
+  return Array.from(idSet).sort();
 }
