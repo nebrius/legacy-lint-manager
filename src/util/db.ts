@@ -43,7 +43,7 @@ export class Database {
     this.database.ids = ids;
   }
 
-  public saveDatabase() {
+  public save() {
     writeFileSync(this.databaseFile, JSON.stringify(this.database));
   }
 }

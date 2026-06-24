@@ -62,7 +62,7 @@ export function validate(options: CommonOptions & { update: boolean }) {
     if (options.update) {
       info('Legacied lint errors were fixed, updating database...');
       database.setIds(results.usedIds.sort());
-      database.saveDatabase();
+      database.save();
     } else {
       error(
         'Legacied lint errors were fixed, good job! Run with --update to update the database.'

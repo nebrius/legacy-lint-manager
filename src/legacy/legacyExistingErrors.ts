@@ -1,8 +1,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 
 import type { CommonOptions } from '../types.js';
+import { Database } from '../util/db.js';
 import { setVerbose, time } from '../util/logging.js';
 import { addLegacyStatements } from './addLegacyStatements.js';
+import { getIds } from './generateIds.js';
 import { parseResults } from './parseResults.js';
 import { readResults } from './readResults.js';
 
@@ -25,5 +27,11 @@ export async function legacyExistingErrors(options: CommonOptions) {
       // Save the file
       writeFileSync(filePath, updatedFileContents);
     }
+  });
+
+  time('Updating database', () => {
+    const database = new Database(options.databaseFile);
+    database.setIds(getIds());
+    database.save();
   });
 }

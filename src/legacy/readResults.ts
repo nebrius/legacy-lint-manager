@@ -1,5 +1,7 @@
 import type { Readable } from 'node:stream';
 
+import { error } from '../util/logging.js';
+
 // Reads the results from stdin, which is supposed to be the output of running
 // eslint/oxlint with the --format=json flag. This function sits early in the
 // pipeline and only ensures that the input could be parsed as JSON. Later steps
@@ -14,10 +16,10 @@ export async function readResults(readableStream: Readable) {
   }
   try {
     return JSON.parse(rawInput) as unknown;
-  } catch (error) {
-    console.error(
+  } catch (err) {
+    error(
       'Could not parse piped results. Did you remember to add --format=json when piping the output?'
     );
-    throw error;
+    throw err;
   }
 }
