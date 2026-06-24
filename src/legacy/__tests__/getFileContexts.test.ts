@@ -183,6 +183,20 @@ const b = 2;`)
 );`)
       ).toEqual(['js', 'js', 'jsx', 'jsx', 'jsx', 'jsx', 'jsx', 'jsx', 'js']);
     });
+
+    it('returns to js for a multi-line expression nested inside two elements', () => {
+      expect(
+        contexts(`const a = (
+  <Foo>
+    <Bar>
+      {
+        1
+      }
+    </Bar>
+  </Foo>
+);`)
+      ).toEqual(['js', 'js', 'jsx', 'jsx', 'js', 'js', 'jsx', 'jsx', 'js']);
+    });
   });
 
   describe('self-closing elements', () => {

@@ -17,9 +17,6 @@ export function getFileContexts(program: Program, lineStartMapping: number[]) {
 
   function enterContext(node: Span, context: LineContext) {
     stack.push(context);
-    if (stack.length && stack[stack.length] === context) {
-      return;
-    }
     const line = getLineFromIndex({
       index: node.start,
       lineStartMapping,
