@@ -14,7 +14,6 @@ export function getFileContexts(program: Program, lineStartMapping: number[]) {
   // creating a stack of context changes per line, we can flatten it to just
   // the last context to indicate how the next line starts
   const rawFileContexts = new Map<number, Array<LineContext>>();
-  rawFileContexts.set(0, ['js']);
 
   function enterContext(node: Span, context: LineContext) {
     stack.push(context);
@@ -103,18 +102,15 @@ export function getFileContexts(program: Program, lineStartMapping: number[]) {
   }
 
   // Build the final fileContexts array
-  const fileContexts: LineContext[] = [];
-  let currentContextLine = 0;
+  const fileContexts: LineContext[] = ['js'];
   let currentContext: LineContext = 'js';
-  for (const { line, context } of flattenedRawFileContexts) {
-    const nextContext = context;
-    for (; currentContextLine < line; currentContextLine++) {
-      fileContexts[currentContextLine] = currentContext;
+  let nextContextEntry = flattenedRawFileContexts.shift();
+  for (let i = 0; i < lineStartMapping.length - 1; i++) {
+    if (i === nextContextEntry?.line) {
+      currentContext = nextContextEntry.context;
+      nextContextEntry = flattenedRawFileContexts.shift();
     }
-    currentContext = nextContext;
-  }
-  for (let i = currentContextLine; i < lineStartMapping.length; i++) {
-    fileContexts[i] = currentContext;
+    fileContexts.push(currentContext);
   }
 
   return fileContexts;
