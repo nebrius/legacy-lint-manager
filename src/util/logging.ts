@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 let verboseEnabled = false;
 export function setVerbose(verbose: boolean) {
   verboseEnabled = verbose;

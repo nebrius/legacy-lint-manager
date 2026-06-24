@@ -24,6 +24,7 @@ export default {
     'eslint/object-shorthand': 'error',
     'eslint/eqeqeq': 'error',
     'simple-import-sort/imports': 'error',
+    'no-console': 'error',
 
     // TypeScript rules matching eslint.config.mjs
     'typescript/consistent-type-imports': 'error',

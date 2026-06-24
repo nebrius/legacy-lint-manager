@@ -29,6 +29,7 @@ export default defineConfig([
       'object-shorthand': 'error',
       'simple-import-sort/imports': 'error',
       eqeqeq: 'error',
+      'no-console': 'error',
 
       // Handled by TypeScript eslint
       'no-unused-vars': 'off',
