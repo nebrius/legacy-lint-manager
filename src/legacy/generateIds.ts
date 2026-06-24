@@ -1,8 +1,6 @@
 import { nanoid } from 'nanoid';
 
 const idSet = new Set<string>();
-
-// and/or memory intensive.
 export function generateId(previousId?: string) {
   let id = previousId ?? nanoid(8);
 

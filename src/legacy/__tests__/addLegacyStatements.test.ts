@@ -228,6 +228,31 @@ describe('addLegacyStatements', () => {
         'const x = 2;',
       ]);
     });
+
+    it('merges an early line and inserts net-new on a later line without displacement', () => {
+      // The realistic mix: a same-length merge into an existing legacy comment
+      // on an early line, plus a length-changing net-new splice on a later
+      // line. Reverse iteration processes the later (net-new) line first, so
+      // the merge's line indices must not have shifted underneath it.
+      const existing = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) keepid05`;
+      const result = run({
+        fileContents: `const a = 1;\n${existing}\nconst b = 2;\nconst c = 3;`,
+        entries: [
+          [2, ['new-rule']], // merges into the comment ending on line 1
+          [3, ['rule-c']], // net-new, inserted before line 3
+        ],
+      });
+      // The net-new comment is processed first and takes issuedIds[0]; the
+      // merge reuses keepid05 and never consumes nanoid.
+      expect(nanoidMock).toHaveBeenCalledTimes(1);
+      expect(result.split('\n')).toEqual([
+        'const a = 1;',
+        `// eslint-disable-next-line old-rule, new-rule -- ${DEFAULT_PRAGMA} (new-rule) keepid05`,
+        'const b = 2;',
+        `// eslint-disable-next-line rule-c -- ${DEFAULT_PRAGMA} (rule-c) ${issuedIds[0]}`,
+        'const c = 3;',
+      ]);
+    });
   });
 
   describe('id collision guard', () => {

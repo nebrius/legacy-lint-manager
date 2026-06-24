@@ -1,4 +1,11 @@
-import { cpSync, readFileSync, rmSync } from 'node:fs';
+import {
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -92,5 +99,61 @@ describe('validate (integration)', () => {
     }).toThrow('process.exit called');
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(errorSpy).toHaveBeenCalledWith('Validation errors:');
+  });
+
+  // A malformed legacy comment takes a different validate branch than an
+  // unregistered id: parseDisableComment records the error before validateIds
+  // ever runs. This drives that path end-to-end through validate(). The project
+  // is built in a temp dir so the malformed source never lives in the shared
+  // fixture (which other tests and the smoke test expect to stay clean).
+  describe('with a malformed legacy comment', () => {
+    const MALFORMED_PROJECT = join(tmpdir(), 'lint-legacies-malformed-project');
+    const MALFORMED_SRC = join(MALFORMED_PROJECT, 'src');
+    const MALFORMED_FILE = join(MALFORMED_SRC, 'bad.ts');
+    const MALFORMED_DB = join(MALFORMED_PROJECT, 'lint-legacies.json');
+
+    afterEach(() => {
+      rmSync(MALFORMED_PROJECT, { recursive: true, force: true });
+    });
+
+    it('exits 1 and reports the malformed comment with its file and line', () => {
+      mkdirSync(MALFORMED_SRC, { recursive: true });
+      writeFileSync(MALFORMED_DB, JSON.stringify({ ids: [] }));
+      // A 7-char id; the parser requires exactly 8, so this is malformed.
+      writeFileSync(
+        MALFORMED_FILE,
+        [
+          'export function logSomething(): void {',
+          `  // eslint-disable-next-line no-console -- ${DEFAULT_PRAGMA} (no-console) tooshrt`,
+          "  console.log('x');",
+          '}',
+          '',
+        ].join('\n')
+      );
+
+      const exitSpy = mockExit();
+      const errorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      expect(() => {
+        validate({
+          databaseFile: MALFORMED_DB,
+          rootDir: MALFORMED_PROJECT,
+          pragma: DEFAULT_PRAGMA,
+          verbose: false,
+          update: false,
+        });
+      }).toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errorSpy).toHaveBeenCalledWith('Validation errors:');
+      // The comment is on the visually-2nd line, but validate prints the
+      // 0-indexed startLine verbatim, so the header reads `:1` (an off-by-one
+      // in the user-facing output — see production note P2 in the review plan).
+      expect(errorSpy).toHaveBeenCalledWith(`${MALFORMED_FILE}:1`);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Malformed legacy comment:')
+      );
+    });
   });
 });

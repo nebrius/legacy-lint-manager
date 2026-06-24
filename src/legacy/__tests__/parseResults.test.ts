@@ -441,5 +441,19 @@ describe('parseResults', () => {
     it('throws for a boolean', () => {
       expect(() => parseResults(true)).toThrow('Could not parse piped results');
     });
+
+    it('rejects the whole batch when one file among valid ones has an invalid message', () => {
+      // Schema validation is all-or-nothing for ESLint: a single message
+      // missing its line invalidates the entire array, even though the other
+      // file is well-formed. (Contrast the Oxlint branch, which skips
+      // individual no-code diagnostics rather than rejecting everything.)
+      const results = [
+        eslintFile('good.ts', [eslintMessage('no-console', 2)]),
+        { filePath: 'bad.ts', messages: [{ ruleId: 'no-debugger' }] },
+      ];
+      expect(() => parseResults(results)).toThrow(
+        'Could not parse piped results'
+      );
+    });
   });
 });

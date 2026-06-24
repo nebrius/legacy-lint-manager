@@ -1,6 +1,8 @@
+import { cpSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { Database } from '../db.js';
 
@@ -9,6 +11,10 @@ const DATABASE_ROOT = join(import.meta.dirname, 'databases');
 function databasePath(fixture: string): string {
   return join(DATABASE_ROOT, fixture);
 }
+
+// save() writes to disk; route it through the OS temp dir so a successful run
+// never dirties the repo and never collides with getFileList's gitignore tests.
+const WORKING_DB = join(tmpdir(), 'lint-legacies-db-roundtrip.json');
 
 describe('Database', () => {
   describe('constructor', () => {
@@ -72,6 +78,35 @@ describe('Database', () => {
       const database = new Database(databasePath('valid.json'));
       database.setIds([]);
       expect(database.getIds()).toEqual([]);
+    });
+  });
+
+  describe('save', () => {
+    afterEach(() => {
+      rmSync(WORKING_DB, { force: true });
+    });
+
+    it('persists the in-memory ids back to disk as a fresh Database can re-read', () => {
+      cpSync(databasePath('valid.json'), WORKING_DB);
+      const database = new Database(WORKING_DB);
+      database.setIds(['new1', 'new2']);
+      database.save();
+
+      // A freshly-constructed Database reads exactly what was written (the
+      // constructor sorts on load, so assert against the sorted form).
+      expect(new Database(WORKING_DB).getIds()).toEqual(['new1', 'new2']);
+      expect(JSON.parse(readFileSync(WORKING_DB, 'utf-8'))).toEqual({
+        ids: ['new1', 'new2'],
+      });
+    });
+
+    it('persists an empty ids array', () => {
+      cpSync(databasePath('valid.json'), WORKING_DB);
+      const database = new Database(WORKING_DB);
+      database.setIds([]);
+      database.save();
+
+      expect(new Database(WORKING_DB).getIds()).toEqual([]);
     });
   });
 });
