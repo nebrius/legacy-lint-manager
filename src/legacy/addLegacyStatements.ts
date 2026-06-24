@@ -71,7 +71,7 @@ export function addLegacyStatements({
               lineContexts,
 
               // TODO: need to figure out a way to detect global collisions
-              id: parsedComment?.id ?? nanoid(8),
+              id: generateId(parsedComment?.id),
             })
           );
           continue outer;
@@ -88,7 +88,7 @@ export function addLegacyStatements({
           pragma,
           line,
           lineContexts,
-          id: nanoid(8),
+          id: generateId(),
         })
       );
     }
@@ -96,6 +96,22 @@ export function addLegacyStatements({
     // Save the file
     writeFileSync(filePath, fileContentsByLine.join('\n'));
   }
+}
+
+// It is very unlikely that we'll ever have a collision, but given that
+// collisions are fatal, we store all generated IDs in a set to prevent them.
+const idSet = new Set<string>();
+function generateId(previousId?: string) {
+  let id = previousId ?? nanoid(8);
+
+  /* v8 ignore start */
+  while (idSet.has(id)) {
+    id = nanoid(8);
+  }
+  /* v8 ignore stop */
+
+  idSet.add(id);
+  return id;
 }
 
 function computeDisableComment({
