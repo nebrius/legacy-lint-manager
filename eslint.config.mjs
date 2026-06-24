@@ -15,6 +15,9 @@ export default defineConfig([
   includeIgnoreFile(join(ROOT_DIR, '.gitignore')),
   globalIgnores([
     'src/**/__tests__/**/project/**/*',
+    // The legacy-errors integration test's fixture sources intentionally
+    // contain the errors the command legacies
+    'src/__tests__/integration/fixtures/legacy-sources/**/*',
     'vitest.config.ts',
     'oxlint.config.ts',
   ]),

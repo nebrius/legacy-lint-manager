@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+import type { Readable } from 'node:stream';
 
 import type { CommonOptions } from '../types.js';
 import { Database } from '../util/db.js';
@@ -8,11 +9,12 @@ import { getIds } from './generateIds.js';
 import { parseResults } from './parseResults.js';
 import { readResults } from './readResults.js';
 
-export async function legacyExistingErrors(options: CommonOptions) {
+export async function legacyExistingErrors(
+  options: CommonOptions,
+  inputStream: Readable = process.stdin
+) {
   setVerbose(options.verbose);
-  const results = await time('Reading results', () =>
-    readResults(process.stdin)
-  );
+  const results = await time('Reading results', () => readResults(inputStream));
   const lintErrors = time('Parsing results', () => parseResults(results));
   time('Adding legacy statements', () => {
     for (const filePath of lintErrors.errors.keys()) {

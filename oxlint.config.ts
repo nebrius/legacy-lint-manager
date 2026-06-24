@@ -17,6 +17,9 @@ export default {
     'coverage',
     'node_modules',
     'src/**/__tests__/**/project/**/*',
+    // The legacy-errors integration test's fixture sources intentionally
+    // contain the errors the command legacies
+    'src/__tests__/integration/fixtures/legacy-sources/**/*',
     'vitest.config.ts',
   ],
   rules: {
