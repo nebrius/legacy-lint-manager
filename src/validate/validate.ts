@@ -10,7 +10,7 @@ import { Database } from '../util/db.js';
 import { getFileList } from '../util/files.js';
 import { error, info, setVerbose, time } from '../util/logging.js';
 import { getFileComments } from '../util/comments.js';
-import { validateIds } from './ids.js';
+import { validateIds } from './validateIds.js';
 import { parseDisableComment } from './parseDisableComment.js';
 
 export function validate(options: CommonOptions & { update: boolean }) {

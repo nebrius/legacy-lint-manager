@@ -35,9 +35,11 @@ export function getFileContexts(program: Program, lineStartMapping: number[]) {
     const nextContext = stack[stack.length - 1];
 
     // Sanity check
+    /* v8 ignore start */
     if (currentContext !== context) {
       throw new InternalError(`Corrupted context stack detected`);
     }
+    /* v8 ignore stop */
 
     // If this isn't a context change, don't mark the transition
     if (nextContext === currentContext) {
@@ -94,11 +96,15 @@ export function getFileContexts(program: Program, lineStartMapping: number[]) {
   }> = [];
   for (const [line, contexts] of rawFileContexts) {
     const lastContext = contexts.at(-1);
+
+    /* v8 ignore start */
     if (!lastContext) {
       throw new InternalError(
         `Raw file context is unexpectedly empty at line ${line.toString()}`
       );
     }
+    /* v8 ignore stop */
+
     if (flattenedRawFileContexts.at(-1)?.context !== lastContext) {
       flattenedRawFileContexts.push({ line, context: lastContext });
     }

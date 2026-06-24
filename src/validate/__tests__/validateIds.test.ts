@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { LegacyComment, ValidationError } from '../../types.js';
 import type { Database } from '../../util/db.js';
-import { validateIds } from '../ids.js';
+import { validateIds } from '../validateIds.js';
 
 function makeDatabase(ids: string[]): Database {
   return { getIds: () => ids } as unknown as Database;
