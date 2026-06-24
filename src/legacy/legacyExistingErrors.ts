@@ -8,7 +8,9 @@ import { readResults } from './readResults.js';
 
 export async function legacyExistingErrors(options: CommonOptions) {
   setVerbose(options.verbose);
-  const results = await time('Reading results', readResults);
+  const results = await time('Reading results', () =>
+    readResults(process.stdin)
+  );
   const lintErrors = time('Parsing results', () => parseResults(results));
   time('Adding legacy statements', () => {
     for (const filePath of lintErrors.errors.keys()) {
