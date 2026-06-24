@@ -1,3 +1,4 @@
+/* v8 ignore start */
 export class InternalError extends Error {
   constructor(
     message: string,
@@ -14,3 +15,4 @@ export class InternalError extends Error {
     super(formattedMessage);
   }
 }
+/* v8 ignore end */
