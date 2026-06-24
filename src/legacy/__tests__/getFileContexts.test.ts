@@ -43,15 +43,17 @@ const c = 3;`;
 
   describe('single-line JSX (mid-line context never affects the line start)', () => {
     it('keeps js when an element opens and closes within one line', () => {
-      expect(contexts('const a = <div>hi</div>;')).toEqual(['js']);
-    });
-
-    it('keeps js when an expression container is on the same line', () => {
-      expect(contexts('const a = <div>{x}</div>;')).toEqual(['js']);
+      expect(
+        contexts(`const a = <div>hi</div>;
+const b = 2;`)
+      ).toEqual(['js', 'js']);
     });
 
     it('keeps js with adjacent expression containers on one line', () => {
-      expect(contexts('const a = <div>{x}{y}</div>;')).toEqual(['js']);
+      expect(
+        contexts(`const a = <div>{x}{y}</div>;
+const b = 2;`)
+      ).toEqual(['js', 'js']);
     });
 
     it('returns js for a single-line element followed by a plain js line', () => {
@@ -94,7 +96,7 @@ const b = 2;`)
       expect(result[4]).toBe('js');
     });
 
-    it('treats the lines of a multi-line opening tag as js', () => {
+    it('treats the lines of a multi-line opening tag as jsx', () => {
       expect(
         contexts(`const a = (
   <div
@@ -103,7 +105,7 @@ const b = 2;`)
     {x}
   </div>
 );`)
-      ).toEqual(['js', 'js', 'js', 'js', 'jsx', 'jsx', 'js']);
+      ).toEqual(['js', 'js', 'jsx', 'jsx', 'jsx', 'jsx', 'js']);
     });
   });
 
@@ -128,13 +130,6 @@ const b = 2;`)
   </div>
 );`)
       ).toEqual(['js', 'js', 'jsx', 'jsx', 'js']);
-    });
-
-    it('handles an expression container holding JSX inside an attribute', () => {
-      expect(
-        contexts(`const a = <Foo bar={x} />;
-const b = 2;`)
-      ).toEqual(['js', 'js']);
     });
   });
 
@@ -200,17 +195,20 @@ const b = 2;`)
     });
 
     it('keeps a self-closing element inline within an expression as js', () => {
-      expect(contexts('const a = <Foo />;')).toEqual(['js']);
+      expect(
+        contexts(`const a = <Foo />;
+const b = 2;`)
+      ).toEqual(['js', 'js']);
     });
 
-    it('keeps the lines of a multi-line self-closing tag as js', () => {
+    it('marks all lines of a multi-line self-closing tag as jsx', () => {
       expect(
         contexts(`const a = (
   <Foo
     bar={1}
   />
 );`)
-      ).toEqual(['js', 'js', 'js', 'js', 'js']);
+      ).toEqual(['js', 'js', 'jsx', 'jsx', 'js']);
     });
 
     it('marks self-closing sibling lines inside a parent as jsx', () => {
@@ -229,6 +227,18 @@ const b = 2;`)
         contexts(`const a = <Foo bar={x} />;
 const b = 2;`)
       ).toEqual(['js', 'js']);
+    });
+
+    it('returns to js for the interior lines of a multi-line attribute expression', () => {
+      expect(
+        contexts(`const a = (
+  <Foo
+    bar={
+      1
+    }
+  />
+);`)
+      ).toEqual(['js', 'js', 'jsx', 'js', 'js', 'jsx', 'js']);
     });
   });
 

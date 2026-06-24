@@ -56,9 +56,12 @@ export function getFileContexts(program: Program, lineStartMapping: number[]) {
 
   const visitor = new Visitor({
     JSXOpeningElement(node) {
-      // Self-closing elements may split across multiple lines where we may
-      // need to add a disable comment, so we still enter and exit both
       enterContext(node, 'jsx');
+    },
+    'JSXOpeningElement:exit'(node) {
+      // Self-closing elements may split across multiple lines where we may
+      // need to add a disable comment, and attributes inside the node may have
+      // js interpolated expressions that need to be processed before this part
       if (node.selfClosing) {
         exitContext(node, 'jsx');
         return;
