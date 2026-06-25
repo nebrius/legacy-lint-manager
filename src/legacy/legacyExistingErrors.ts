@@ -14,9 +14,9 @@ export async function legacyExistingErrors(
   inputStream: Readable = process.stdin
 ) {
   setVerbose(options.verbose);
-  const results = await time('Reading results', () => readResults(inputStream));
-  const lintErrors = time('Parsing results', () => parseResults(results));
-  time('Adding legacy statements', () => {
+  const results = await time('reading results', () => readResults(inputStream));
+  const lintErrors = time('parsing results', () => parseResults(results));
+  time('adding legacy statements', () => {
     for (const filePath of lintErrors.errors.keys()) {
       // Get comments so we can check if we need to add to an existing disable
       const fileContents = readFileSync(filePath, 'utf-8');
@@ -31,7 +31,7 @@ export async function legacyExistingErrors(
     }
   });
 
-  time('Updating database', () => {
+  time('updating database', () => {
     const database = new Database(options.databaseFile);
     database.setIds(getIds());
     database.save();

@@ -34,9 +34,10 @@ describe('logging', () => {
       setVerbose(true);
       time('Get file list', () => undefined);
 
-      expect(messages).toHaveLength(1);
-      expect(messages[0]).toContain('[Debug]: Get file list:');
-      expect(messages[0]).toContain('ms');
+      expect(messages).toHaveLength(2);
+      expect(messages[0]).toBe('[Debug]: Started Get file list');
+      expect(messages[1]).toContain('[Debug]: Finished Get file list');
+      expect(messages[1]).toContain('ms');
     });
   });
 });

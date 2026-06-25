@@ -9,8 +9,10 @@ const EslintSchema = TypeBox.Array(
     filePath: TypeBox.String(),
     messages: TypeBox.Array(
       TypeBox.Object({
-        ruleId: TypeBox.String(),
-        line: TypeBox.Number(),
+        // ruleId and line are missing for some top-level errors, such as file
+        // parsing errors
+        ruleId: TypeBox.Union([TypeBox.Null(), TypeBox.String()]),
+        line: TypeBox.Optional(TypeBox.Number()),
       })
     ),
   })
@@ -36,15 +38,25 @@ const SpanSchema = TypeBox.Object({
 const OXLINT_CODE_REGEX = /^(.*?)\((.*?)\)$/;
 
 export function parseResults(results: unknown): LintErrors {
-  // We check if this is an array before calling Value check as a performance
-  // optimization for Oxlint. Since Oxlint is an object, not an array, we can
-  // skip verifying the entire results object (which may be large) against
-  // ESLint's schema
-  if (Array.isArray(results) && Value.Check(EslintSchema, results)) {
+  // ESLint diagnostics come in array form, while Oxlint errors come in an
+  // object form, making it simple to determine which framework the results are
+  if (Array.isArray(results)) {
+    if (!Value.Check(EslintSchema, results)) {
+      const errors = Value.Errors(EslintSchema, results);
+      throw new InternalError(
+        'Could not parse piped ESLint results: ' +
+          JSON.stringify(Array.from(errors), null, 2)
+      );
+    }
     const lintErrors: LintErrors = { type: 'eslint', errors: new Map() };
     for (const file of results) {
       const { filePath } = file;
       for (const message of file.messages) {
+        // A missing ruleId or line indicates the file couldn't be parsed, which
+        // means there's nothing for us to legacy
+        if (!message.ruleId || message.line === undefined) {
+          continue;
+        }
         if (!lintErrors.errors.has(filePath)) {
           lintErrors.errors.set(filePath, new Map());
         }
@@ -60,8 +72,14 @@ export function parseResults(results: unknown): LintErrors {
       }
     }
     return lintErrors;
-  }
-  if (Value.Check(OxlintSchema, results)) {
+  } else {
+    if (!Value.Check(OxlintSchema, results)) {
+      const errors = Value.Errors(OxlintSchema, results);
+      throw new InternalError(
+        'Could not parse piped Oxlint results: ' +
+          JSON.stringify(Array.from(errors), null, 2)
+      );
+    }
     const lintErrors: LintErrors = { type: 'oxlint', errors: new Map() };
     for (const diagnostic of results.diagnostics) {
       // A missing code means that an error happened before Oxlint was able to
@@ -114,5 +132,4 @@ export function parseResults(results: unknown): LintErrors {
     }
     return lintErrors;
   }
-  throw new Error('Could not parse piped results');
 }

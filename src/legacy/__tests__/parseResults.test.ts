@@ -4,13 +4,13 @@ import { parseResults } from '../parseResults.js';
 
 // --- ESLint input builders ------------------------------------------------
 
-function eslintMessage(ruleId: string, line: number) {
+function eslintMessage(ruleId: string | null, line?: number) {
   return { ruleId, line };
 }
 
 function eslintFile(
   filePath: string,
-  messages: Array<{ ruleId: string; line: number }>
+  messages: Array<{ ruleId: string | null; line?: number }>
 ) {
   return { filePath, messages };
 }
@@ -184,6 +184,51 @@ describe('parseResults', () => {
         errors: new Map([['w.ts', new Map([[1, ['no-console']]])]]),
       });
     });
+
+    // Real `eslint --format=json` emits a message with `ruleId: null` and no
+    // line when a file fails to parse. There's no rule to legacy, so the
+    // message is skipped rather than recorded or treated as a parse failure.
+    it('skips a message whose ruleId is null (fatal parse error)', () => {
+      const results = [eslintFile('broken.ts', [eslintMessage(null, 1)])];
+      expect(parseResults(results)).toEqual({
+        type: 'eslint',
+        errors: new Map(),
+      });
+    });
+
+    it('skips a message that has no line', () => {
+      const results = [eslintFile('broken.ts', [eslintMessage('no-console')])];
+      expect(parseResults(results)).toEqual({
+        type: 'eslint',
+        errors: new Map(),
+      });
+    });
+
+    it('keeps real errors while skipping a parse-error message in the same file', () => {
+      const results = [
+        eslintFile('mixed.ts', [
+          eslintMessage(null, 1),
+          eslintMessage('no-console', 2),
+        ]),
+      ];
+      expect(parseResults(results)).toEqual({
+        type: 'eslint',
+        errors: new Map([['mixed.ts', new Map([[1, ['no-console']]])]]),
+      });
+    });
+
+    it('skips a parse-error message in one file while still recording a valid file', () => {
+      // Skipping is per-message: a file that only reports a parse error is
+      // omitted, but a well-formed file in the same batch is still recorded.
+      const results = [
+        eslintFile('good.ts', [eslintMessage('no-console', 2)]),
+        eslintFile('bad.ts', [eslintMessage(null)]),
+      ];
+      expect(parseResults(results)).toEqual({
+        type: 'eslint',
+        errors: new Map([['good.ts', new Map([[1, ['no-console']]])]]),
+      });
+    });
   });
 
   describe('Oxlint output', () => {
@@ -350,42 +395,58 @@ describe('parseResults', () => {
   });
 
   describe('unrecognized input', () => {
+    // A non-array is treated as Oxlint (object-shaped) input, so the failing
+    // schema check reports an Oxlint parse error.
     it('throws for an empty object', () => {
-      expect(() => parseResults({})).toThrow('Could not parse piped results');
+      expect(() => parseResults({})).toThrow(
+        'Could not parse piped Oxlint results'
+      );
     });
 
     it('throws for null', () => {
-      expect(() => parseResults(null)).toThrow('Could not parse piped results');
+      expect(() => parseResults(null)).toThrow(
+        'Could not parse piped Oxlint results'
+      );
     });
 
     it('throws for undefined', () => {
       expect(() => parseResults(undefined)).toThrow(
-        'Could not parse piped results'
+        'Could not parse piped Oxlint results'
       );
     });
 
     it('throws for a primitive string', () => {
       expect(() => parseResults('oops')).toThrow(
-        'Could not parse piped results'
+        'Could not parse piped Oxlint results'
       );
     });
 
     it('throws for a primitive number', () => {
-      expect(() => parseResults(42)).toThrow('Could not parse piped results');
-    });
-
-    it('throws for an array whose entries are not ESLint messages', () => {
-      expect(() => parseResults([{ foo: 'bar' }])).toThrow(
-        'Could not parse piped results'
+      expect(() => parseResults(42)).toThrow(
+        'Could not parse piped Oxlint results'
       );
     });
 
-    it('throws when an ESLint message is missing its line number', () => {
-      const results = [
-        { filePath: 'a.ts', messages: [{ ruleId: 'no-console' }] },
-      ];
+    it('throws for a boolean', () => {
+      expect(() => parseResults(true)).toThrow(
+        'Could not parse piped Oxlint results'
+      );
+    });
+
+    // An array is treated as ESLint input, so a failing schema check reports an
+    // ESLint parse error.
+    it('throws for an array whose entries are not ESLint messages', () => {
+      expect(() => parseResults([{ foo: 'bar' }])).toThrow(
+        'Could not parse piped ESLint results'
+      );
+    });
+
+    it('throws when an ESLint message is missing its ruleId', () => {
+      // `ruleId` is required (only nullable), so omitting it entirely still
+      // fails the schema, unlike a null ruleId, which is skipped.
+      const results = [{ filePath: 'a.ts', messages: [{ line: 1 }] }];
       expect(() => parseResults(results)).toThrow(
-        'Could not parse piped results'
+        'Could not parse piped ESLint results'
       );
     });
 
@@ -396,28 +457,7 @@ describe('parseResults', () => {
         ],
       };
       expect(() => parseResults(results)).toThrow(
-        'Could not parse piped results'
-      );
-    });
-
-    it('throws for an ESLint message whose ruleId is null (fatal parse error)', () => {
-      // Real `eslint --format=json` emits `ruleId: null` for a file that fails
-      // to parse. The schema requires a string ruleId, so the whole batch is
-      // rejected and parsing throws. This is the accepted behavior, and is
-      // asymmetric with the Oxlint branch, which instead skips its no-code
-      // (pre-lint error) diagnostics.
-      const results = [
-        { filePath: 'a.ts', messages: [{ ruleId: null, line: 1 }] },
-      ];
-      expect(() => parseResults(results)).toThrow(
-        'Could not parse piped results'
-      );
-    });
-
-    it('throws when an ESLint message is missing its ruleId', () => {
-      const results = [{ filePath: 'a.ts', messages: [{ line: 1 }] }];
-      expect(() => parseResults(results)).toThrow(
-        'Could not parse piped results'
+        'Could not parse piped Oxlint results'
       );
     });
 
@@ -428,31 +468,13 @@ describe('parseResults', () => {
         ],
       };
       expect(() => parseResults(results)).toThrow(
-        'Could not parse piped results'
+        'Could not parse piped Oxlint results'
       );
     });
 
     it('throws when Oxlint diagnostics is not an array', () => {
       expect(() => parseResults({ diagnostics: 'nope' })).toThrow(
-        'Could not parse piped results'
-      );
-    });
-
-    it('throws for a boolean', () => {
-      expect(() => parseResults(true)).toThrow('Could not parse piped results');
-    });
-
-    it('rejects the whole batch when one file among valid ones has an invalid message', () => {
-      // Schema validation is all-or-nothing for ESLint: a single message
-      // missing its line invalidates the entire array, even though the other
-      // file is well-formed. (Contrast the Oxlint branch, which skips
-      // individual no-code diagnostics rather than rejecting everything.)
-      const results = [
-        eslintFile('good.ts', [eslintMessage('no-console', 2)]),
-        { filePath: 'bad.ts', messages: [{ ruleId: 'no-debugger' }] },
-      ];
-      expect(() => parseResults(results)).toThrow(
-        'Could not parse piped results'
+        'Could not parse piped Oxlint results'
       );
     });
   });

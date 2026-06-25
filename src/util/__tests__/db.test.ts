@@ -16,6 +16,12 @@ function databasePath(fixture: string): string {
 // never dirties the repo and never collides with getFileList's gitignore tests.
 const WORKING_DB = join(tmpdir(), 'lint-legacies-db-roundtrip.json');
 
+// A path that must be absent so the constructor takes its "create a new
+// database" branch. It can't be a committed fixture (the test relies on the
+// file not existing), and save() will create it, so it lives in the temp dir
+// and is removed after each test.
+const MISSING_DB = join(tmpdir(), 'lint-legacies-db-missing.json');
+
 describe('Database', () => {
   describe('constructor', () => {
     it('loads the ids from a valid database file', () => {
@@ -56,6 +62,32 @@ describe('Database', () => {
         expect(() => new Database(databasePath('missing-ids.json'))).toThrow(
           'Invalid database file:\n  must have required properties ids\n  must not have additional properties'
         );
+      });
+    });
+
+    describe('with a nonexistent database file', () => {
+      afterEach(() => {
+        rmSync(MISSING_DB, { force: true });
+      });
+
+      it('initializes an empty ids array when the file does not exist', () => {
+        rmSync(MISSING_DB, { force: true });
+        const database = new Database(MISSING_DB);
+        expect(database.getIds()).toEqual([]);
+      });
+
+      it('can be populated, saved (creating the file), and re-read', () => {
+        rmSync(MISSING_DB, { force: true });
+        const database = new Database(MISSING_DB);
+        database.setIds(['new2', 'new1']);
+        database.save();
+
+        // The freshly-created file reads back exactly what was written. The
+        // load path sorts on construction, so assert against the sorted form.
+        expect(new Database(MISSING_DB).getIds()).toEqual(['new1', 'new2']);
+        expect(JSON.parse(readFileSync(MISSING_DB, 'utf-8'))).toEqual({
+          ids: ['new2', 'new1'],
+        });
       });
     });
   });

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 import TypeBox from 'typebox';
 import Value from 'typebox/value';
@@ -16,6 +16,10 @@ export class Database {
 
   constructor(databaseFile: string) {
     this.databaseFile = databaseFile;
+    if (!existsSync(databaseFile)) {
+      this.database = { ids: [] };
+      return;
+    }
     const databaseContents = JSON.parse(
       readFileSync(databaseFile, 'utf-8')
     ) as unknown;
