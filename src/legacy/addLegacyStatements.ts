@@ -39,9 +39,10 @@ export function addLegacyStatements({
     ([a], [b]) => b - a
   );
 
-  // Add the legacy comment to the file, iterating in reverse order so that
-  // future lines to disable are not displaced
+  // Add the legacy comment to the file, iterating in forward order of the
+  // reverse sorted array so that lines don't get offset by other fixes
   outer: for (const [line, rules] of sortedFileErrors) {
+    const indentation = getIndentation(fileContentsByLine[line]);
     // First, check if there is already a disable comment for this line, in
     // which case we need to replace it.
     for (const fileComment of fileComments) {
@@ -74,8 +75,7 @@ export function addLegacyStatements({
             pragma,
             line,
             lineContexts,
-
-            // TODO: need to figure out a way to detect global collisions
+            indentation,
             id: generateId(parsedComment?.id),
           })
         );
@@ -93,12 +93,21 @@ export function addLegacyStatements({
         pragma,
         line,
         lineContexts,
+        indentation,
         id: generateId(),
       })
     );
   }
 
   return fileContentsByLine.join('\n');
+}
+
+function getIndentation(line: string) {
+  const indentation = line.match(/^\s*/)?.[0];
+  if (typeof indentation !== 'string') {
+    throw new InternalError(`Could not compute indentation for ${line}`);
+  }
+  return indentation;
 }
 
 function computeDisableComment({
@@ -108,6 +117,7 @@ function computeDisableComment({
   pragma,
   line,
   lineContexts,
+  indentation,
   id,
 }: {
   type: 'eslint' | 'oxlint';
@@ -116,6 +126,7 @@ function computeDisableComment({
   pragma: string;
   line: number;
   lineContexts: LineContext[];
+  indentation: string;
   id: string;
 }) {
   const combinedRules = Array.from(new Set([...existingRules, ...newRules]));
@@ -129,8 +140,8 @@ function computeDisableComment({
 
   const innerComment = `${type}-disable-next-line ${combinedRules.join(', ')} -- ${pragma} (${newRules.join(', ')}) ${id}`;
   if (context === 'jsx') {
-    return `{/* ${innerComment} */}`;
+    return `${indentation}{/* ${innerComment} */}`;
   } else {
-    return `// ${innerComment}`;
+    return `${indentation}// ${innerComment}`;
   }
 }

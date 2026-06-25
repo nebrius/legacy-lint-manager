@@ -105,15 +105,15 @@ describe('addLegacyStatements', () => {
       );
     });
 
-    it('honors a non-default pragma verbatim', () => {
+    it('honors a non-default pragma verbatim with indentation', () => {
       const pragma = 'CUSTOM LEGACY PRAGMA';
       const result = run({
-        fileContents: 'const a = 1;\nconst x = 2;',
+        fileContents: 'if (1) {\n  const a = 1;\n  const x = 2;\n}',
         entries: [[1, ['no-debugger']]],
         pragma,
       });
       expect(result.split('\n')[1]).toBe(
-        `// eslint-disable-next-line no-debugger -- ${pragma} (no-debugger) ${issuedIds[0]}`
+        `  // eslint-disable-next-line no-debugger -- ${pragma} (no-debugger) ${issuedIds[0]}`
       );
     });
 
@@ -131,7 +131,7 @@ describe('addLegacyStatements', () => {
         filePath: JSX_FILE,
       });
       expect(result.split('\n')[2]).toBe(
-        `{/* eslint-disable-next-line no-undef -- ${DEFAULT_PRAGMA} (no-undef) ${issuedIds[0]} */}`
+        `    {/* eslint-disable-next-line no-undef -- ${DEFAULT_PRAGMA} (no-undef) ${issuedIds[0]} */}`
       );
     });
   });
