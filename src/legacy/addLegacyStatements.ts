@@ -104,9 +104,11 @@ export function addLegacyStatements({
 
 function getIndentation(line: string) {
   const indentation = line.match(/^\s*/)?.[0];
+  /* v8 ignore start */
   if (typeof indentation !== 'string') {
     throw new InternalError(`Could not compute indentation for ${line}`);
   }
+  /* v8 ignore stop */
   return indentation;
 }
 
