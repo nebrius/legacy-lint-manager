@@ -17,6 +17,16 @@
     {
       "type": "node-terminal",
       "request": "launch",
+      "name": "Legacy (hive-kube)",
+      "command": "npx eslint --format=json \"**/*.{ts,tsx,mts,js,jsx,mjs,cjs}\" --format=json | node /Users/bryan/Projects/legacy-lint-manager/dist/cli.js legacy-errors --verbose",
+      "cwd": "/Users/bryan/Projects/hive-kube/services/control_plane/cp_frontend_service",
+      "preLaunchTask": "npm: build",
+      "skipFiles": ["<node_internals>/**"],
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"]
+    },
+    {
+      "type": "node-terminal",
+      "request": "launch",
       "name": "Legacy (ESLint)",
       "command": "npx eslint -c eslint.config.mjs \"**/*.{ts,tsx,mts,js,jsx,mjs}\" --format=json | node dist/cli.js legacy-errors --verbose",
       "cwd": "${workspaceFolder}",

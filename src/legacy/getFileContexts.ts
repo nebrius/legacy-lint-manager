@@ -1,4 +1,3 @@
-import type { Span } from 'oxc-parser';
 import { type Program, Visitor } from 'oxc-parser';
 
 import type { LineContext } from '../types.js';
@@ -15,10 +14,10 @@ export function getFileContexts(program: Program, lineStartMapping: number[]) {
   // the last context to indicate how the next line starts
   const rawFileContexts = new Map<number, Array<LineContext>>();
 
-  function enterContext(node: Span, context: LineContext) {
+  function enterContext(index: number, context: LineContext) {
     stack.push(context);
     const line = getLineFromIndex({
-      index: node.start,
+      index,
       lineStartMapping,
     });
     if (!rawFileContexts.has(line)) {
@@ -27,7 +26,7 @@ export function getFileContexts(program: Program, lineStartMapping: number[]) {
     rawFileContexts.get(line)?.push(context);
   }
 
-  function exitContext(node: Span, context: LineContext) {
+  function exitContext(index: number, context: LineContext) {
     const currentContext = stack.pop();
     const nextContext = stack[stack.length - 1];
 
@@ -44,7 +43,7 @@ export function getFileContexts(program: Program, lineStartMapping: number[]) {
     }
 
     const line = getLineFromIndex({
-      index: node.end,
+      index,
       lineStartMapping,
     });
     if (!rawFileContexts.has(line)) {
@@ -55,33 +54,34 @@ export function getFileContexts(program: Program, lineStartMapping: number[]) {
 
   const visitor = new Visitor({
     JSXOpeningElement(node) {
-      enterContext(node, 'jsx');
+      enterContext(node.start, 'js');
     },
     'JSXOpeningElement:exit'(node) {
+      exitContext(node.end, 'js');
       // Self-closing elements may split across multiple lines where we may
       // need to add a disable comment, and attributes inside the node may have
       // js interpolated expressions that need to be processed before this part
-      if (node.selfClosing) {
-        exitContext(node, 'jsx');
+      if (!node.selfClosing) {
+        enterContext(node.end, 'jsx');
         return;
       }
     },
     JSXClosingElement(node) {
-      exitContext(node, 'jsx');
+      exitContext(node.end, 'jsx');
     },
 
     JSXOpeningFragment(node) {
-      enterContext(node, 'jsx');
+      enterContext(node.start, 'jsx');
     },
     JSXClosingFragment(node) {
-      exitContext(node, 'jsx');
+      exitContext(node.end, 'jsx');
     },
 
     JSXExpressionContainer(node) {
-      enterContext(node, 'js');
+      enterContext(node.start, 'js');
     },
     'JSXExpressionContainer:exit'(node) {
-      exitContext(node, 'js');
+      exitContext(node.end, 'js');
     },
   });
   visitor.visit(program);

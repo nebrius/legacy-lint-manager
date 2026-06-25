@@ -134,6 +134,27 @@ describe('addLegacyStatements', () => {
         `    {/* eslint-disable-next-line no-undef -- ${DEFAULT_PRAGMA} (no-undef) ${issuedIds[0]} */}`
       );
     });
+
+    it('uses a line comment for an error on an attribute line of a multi-line opening tag', () => {
+      // The attribute region of an opening tag is js context, so the disable
+      // must be a `//` comment — a `{/* */}` comment is a syntax error between
+      // JSX attributes.
+      const fileContents = `const a = (
+  <Button
+    onClick={fn}
+  >
+    Reset
+  </Button>
+);`;
+      const result = run({
+        fileContents,
+        entries: [[2, ['no-undef']]],
+        filePath: JSX_FILE,
+      });
+      expect(result.split('\n')[2]).toBe(
+        `    // eslint-disable-next-line no-undef -- ${DEFAULT_PRAGMA} (no-undef) ${issuedIds[0]}`
+      );
+    });
   });
 
   describe('reverse-iteration ordering', () => {

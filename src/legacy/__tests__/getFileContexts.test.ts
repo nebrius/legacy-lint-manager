@@ -96,7 +96,10 @@ const b = 2;`)
       expect(result[4]).toBe('js');
     });
 
-    it('treats the lines of a multi-line opening tag as jsx', () => {
+    it('treats the lines of a multi-line opening tag as js, switching to jsx only after the closing >', () => {
+      // The attribute region of an opening tag is js context: an eslint-disable
+      // next to an attribute must be a `//` comment, not a `{/* */}` one. Only
+      // the children (after the `>`) are jsx.
       expect(
         contexts(`const a = (
   <div
@@ -105,7 +108,48 @@ const b = 2;`)
     {x}
   </div>
 );`)
-      ).toEqual(['js', 'js', 'jsx', 'jsx', 'jsx', 'jsx', 'js']);
+      ).toEqual(['js', 'js', 'js', 'js', 'jsx', 'jsx', 'js']);
+    });
+
+    it('keeps an attribute line js when its element has children on later lines', () => {
+      // Regression: the attribute lines of a non-self-closing element used to
+      // leak jsx because the jsx context was entered at the opening tag's start
+      // rather than after its closing `>`. Each attribute line, the `>` line,
+      // and the closing-tag line must resolve correctly.
+      const result = contexts(`const a = (
+  <Button
+    onClick={fn}
+    variant="x"
+  >
+    Reset
+  </Button>
+);`);
+      expect(result).toEqual([
+        'js', // const a = (
+        'js', // <Button
+        'js', // onClick={fn}
+        'js', // variant="x"
+        'js', // >
+        'jsx', // Reset
+        'jsx', // </Button>
+        'js', // );
+      ]);
+    });
+
+    it('keeps the attribute region js even when an attribute expression spans lines', () => {
+      // The attribute region is js and the multi-line expression interior is
+      // also js, so every line up to the `>` is js; only the child is jsx.
+      expect(
+        contexts(`const a = (
+  <div
+    style={
+      x
+    }
+  >
+    {y}
+  </div>
+);`)
+      ).toEqual(['js', 'js', 'js', 'js', 'js', 'js', 'jsx', 'jsx', 'js']);
     });
   });
 
@@ -215,14 +259,16 @@ const b = 2;`)
       ).toEqual(['js', 'js']);
     });
 
-    it('marks all lines of a multi-line self-closing tag as jsx', () => {
+    it('keeps all lines of a multi-line self-closing tag as js', () => {
+      // A self-closing tag has no children, so every line — the attribute
+      // region included — stays js context.
       expect(
         contexts(`const a = (
   <Foo
     bar={1}
   />
 );`)
-      ).toEqual(['js', 'js', 'jsx', 'jsx', 'js']);
+      ).toEqual(['js', 'js', 'js', 'js', 'js']);
     });
 
     it('marks self-closing sibling lines inside a parent as jsx', () => {
@@ -243,7 +289,9 @@ const b = 2;`)
       ).toEqual(['js', 'js']);
     });
 
-    it('returns to js for the interior lines of a multi-line attribute expression', () => {
+    it('keeps every line of a multi-line attribute expression as js', () => {
+      // Both the attribute region and the expression interior are js context,
+      // so the whole self-closing tag stays js.
       expect(
         contexts(`const a = (
   <Foo
@@ -252,7 +300,7 @@ const b = 2;`)
     }
   />
 );`)
-      ).toEqual(['js', 'js', 'jsx', 'js', 'js', 'jsx', 'js']);
+      ).toEqual(['js', 'js', 'js', 'js', 'js', 'js', 'js']);
     });
   });
 
