@@ -7,7 +7,7 @@ export function generateId(previousId?: string) {
   // It is very unlikely that we'll ever have a collision, but given that
   // collisions are fatal, we store all generated IDs in a set to prevent them.
   // In theory, this could lead to a previous Id being rewritten to a new ID if
-  // a previous ID encountered a collision, but this is an acceptible trade-off
+  // a previous ID encountered a collision, but this is an acceptable trade-off
   // given that to always preserve IDs requires first knowing the entire list
   // before we generate a single ID, which would be much more computationally
   while (idSet.has(id)) {

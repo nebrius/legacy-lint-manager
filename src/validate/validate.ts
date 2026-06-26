@@ -57,8 +57,8 @@ export function validate({
   if (compare) {
     // Note: due to the nature of compare (reading a file across branches), we
     // can't easily write a unit test for this code path. There is an
-    // integration test at src/__tests__/integration/compareDatabases.integration.test.ts
-    // that excercises this code path, but code coverage can't track it due
+    // integration test at src/__tests__/integration/getCompareInfo.integration.test.ts
+    // that exercises this code path, but code coverage can't track it due
     // to the use of a subprocess used to call the CLI.
     /* v8 ignore start */
     time('Getting list of expected IDs from compare branch', () => {

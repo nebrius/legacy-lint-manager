@@ -1,1 +1,2 @@
-- Support including/excuding warnings based on configuration
+- Support including/excluding warnings based on configuration
+- Add support for non-disablable rules aside from legacies

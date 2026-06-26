@@ -38,7 +38,7 @@
       "type": "node-terminal",
       "request": "launch",
       "name": "Legacy (Oxlint)",
-      "command": "npx oxlint -c oxlint.config.mts --type-aware --format=json | node dist/cli.js legacy-errors --verbose",
+      "command": "npx oxlint -c oxlint.config.ts --type-aware --format=json | node dist/cli.js legacy-errors --verbose",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "npm: build",
       "skipFiles": ["<node_internals>/**"],

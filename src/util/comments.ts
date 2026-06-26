@@ -63,7 +63,7 @@ function parseCommentText(
     if (text.startsWith(prefix)) {
       const strippedText = text.substring(prefix.length);
 
-      // We have to make sure that the first character in the remaining test is
+      // We have to make sure that the first character in the remaining text is
       // a whitespace character or the string is empty (representing disabling
       // all rules), otherwise it's not a real disable comment
       if (strippedText.match(/^\s/) || strippedText.length === 0) {

@@ -43,7 +43,7 @@ addCommonOptions(program.command('validate'))
   )
   .option(
     '--no-compare',
-    "Compare the current database with the compare branch's database"
+    "Disable comparing the current database with the compare branch's database"
   )
   .action((options) => {
     validate({
