@@ -25,6 +25,11 @@ const CONSOLE_FILE = join(WORK_SRC, 'usesConsole.ts');
 const DEBUGGER_FILE = join(WORK_SRC, 'usesDebugger.ts');
 const REL_FILES = ['src/usesConsole.ts', 'src/usesDebugger.ts'];
 
+// usesVar.ts holds a no-var warning (line 2) and a no-console error (line 3),
+// so it exercises the warning-vs-error split that --ignore-warnings toggles.
+const VAR_FILE = join(WORK_SRC, 'usesVar.ts');
+const VAR_REL_FILES = ['src/usesVar.ts'];
+
 // eslint/oxlint exit non-zero when lint errors exist, so execFileSync throws;
 // the JSON we want is on the thrown error's stdout.
 function runLinter(bin: string, args: string[]): string {
@@ -39,12 +44,12 @@ function runLinter(bin: string, args: string[]): string {
   }
 }
 
-function runEslint(): string {
-  return runLinter(ESLINT_BIN, ['--no-ignore', '--format=json', ...REL_FILES]);
+function runEslint(files: string[] = REL_FILES): string {
+  return runLinter(ESLINT_BIN, ['--no-ignore', '--format=json', ...files]);
 }
 
-function runOxlint(): string {
-  return runLinter(OXLINT_BIN, ['-f', 'json', ...REL_FILES]);
+function runOxlint(files: string[] = REL_FILES): string {
+  return runLinter(OXLINT_BIN, ['-f', 'json', ...files]);
 }
 
 // generateIds.ts holds a process-global Set that getIds() reads in full, and
@@ -57,8 +62,20 @@ async function loadCommand() {
   return mod.legacyExistingErrors;
 }
 
-function readDatabase(): { ids: string[] } {
-  return JSON.parse(readFileSync(WORKING_DB, 'utf-8')) as { ids: string[] };
+function readDatabase(): { ids: string[]; ignoreWarnings?: boolean } {
+  return JSON.parse(readFileSync(WORKING_DB, 'utf-8')) as {
+    ids: string[];
+    ignoreWarnings?: boolean;
+  };
+}
+
+// True when the file has a legacy-disable comment for the given rule (matching
+// either the eslint or oxlint comment form).
+function hasLegacyComment(path: string, rule: string): boolean {
+  const contents = readFileSync(path, 'utf-8');
+  return new RegExp(
+    `-disable-next-line ${rule} -- This lint error is legacied\\. DO NOT COPY \\(${rule}\\) [\\w-]{8}`
+  ).test(contents);
 }
 
 // Pull the 8-char ids out of the legacy comments the command wrote.
@@ -167,5 +184,98 @@ describe('legacy-errors (integration)', () => {
     const fileIds = [...idsInFile(CONSOLE_FILE), ...idsInFile(DEBUGGER_FILE)];
     expect(fileIds).toHaveLength(2);
     expect(readDatabase().ids.sort()).toEqual([...fileIds].sort());
+  });
+
+  it('legacies an ESLint warning when ignoreWarnings is not set (default false)', async () => {
+    const legacyExistingErrors = await loadCommand();
+    const json = runEslint(VAR_REL_FILES);
+
+    await legacyExistingErrors(
+      {
+        pragma: DEFAULT_PRAGMA,
+        databaseFile: WORKING_DB,
+        rootDir: WORK_DIR,
+        verbose: false,
+      },
+      Readable.from([json])
+    );
+
+    // Both the no-var warning and the no-console error get legacied, and the
+    // database records the resolved default.
+    expect(hasLegacyComment(VAR_FILE, 'no-var')).toBe(true);
+    expect(hasLegacyComment(VAR_FILE, 'no-console')).toBe(true);
+    expect(readDatabase().ignoreWarnings).toBe(false);
+  });
+
+  it('does not legacy an ESLint warning when ignoreWarnings is true', async () => {
+    const legacyExistingErrors = await loadCommand();
+    const json = runEslint(VAR_REL_FILES);
+
+    await legacyExistingErrors(
+      {
+        pragma: DEFAULT_PRAGMA,
+        databaseFile: WORKING_DB,
+        rootDir: WORK_DIR,
+        verbose: false,
+        ignoreWarnings: true,
+      },
+      Readable.from([json])
+    );
+
+    // The no-console error is still legacied; the no-var warning is skipped.
+    expect(hasLegacyComment(VAR_FILE, 'no-console')).toBe(true);
+    expect(hasLegacyComment(VAR_FILE, 'no-var')).toBe(false);
+    expect(readDatabase().ignoreWarnings).toBe(true);
+  });
+
+  it('uses the database ignoreWarnings value when the flag is omitted', async () => {
+    // Pre-seed the database with ignoreWarnings: true; running without the flag
+    // must honor the stored value rather than resetting it to the default.
+    writeFileSync(
+      WORKING_DB,
+      JSON.stringify({ ids: [], ignoreWarnings: true })
+    );
+    const legacyExistingErrors = await loadCommand();
+    const json = runEslint(VAR_REL_FILES);
+
+    await legacyExistingErrors(
+      {
+        pragma: DEFAULT_PRAGMA,
+        databaseFile: WORKING_DB,
+        rootDir: WORK_DIR,
+        verbose: false,
+      },
+      Readable.from([json])
+    );
+
+    expect(hasLegacyComment(VAR_FILE, 'no-console')).toBe(true);
+    expect(hasLegacyComment(VAR_FILE, 'no-var')).toBe(false);
+    expect(readDatabase().ignoreWarnings).toBe(true);
+  });
+
+  it('does not legacy an Oxlint warning when ignoreWarnings is true', async () => {
+    const legacyExistingErrors = await loadCommand();
+    const json = runOxlint(VAR_REL_FILES);
+
+    const originalCwd = process.cwd();
+    process.chdir(WORK_DIR);
+    try {
+      await legacyExistingErrors(
+        {
+          pragma: DEFAULT_PRAGMA,
+          databaseFile: WORKING_DB,
+          rootDir: WORK_DIR,
+          verbose: false,
+          ignoreWarnings: true,
+        },
+        Readable.from([json])
+      );
+    } finally {
+      process.chdir(originalCwd);
+    }
+
+    expect(hasLegacyComment(VAR_FILE, 'eslint/no-console')).toBe(true);
+    expect(hasLegacyComment(VAR_FILE, 'eslint/no-var')).toBe(false);
+    expect(readDatabase().ignoreWarnings).toBe(true);
   });
 });

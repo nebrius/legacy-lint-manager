@@ -84,7 +84,12 @@ describe('validate (integration)', () => {
       useDatabase('has-unused.json');
       vi.spyOn(console, 'info').mockImplementation(() => undefined);
       runValidate(true);
-      expect(readDatabase()).toEqual({ ids: ['c0nsole1', 'debugg02'] });
+      // The --update path calls database.save(), which backfills the
+      // ignoreWarnings default for databases that predate the field.
+      expect(readDatabase()).toEqual({
+        ids: ['c0nsole1', 'debugg02'],
+        ignoreWarnings: false,
+      });
     });
 
     it('exits with an error and leaves the database untouched without --update', () => {

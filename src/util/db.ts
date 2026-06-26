@@ -8,6 +8,7 @@ import { error } from './logging.js';
 
 const DatabaseSchema = TypeBox.Object(
   {
+    ignoreWarnings: TypeBox.Optional(TypeBox.Boolean()),
     ids: TypeBox.Array(TypeBox.String()),
   },
   { additionalProperties: false }
@@ -81,12 +82,27 @@ class DatabaseInstance {
     this.database.ids = ids;
   }
 
+  public getIgnoreWarnings() {
+    return this.database.ignoreWarnings ?? false;
+  }
+
+  public setIgnoreWarnings(ignoreWarnings: boolean) {
+    this.database.ignoreWarnings = ignoreWarnings;
+  }
+
   public save() {
     /* v8 ignore start */
     if (!this.databaseFile) {
       throw new InternalError('this.databaseFile is undefined');
     }
     /* v8 ignore end */
+
+    // This is only possible if the database was created before the
+    // ignoreWarnings field was added, or if this is a new database and the user
+    // didn't explicitly set it via the --ignore-warnings CLI flag
+    if (this.database.ignoreWarnings === undefined) {
+      this.database.ignoreWarnings = false;
+    }
     writeFileSync(this.databaseFile, JSON.stringify(this.database));
   }
 }

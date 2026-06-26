@@ -10,12 +10,21 @@ import { parseResults } from './parseResults.js';
 import { readResults } from './readResults.js';
 
 export async function legacyExistingErrors(
-  options: CommonOptions,
+  options: CommonOptions & { ignoreWarnings?: boolean },
   inputStream: Readable = process.stdin
 ) {
   setVerbose(options.verbose);
+  const database = fromFile({
+    databaseFile: options.databaseFile,
+    createIfMissing: true,
+  });
+  if (options.ignoreWarnings !== undefined) {
+    database.setIgnoreWarnings(options.ignoreWarnings);
+  }
   const results = await time('reading results', () => readResults(inputStream));
-  const lintErrors = time('parsing results', () => parseResults(results));
+  const lintErrors = time('parsing results', () =>
+    parseResults({ results, ignoreWarnings: database.getIgnoreWarnings() })
+  );
   time('adding legacy statements', () => {
     for (const filePath of lintErrors.errors.keys()) {
       // Get comments so we can check if we need to add to an existing disable
@@ -32,10 +41,6 @@ export async function legacyExistingErrors(
   });
 
   time('updating database', () => {
-    const database = fromFile({
-      databaseFile: options.databaseFile,
-      createIfMissing: true,
-    });
     database.setIds(getIds());
     database.save();
   });

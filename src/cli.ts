@@ -58,6 +58,10 @@ addCommonOptions(program.command('validate'))
 
 addCommonOptions(program.command('legacy-errors'))
   .description('Mark existing lint errors as legacied')
+  .option(
+    '--ignore-warnings',
+    'Ignore warnings when parsing results. If this is a new database, defaults to false, otherwise defaults to what is currently set in the database'
+  )
   .action((options) => {
     void legacyExistingErrors(options);
   });

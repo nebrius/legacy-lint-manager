@@ -13,6 +13,7 @@ const EslintSchema = TypeBox.Array(
         // parsing errors
         ruleId: TypeBox.Union([TypeBox.Null(), TypeBox.String()]),
         line: TypeBox.Optional(TypeBox.Number()),
+        severity: TypeBox.Optional(TypeBox.Number()),
       })
     ),
   })
@@ -25,6 +26,10 @@ const OxlintSchema = TypeBox.Object({
       code: TypeBox.Optional(TypeBox.String()),
       filename: TypeBox.String(),
       labels: TypeBox.Array(TypeBox.Unknown()),
+      severity: TypeBox.Union([
+        TypeBox.Literal('error'),
+        TypeBox.Literal('warning'),
+      ]),
     })
   ),
 });
@@ -37,7 +42,13 @@ const SpanSchema = TypeBox.Object({
 
 const OXLINT_CODE_REGEX = /^(.*?)\((.*?)\)$/;
 
-export function parseResults(results: unknown): LintErrors {
+export function parseResults({
+  results,
+  ignoreWarnings,
+}: {
+  results: unknown;
+  ignoreWarnings: boolean;
+}): LintErrors {
   // ESLint diagnostics come in array form, while Oxlint errors come in an
   // object form, making it simple to determine which framework the results are
   if (Array.isArray(results)) {
@@ -54,7 +65,14 @@ export function parseResults(results: unknown): LintErrors {
       for (const message of file.messages) {
         // A missing ruleId or line indicates the file couldn't be parsed, which
         // means there's nothing for us to legacy
-        if (!message.ruleId || message.line === undefined) {
+        if (
+          !message.ruleId ||
+          message.line === undefined ||
+          message.severity === undefined
+        ) {
+          continue;
+        }
+        if (ignoreWarnings && message.severity === 1) {
           continue;
         }
         if (!lintErrors.errors.has(filePath)) {
@@ -85,6 +103,10 @@ export function parseResults(results: unknown): LintErrors {
       // A missing code means that an error happened before Oxlint was able to
       // lint the file, such as a syntax error. We don't care about these cases.
       if (!diagnostic.code) {
+        continue;
+      }
+
+      if (ignoreWarnings && diagnostic.severity === 'warning') {
         continue;
       }
 

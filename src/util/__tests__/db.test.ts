@@ -123,6 +123,7 @@ describe('Database', () => {
           ).toEqual(['new1', 'new2']);
           expect(JSON.parse(readFileSync(MISSING_DB, 'utf-8'))).toEqual({
             ids: ['new2', 'new1'],
+            ignoreWarnings: false,
           });
         });
       });
@@ -200,6 +201,7 @@ describe('Database', () => {
       ).toEqual(['new1', 'new2']);
       expect(JSON.parse(readFileSync(WORKING_DB, 'utf-8'))).toEqual({
         ids: ['new1', 'new2'],
+        ignoreWarnings: false,
       });
     });
 
@@ -215,6 +217,74 @@ describe('Database', () => {
       expect(
         fromFile({ databaseFile: WORKING_DB, createIfMissing: false }).getIds()
       ).toEqual([]);
+    });
+
+    it('defaults ignoreWarnings to false on disk when it was never set', () => {
+      // valid.json omits ignoreWarnings; save() fills in the default so older
+      // databases gain the field without the user having to opt in.
+      cpSync(databasePath('valid.json'), WORKING_DB);
+      const database = fromFile({
+        databaseFile: WORKING_DB,
+        createIfMissing: false,
+      });
+      database.save();
+
+      expect(JSON.parse(readFileSync(WORKING_DB, 'utf-8'))).toEqual({
+        ids: ['18gh38s6', 'abc12345', 'xyz98765'],
+        ignoreWarnings: false,
+      });
+    });
+  });
+
+  describe('ignoreWarnings', () => {
+    afterEach(() => {
+      rmSync(WORKING_DB, { force: true });
+    });
+
+    it('returns false when the database file omits the field', () => {
+      const database = fromFile({
+        databaseFile: databasePath('valid.json'),
+        createIfMissing: false,
+      });
+      expect(database.getIgnoreWarnings()).toBe(false);
+    });
+
+    it('returns the value loaded from a database file that sets it', () => {
+      const database = fromFile({
+        databaseFile: databasePath('ignore-warnings-true.json'),
+        createIfMissing: false,
+      });
+      expect(database.getIgnoreWarnings()).toBe(true);
+    });
+
+    it('reflects a value set in memory', () => {
+      const database = fromFile({
+        databaseFile: databasePath('valid.json'),
+        createIfMissing: false,
+      });
+      database.setIgnoreWarnings(true);
+      expect(database.getIgnoreWarnings()).toBe(true);
+    });
+
+    it('persists the set value back to disk for a fresh Database to re-read', () => {
+      cpSync(databasePath('valid.json'), WORKING_DB);
+      const database = fromFile({
+        databaseFile: WORKING_DB,
+        createIfMissing: false,
+      });
+      database.setIgnoreWarnings(true);
+      database.save();
+
+      expect(
+        fromFile({
+          databaseFile: WORKING_DB,
+          createIfMissing: false,
+        }).getIgnoreWarnings()
+      ).toBe(true);
+      expect(JSON.parse(readFileSync(WORKING_DB, 'utf-8'))).toEqual({
+        ids: ['18gh38s6', 'abc12345', 'xyz98765'],
+        ignoreWarnings: true,
+      });
     });
   });
 });
