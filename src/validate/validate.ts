@@ -28,7 +28,10 @@ export function validate({
   compare: boolean;
 }) {
   setVerbose(verbose);
-  const database = fromFile(databaseFile);
+  const database = fromFile({
+    databaseFile,
+    createIfMissing: false,
+  });
   const files = time('getting file list', () => getFileList(rootDir));
 
   const legacyComments: LegacyComment[] = [];

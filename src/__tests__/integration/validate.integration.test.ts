@@ -54,6 +54,22 @@ describe('validate (integration)', () => {
     rmSync(WORKING_DB, { force: true });
   });
 
+  it('exits with an error when the database file does not exist', () => {
+    rmSync(WORKING_DB, { force: true });
+    const exitSpy = mockExit();
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    expect(() => {
+      runValidate(false);
+    }).toThrow('process.exit called');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('does not exist')
+    );
+  });
+
   it('passes cleanly when every database id is found in code', () => {
     useDatabase('all-used.json');
     expect(() => {

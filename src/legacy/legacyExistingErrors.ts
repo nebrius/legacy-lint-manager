@@ -32,7 +32,10 @@ export async function legacyExistingErrors(
   });
 
   time('updating database', () => {
-    const database = fromFile(options.databaseFile);
+    const database = fromFile({
+      databaseFile: options.databaseFile,
+      createIfMissing: true,
+    });
     database.setIds(getIds());
     database.save();
   });

@@ -113,6 +113,28 @@ describe('legacy-errors (integration)', () => {
     expect(readDatabase().ids.sort()).toEqual([...fileIds].sort());
   });
 
+  it('creates the database when it does not yet exist', async () => {
+    // The command builds the database from scratch (createIfMissing: true), so
+    // remove the file the beforeEach seeded to prove it is created here.
+    rmSync(WORKING_DB, { force: true });
+    const legacyExistingErrors = await loadCommand();
+    const json = runEslint();
+
+    await legacyExistingErrors(
+      {
+        pragma: DEFAULT_PRAGMA,
+        databaseFile: WORKING_DB,
+        rootDir: WORK_DIR,
+        verbose: false,
+      },
+      Readable.from([json])
+    );
+
+    const fileIds = [...idsInFile(CONSOLE_FILE), ...idsInFile(DEBUGGER_FILE)];
+    expect(fileIds).toHaveLength(2);
+    expect(readDatabase().ids.sort()).toEqual([...fileIds].sort());
+  });
+
   it('legacies real Oxlint errors and records their ids', async () => {
     const legacyExistingErrors = await loadCommand();
     const json = runOxlint();

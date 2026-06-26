@@ -4,6 +4,7 @@ import TypeBox from 'typebox';
 import Value from 'typebox/value';
 
 import { InternalError } from './error.js';
+import { error } from './logging.js';
 
 const DatabaseSchema = TypeBox.Object(
   {
@@ -14,9 +15,19 @@ const DatabaseSchema = TypeBox.Object(
 
 type DatabaseContents = TypeBox.Static<typeof DatabaseSchema>;
 
-export function fromFile(databaseFile: string) {
+export function fromFile({
+  databaseFile,
+  createIfMissing,
+}: {
+  databaseFile: string;
+  createIfMissing: boolean;
+}) {
   if (!existsSync(databaseFile)) {
-    return new DatabaseInstance(databaseFile, { ids: [] });
+    if (createIfMissing) {
+      return new DatabaseInstance(databaseFile, { ids: [] });
+    }
+    error(`Database file ${databaseFile} does not exist`);
+    process.exit(1);
   }
   const rawdatabaseContents = JSON.parse(
     readFileSync(databaseFile, 'utf-8')
