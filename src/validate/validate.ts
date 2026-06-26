@@ -87,6 +87,12 @@ export function validate({
 
   // Validate that now new IDs were added compared to the compare branch
   if (compare) {
+    // Note: due to the nature of compare (reading a file across branches), we
+    // can't easily write a unit test for this code path. There is an
+    // integration test at src/__tests__/integration/compareDatabases.integration.test.ts
+    // that excercises this code path, but code coverage can't track it due
+    // to the use of a subprocess used to call the CLI.
+    /* v8 ignore start */
     time('comparing current database with compare branch', () => {
       compareDatabases({
         compareBranch,
@@ -94,5 +100,6 @@ export function validate({
         databaseFile,
       });
     });
+    /* v8 ignore end */
   }
 }

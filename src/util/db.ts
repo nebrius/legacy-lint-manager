@@ -71,9 +71,11 @@ class DatabaseInstance {
   }
 
   public save() {
+    /* v8 ignore start */
     if (!this.databaseFile) {
       throw new InternalError('this.databaseFile is undefined');
     }
+    /* v8 ignore end */
     writeFileSync(this.databaseFile, JSON.stringify(this.database));
   }
 }
