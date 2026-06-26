@@ -37,8 +37,23 @@ const program = new Command()
 addCommonOptions(program.command('validate'))
   .description('Validate that legacied lint errors are still accurate')
   .option('--update', 'update the database', false)
+  .option(
+    '--compare-branch <branch>',
+    'branch to validate the database against. Defaults to the branch resolved from origin/HEAD'
+  )
+  .option(
+    '--no-compare',
+    "Compare the current database with the compare branch's database"
+  )
   .action((options) => {
-    validate(options);
+    validate({
+      ...options,
+
+      // Commander types compareBranch as optional, but we want an explicit
+      // undefined value, so this coercion, while a no-op in practice, makes
+      // TypeScript happy
+      compareBranch: options.compareBranch ?? undefined,
+    });
   });
 
 addCommonOptions(program.command('legacy-errors'))

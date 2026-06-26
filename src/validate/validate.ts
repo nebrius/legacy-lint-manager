@@ -6,17 +6,30 @@ import type {
   LegacyComment,
   ValidationError,
 } from '../types.js';
-import { Database } from '../util/db.js';
+import { fromFile } from '../util/db.js';
 import { getFileList } from '../util/files.js';
 import { error, info, setVerbose, time } from '../util/logging.js';
 import { getFileComments } from '../util/comments.js';
 import { validateIds } from './validateIds.js';
 import { parseDisableComment } from './parseDisableComment.js';
+import { compareDatabases } from './compareDatabases.js';
 
-export function validate(options: CommonOptions & { update: boolean }) {
-  setVerbose(options.verbose);
-  const database = new Database(options.databaseFile);
-  const files = time('getting file list', () => getFileList(options.rootDir));
+export function validate({
+  verbose,
+  databaseFile,
+  pragma,
+  rootDir,
+  update,
+  compareBranch,
+  compare,
+}: CommonOptions & {
+  update: boolean;
+  compareBranch: string | undefined;
+  compare: boolean;
+}) {
+  setVerbose(verbose);
+  const database = fromFile(databaseFile);
+  const files = time('getting file list', () => getFileList(rootDir));
 
   const legacyComments: LegacyComment[] = [];
   const validationErrors: ValidationError[] = [];
@@ -30,7 +43,7 @@ export function validate(options: CommonOptions & { update: boolean }) {
         const parsedDisableComment = parseDisableComment({
           comment,
           validationErrors,
-          pragma: options.pragma,
+          pragma,
         });
         if (parsedDisableComment) {
           legacyComments.push(parsedDisableComment);
@@ -47,6 +60,7 @@ export function validate(options: CommonOptions & { update: boolean }) {
     })
   );
 
+  // Print errors if any were found
   if (validationErrors.length > 0) {
     error('Validation errors:');
     for (const validationError of validationErrors) {
@@ -59,7 +73,7 @@ export function validate(options: CommonOptions & { update: boolean }) {
   // Check if there were any unused IDs. Unused IDs are legacied errors listed
   // in the DB that couldn't be found in code, aka errors that were fixed
   if (results.unusedIds.length > 0) {
-    if (options.update) {
+    if (update) {
       info('Legacied lint errors were fixed, updating database...');
       database.setIds(results.usedIds.sort());
       database.save();
@@ -69,5 +83,16 @@ export function validate(options: CommonOptions & { update: boolean }) {
       );
       process.exit(1);
     }
+  }
+
+  // Validate that now new IDs were added compared to the compare branch
+  if (compare) {
+    time('comparing current database with compare branch', () => {
+      compareDatabases({
+        compareBranch,
+        usedIds: results.usedIds,
+        databaseFile,
+      });
+    });
   }
 }

@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { LegacyComment, ValidationError } from '../../types.js';
-import type { Database } from '../../util/db.js';
+import { fromContents } from '../../util/db.js';
 import { validateIds } from '../validateIds.js';
-
-function makeDatabase(ids: string[]): Database {
-  return { getIds: () => ids } as unknown as Database;
-}
 
 function makeLegacy(overrides: Partial<LegacyComment> = {}): LegacyComment {
   return {
@@ -23,7 +19,7 @@ describe('validateIds', () => {
   describe('partitioning ids into used and unused', () => {
     it('returns empty arrays when the database is empty and there are no comments', () => {
       const result = validateIds({
-        database: makeDatabase([]),
+        database: fromContents({ ids: [] }),
         validationErrors: [],
         legacyComments: [],
       });
@@ -32,7 +28,7 @@ describe('validateIds', () => {
 
     it('treats every database id as unused when there are no comments', () => {
       const result = validateIds({
-        database: makeDatabase(['id1', 'id2', 'id3']),
+        database: fromContents({ ids: ['id1', 'id2', 'id3'] }),
         validationErrors: [],
         legacyComments: [],
       });
@@ -42,7 +38,7 @@ describe('validateIds', () => {
     it('marks an id as used when a matching comment is found', () => {
       const validationErrors: ValidationError[] = [];
       const result = validateIds({
-        database: makeDatabase(['id1', 'id2']),
+        database: fromContents({ ids: ['id1', 'id2'] }),
         validationErrors,
         legacyComments: [makeLegacy({ id: 'id1' })],
       });
@@ -55,7 +51,7 @@ describe('validateIds', () => {
       // preserves that order, so the results come back sorted regardless of the
       // order in which the comments are encountered.
       const result = validateIds({
-        database: makeDatabase(['a', 'b', 'c', 'd']),
+        database: fromContents({ ids: ['a', 'b', 'c', 'd'] }),
         validationErrors: [],
         legacyComments: [makeLegacy({ id: 'c' }), makeLegacy({ id: 'a' })],
       });
@@ -67,7 +63,7 @@ describe('validateIds', () => {
     it('records an error when a comment id is not in the database', () => {
       const validationErrors: ValidationError[] = [];
       const result = validateIds({
-        database: makeDatabase(['id1']),
+        database: fromContents({ ids: ['id1'] }),
         validationErrors,
         legacyComments: [
           makeLegacy({
@@ -95,7 +91,7 @@ describe('validateIds', () => {
     it('records an error for the second use of the same id', () => {
       const validationErrors: ValidationError[] = [];
       const result = validateIds({
-        database: makeDatabase(['dup', 'other']),
+        database: fromContents({ ids: ['dup', 'other'] }),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'dup', file: 'a.ts', startLine: 1, endLine: 1 }),
@@ -117,7 +113,7 @@ describe('validateIds', () => {
     it('records an error for every use beyond the first', () => {
       const validationErrors: ValidationError[] = [];
       validateIds({
-        database: makeDatabase(['dup']),
+        database: fromContents({ ids: ['dup'] }),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'dup', file: 'a.ts', startLine: 1, endLine: 1 }),
@@ -146,7 +142,7 @@ describe('validateIds', () => {
     it('handles used, unused, unregistered, and duplicate ids together', () => {
       const validationErrors: ValidationError[] = [];
       const result = validateIds({
-        database: makeDatabase(['dup', 'unused', 'used']),
+        database: fromContents({ ids: ['dup', 'unused', 'used'] }),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'used', file: 'a.ts', startLine: 1, endLine: 1 }),
@@ -179,7 +175,7 @@ describe('validateIds', () => {
         { message: 'pre-existing', file: 'x.ts', line: 9 },
       ];
       validateIds({
-        database: makeDatabase(['id1']),
+        database: fromContents({ ids: ['id1'] }),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'ghost', file: 'y.ts', startLine: 10, endLine: 10 }),

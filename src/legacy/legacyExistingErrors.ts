@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import type { Readable } from 'node:stream';
 
 import type { CommonOptions } from '../types.js';
-import { Database } from '../util/db.js';
+import { fromFile } from '../util/db.js';
 import { setVerbose, time } from '../util/logging.js';
 import { addLegacyStatements } from './addLegacyStatements.js';
 import { getIds } from './generateIds.js';
@@ -32,7 +32,7 @@ export async function legacyExistingErrors(
   });
 
   time('updating database', () => {
-    const database = new Database(options.databaseFile);
+    const database = fromFile(options.databaseFile);
     database.setIds(getIds());
     database.save();
   });

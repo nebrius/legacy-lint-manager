@@ -30,6 +30,7 @@ function runCli(scenario: string) {
       PROJECT_DIR,
       '--database-file',
       WORKING_DB,
+      '--no-compare',
     ],
     { stdio: 'pipe' }
   );

@@ -37,6 +37,8 @@ function runValidate(update: boolean) {
     pragma: DEFAULT_PRAGMA,
     verbose: false,
     update,
+    compareBranch: undefined,
+    compare: false,
   });
 }
 
@@ -143,6 +145,8 @@ describe('validate (integration)', () => {
           pragma: DEFAULT_PRAGMA,
           verbose: false,
           update: false,
+          compareBranch: undefined,
+          compare: false,
         });
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
