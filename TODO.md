@@ -1,1 +1,2 @@
 - Add support for non-disablable rules aside from legacies
+- Add ability to bypass the legacy check if the lint config was changed
