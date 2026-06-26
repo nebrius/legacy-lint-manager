@@ -1,14 +1,17 @@
 import type { LegacyComment, ValidationError } from '../types.js';
 import type { Database } from '../util/db.js';
+import type { CompareInfo } from './getCompareInfo.js';
 
 export function validateIds({
   database,
   validationErrors,
   legacyComments,
+  compareData,
 }: {
   database: Database;
   validationErrors: ValidationError[];
   legacyComments: LegacyComment[];
+  compareData: CompareInfo | undefined;
 }) {
   // Create the map form of the database used to set what was found in code
   const databaseMap = new Map<string, boolean>();
@@ -24,6 +27,12 @@ export function validateIds({
       if (databaseMap.get(comment.id)) {
         validationErrors.push({
           message: `Duplicate legacy ID "${comment.id}". Each legacy ID can only be used once.`,
+          file: comment.file,
+          line: comment.startLine,
+        });
+      } else if (compareData && !compareData.expectedIds.has(comment.id)) {
+        validationErrors.push({
+          message: `Legacy ID "${comment.id}" is not present in ${compareData.compareBranchName}. New legacied statements are not allowed`,
           file: comment.file,
           line: comment.startLine,
         });

@@ -1,4 +1,3 @@
-// eslint-disable-next-line simple-import-sort/imports
 import { readFileSync } from 'node:fs';
 
 import type {
@@ -6,13 +5,14 @@ import type {
   LegacyComment,
   ValidationError,
 } from '../types.js';
+import { getFileComments } from '../util/comments.js';
 import { fromFile } from '../util/db.js';
 import { getFileList } from '../util/files.js';
 import { error, info, setVerbose, time } from '../util/logging.js';
-import { getFileComments } from '../util/comments.js';
-import { validateIds } from './validateIds.js';
+import type { CompareInfo } from './getCompareInfo.js';
+import { getCompareInfo } from './getCompareInfo.js';
 import { parseDisableComment } from './parseDisableComment.js';
-import { compareDatabases } from './compareDatabases.js';
+import { validateIds } from './validateIds.js';
 
 export function validate({
   verbose,
@@ -52,11 +52,30 @@ export function validate({
     }
   });
 
+  // Get the list of expected IDs, if comparing against a branch is enabled
+  let compareData: CompareInfo | undefined;
+  if (compare) {
+    // Note: due to the nature of compare (reading a file across branches), we
+    // can't easily write a unit test for this code path. There is an
+    // integration test at src/__tests__/integration/compareDatabases.integration.test.ts
+    // that excercises this code path, but code coverage can't track it due
+    // to the use of a subprocess used to call the CLI.
+    /* v8 ignore start */
+    time('Getting list of expected IDs from compare branch', () => {
+      compareData = getCompareInfo({
+        compareBranch,
+        databaseFile,
+      });
+    });
+    /* v8 ignore end */
+  }
+
   const results = time('validating IDs', () =>
     validateIds({
       database,
       validationErrors,
       legacyComments,
+      compareData,
     })
   );
 
@@ -83,23 +102,5 @@ export function validate({
       );
       process.exit(1);
     }
-  }
-
-  // Validate that now new IDs were added compared to the compare branch
-  if (compare) {
-    // Note: due to the nature of compare (reading a file across branches), we
-    // can't easily write a unit test for this code path. There is an
-    // integration test at src/__tests__/integration/compareDatabases.integration.test.ts
-    // that excercises this code path, but code coverage can't track it due
-    // to the use of a subprocess used to call the CLI.
-    /* v8 ignore start */
-    time('comparing current database with compare branch', () => {
-      compareDatabases({
-        compareBranch,
-        usedIds: results.usedIds,
-        databaseFile,
-      });
-    });
-    /* v8 ignore end */
   }
 }

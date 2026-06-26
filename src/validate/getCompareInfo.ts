@@ -1,17 +1,19 @@
 import { execSync } from 'node:child_process';
 
 import { fromContents } from '../util/db.js';
-import { error } from '../util/logging.js';
 
-export function compareDatabases({
+export type CompareInfo = {
+  expectedIds: Set<string>;
+  compareBranchName: string;
+};
+
+export function getCompareInfo({
   compareBranch,
-  usedIds,
   databaseFile,
 }: {
   compareBranch: string | undefined;
-  usedIds: string[];
   databaseFile: string;
-}) {
+}): CompareInfo {
   // Get the default branch if an explicit branch was not provided
   if (!compareBranch) {
     compareBranch = execSync(
@@ -35,12 +37,8 @@ export function compareDatabases({
     JSON.parse(compareDatabaseContent) as unknown
   );
 
-  const previousIds = compareDatabase.getIds();
-  const newIds = usedIds.filter((id) => !previousIds.includes(id));
-  if (newIds.length > 0) {
-    error(
-      `Unknown legacy statements found in codebase. New legacied lint failures are not allowed. Unknown IDs:\n  ${newIds.join('\n  ')}`
-    );
-    process.exit(1);
-  }
+  return {
+    expectedIds: new Set(compareDatabase.getIds()),
+    compareBranchName: compareBranch,
+  };
 }
