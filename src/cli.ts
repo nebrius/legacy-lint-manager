@@ -62,8 +62,21 @@ addCommonOptions(program.command('legacy-errors'))
     '--ignore-warnings',
     'Ignore warnings when parsing results. If this is a new database, defaults to false, otherwise defaults to what is currently set in the database'
   )
+  .option(
+    '--non-disableable-rules <rules>',
+    'Comma-separated list of rules that cannot be disabled, aside from legacied errors'
+  )
   .action((options) => {
-    void legacyExistingErrors(options);
+    const nonDisableableRules = options.nonDisableableRules
+      ? options.nonDisableableRules.split(',').map((rule) => rule.trim())
+      : undefined;
+    void legacyExistingErrors(
+      {
+        ...options,
+        nonDisableableRules,
+      },
+      process.stdin
+    );
   });
 
 program.parse();

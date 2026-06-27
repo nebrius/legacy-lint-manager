@@ -10,8 +10,11 @@ import { parseResults } from './parseResults.js';
 import { readResults } from './readResults.js';
 
 export async function legacyExistingErrors(
-  options: CommonOptions & { ignoreWarnings?: boolean },
-  inputStream: Readable = process.stdin
+  options: CommonOptions & {
+    ignoreWarnings?: boolean;
+    nonDisableableRules: string[] | undefined;
+  },
+  inputStream: Readable
 ) {
   setVerbose(options.verbose);
   const database = fromFile({
@@ -20,6 +23,9 @@ export async function legacyExistingErrors(
   });
   if (options.ignoreWarnings !== undefined) {
     database.setIgnoreWarnings(options.ignoreWarnings);
+  }
+  if (options.nonDisableableRules !== undefined) {
+    database.setNonDisableableRules(options.nonDisableableRules);
   }
   const results = await time('reading results', () => readResults(inputStream));
   const lintErrors = time('parsing results', () =>

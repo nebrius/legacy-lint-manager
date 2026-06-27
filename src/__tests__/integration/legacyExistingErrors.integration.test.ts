@@ -62,10 +62,15 @@ async function loadCommand() {
   return mod.legacyExistingErrors;
 }
 
-function readDatabase(): { ids: string[]; ignoreWarnings?: boolean } {
+function readDatabase(): {
+  ids: string[];
+  ignoreWarnings?: boolean;
+  nonDisableableRules?: string[];
+} {
   return JSON.parse(readFileSync(WORKING_DB, 'utf-8')) as {
     ids: string[];
     ignoreWarnings?: boolean;
+    nonDisableableRules?: string[];
   };
 }
 
@@ -114,6 +119,7 @@ describe('legacy-errors (integration)', () => {
         databaseFile: WORKING_DB,
         rootDir: WORK_DIR,
         verbose: false,
+        nonDisableableRules: undefined,
       },
       Readable.from([json])
     );
@@ -143,6 +149,7 @@ describe('legacy-errors (integration)', () => {
         databaseFile: WORKING_DB,
         rootDir: WORK_DIR,
         verbose: false,
+        nonDisableableRules: undefined,
       },
       Readable.from([json])
     );
@@ -167,6 +174,7 @@ describe('legacy-errors (integration)', () => {
           databaseFile: WORKING_DB,
           rootDir: WORK_DIR,
           verbose: false,
+          nonDisableableRules: undefined,
         },
         Readable.from([json])
       );
@@ -196,6 +204,7 @@ describe('legacy-errors (integration)', () => {
         databaseFile: WORKING_DB,
         rootDir: WORK_DIR,
         verbose: false,
+        nonDisableableRules: undefined,
       },
       Readable.from([json])
     );
@@ -218,6 +227,7 @@ describe('legacy-errors (integration)', () => {
         rootDir: WORK_DIR,
         verbose: false,
         ignoreWarnings: true,
+        nonDisableableRules: undefined,
       },
       Readable.from([json])
     );
@@ -244,6 +254,7 @@ describe('legacy-errors (integration)', () => {
         databaseFile: WORKING_DB,
         rootDir: WORK_DIR,
         verbose: false,
+        nonDisableableRules: undefined,
       },
       Readable.from([json])
     );
@@ -267,6 +278,7 @@ describe('legacy-errors (integration)', () => {
           rootDir: WORK_DIR,
           verbose: false,
           ignoreWarnings: true,
+          nonDisableableRules: undefined,
         },
         Readable.from([json])
       );
@@ -277,5 +289,50 @@ describe('legacy-errors (integration)', () => {
     expect(hasLegacyComment(VAR_FILE, 'eslint/no-console')).toBe(true);
     expect(hasLegacyComment(VAR_FILE, 'eslint/no-var')).toBe(false);
     expect(readDatabase().ignoreWarnings).toBe(true);
+  });
+
+  it('persists the nonDisableableRules passed via the flag to the database', async () => {
+    const legacyExistingErrors = await loadCommand();
+    const json = runEslint();
+
+    await legacyExistingErrors(
+      {
+        pragma: DEFAULT_PRAGMA,
+        databaseFile: WORKING_DB,
+        rootDir: WORK_DIR,
+        verbose: false,
+        nonDisableableRules: ['no-console', 'no-debugger'],
+      },
+      Readable.from([json])
+    );
+
+    expect(readDatabase().nonDisableableRules).toEqual([
+      'no-console',
+      'no-debugger',
+    ]);
+  });
+
+  it('uses the database nonDisableableRules value when the flag is omitted', async () => {
+    // Pre-seed the database with nonDisableableRules; running without the flag
+    // must honor the stored value rather than resetting it to the default.
+    writeFileSync(
+      WORKING_DB,
+      JSON.stringify({ ids: [], nonDisableableRules: ['no-console'] })
+    );
+    const legacyExistingErrors = await loadCommand();
+    const json = runEslint();
+
+    await legacyExistingErrors(
+      {
+        pragma: DEFAULT_PRAGMA,
+        databaseFile: WORKING_DB,
+        rootDir: WORK_DIR,
+        verbose: false,
+        nonDisableableRules: undefined,
+      },
+      Readable.from([json])
+    );
+
+    expect(readDatabase().nonDisableableRules).toEqual(['no-console']);
   });
 });

@@ -124,6 +124,7 @@ describe('Database', () => {
           expect(JSON.parse(readFileSync(MISSING_DB, 'utf-8'))).toEqual({
             ids: ['new2', 'new1'],
             ignoreWarnings: false,
+            nonDisableableRules: [],
           });
         });
       });
@@ -202,6 +203,7 @@ describe('Database', () => {
       expect(JSON.parse(readFileSync(WORKING_DB, 'utf-8'))).toEqual({
         ids: ['new1', 'new2'],
         ignoreWarnings: false,
+        nonDisableableRules: [],
       });
     });
 
@@ -232,6 +234,24 @@ describe('Database', () => {
       expect(JSON.parse(readFileSync(WORKING_DB, 'utf-8'))).toEqual({
         ids: ['18gh38s6', 'abc12345', 'xyz98765'],
         ignoreWarnings: false,
+        nonDisableableRules: [],
+      });
+    });
+
+    it('defaults nonDisableableRules to [] on disk when it was never set', () => {
+      // valid.json omits nonDisableableRules; save() fills in the default so
+      // older databases gain the field without the user having to opt in.
+      cpSync(databasePath('valid.json'), WORKING_DB);
+      const database = fromFile({
+        databaseFile: WORKING_DB,
+        createIfMissing: false,
+      });
+      database.save();
+
+      expect(JSON.parse(readFileSync(WORKING_DB, 'utf-8'))).toEqual({
+        ids: ['18gh38s6', 'abc12345', 'xyz98765'],
+        ignoreWarnings: false,
+        nonDisableableRules: [],
       });
     });
   });
@@ -284,6 +304,63 @@ describe('Database', () => {
       expect(JSON.parse(readFileSync(WORKING_DB, 'utf-8'))).toEqual({
         ids: ['18gh38s6', 'abc12345', 'xyz98765'],
         ignoreWarnings: true,
+        nonDisableableRules: [],
+      });
+    });
+  });
+
+  describe('nonDisableableRules', () => {
+    afterEach(() => {
+      rmSync(WORKING_DB, { force: true });
+    });
+
+    it('returns an empty array when the database file omits the field', () => {
+      const database = fromFile({
+        databaseFile: databasePath('valid.json'),
+        createIfMissing: false,
+      });
+      expect(database.getNonDisableableRules()).toEqual([]);
+    });
+
+    it('returns the value loaded from a database file that sets it', () => {
+      const database = fromFile({
+        databaseFile: databasePath('non-disableable-rules.json'),
+        createIfMissing: false,
+      });
+      expect(database.getNonDisableableRules()).toEqual([
+        'no-console',
+        'no-debugger',
+      ]);
+    });
+
+    it('reflects a value set in memory', () => {
+      const database = fromFile({
+        databaseFile: databasePath('valid.json'),
+        createIfMissing: false,
+      });
+      database.setNonDisableableRules(['no-console']);
+      expect(database.getNonDisableableRules()).toEqual(['no-console']);
+    });
+
+    it('persists the set value back to disk for a fresh Database to re-read', () => {
+      cpSync(databasePath('valid.json'), WORKING_DB);
+      const database = fromFile({
+        databaseFile: WORKING_DB,
+        createIfMissing: false,
+      });
+      database.setNonDisableableRules(['no-console', 'no-debugger']);
+      database.save();
+
+      expect(
+        fromFile({
+          databaseFile: WORKING_DB,
+          createIfMissing: false,
+        }).getNonDisableableRules()
+      ).toEqual(['no-console', 'no-debugger']);
+      expect(JSON.parse(readFileSync(WORKING_DB, 'utf-8'))).toEqual({
+        ids: ['18gh38s6', 'abc12345', 'xyz98765'],
+        ignoreWarnings: false,
+        nonDisableableRules: ['no-console', 'no-debugger'],
       });
     });
   });

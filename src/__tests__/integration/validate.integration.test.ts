@@ -26,8 +26,16 @@ function useDatabase(scenario: string) {
   cpSync(join(DATABASES_DIR, scenario), WORKING_DB);
 }
 
-function readDatabase(): { ids: string[] } {
-  return JSON.parse(readFileSync(WORKING_DB, 'utf-8')) as { ids: string[] };
+function readDatabase(): {
+  ids: string[];
+  ignoreWarnings?: boolean;
+  nonDisableableRules?: string[];
+} {
+  return JSON.parse(readFileSync(WORKING_DB, 'utf-8')) as {
+    ids: string[];
+    ignoreWarnings?: boolean;
+    nonDisableableRules?: string[];
+  };
 }
 
 function runValidate(update: boolean) {
@@ -85,10 +93,12 @@ describe('validate (integration)', () => {
       vi.spyOn(console, 'info').mockImplementation(() => undefined);
       runValidate(true);
       // The --update path calls database.save(), which backfills the
-      // ignoreWarnings default for databases that predate the field.
+      // ignoreWarnings and nonDisableableRules defaults for databases that
+      // predate those fields.
       expect(readDatabase()).toEqual({
         ids: ['c0nsole1', 'debugg02'],
         ignoreWarnings: false,
+        nonDisableableRules: [],
       });
     });
 

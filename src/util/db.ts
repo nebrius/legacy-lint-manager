@@ -9,6 +9,7 @@ import { error } from './logging.js';
 const DatabaseSchema = TypeBox.Object(
   {
     ignoreWarnings: TypeBox.Optional(TypeBox.Boolean()),
+    nonDisableableRules: TypeBox.Optional(TypeBox.Array(TypeBox.String())),
     ids: TypeBox.Array(TypeBox.String()),
   },
   { additionalProperties: false }
@@ -90,6 +91,14 @@ class DatabaseInstance {
     this.database.ignoreWarnings = ignoreWarnings;
   }
 
+  public getNonDisableableRules() {
+    return this.database.nonDisableableRules ?? [];
+  }
+
+  public setNonDisableableRules(nonDisableableRules: string[]) {
+    this.database.nonDisableableRules = nonDisableableRules;
+  }
+
   public save() {
     /* v8 ignore start */
     if (!this.databaseFile) {
@@ -97,11 +106,15 @@ class DatabaseInstance {
     }
     /* v8 ignore end */
 
-    // This is only possible if the database was created before the
-    // ignoreWarnings field was added, or if this is a new database and the user
-    // didn't explicitly set it via the --ignore-warnings CLI flag
+    // This is only possible if this is a new database and the user didn't
+    // explicitly set it via the --ignore-warnings CLI flag
     if (this.database.ignoreWarnings === undefined) {
       this.database.ignoreWarnings = false;
+    }
+    // This is only possible if this is a new database and the user didn't
+    // explicitly set it via the --non-disableable-rules CLI flag
+    if (this.database.nonDisableableRules === undefined) {
+      this.database.nonDisableableRules = [];
     }
     writeFileSync(this.databaseFile, JSON.stringify(this.database));
   }
