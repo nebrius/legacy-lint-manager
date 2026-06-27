@@ -1,8 +1,8 @@
 import { type Program, Visitor } from 'oxc-parser';
 
-import type { LineContext } from '../types.js';
 import { getLineFromIndex } from '../util/comments.js';
 import { InternalError } from '../util/error.js';
+import type { LineContext } from '../util/types.js';
 
 export function getFileContexts(program: Program, lineStartMapping: number[]) {
   // We always start in a JS context

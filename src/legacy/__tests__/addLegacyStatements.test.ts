@@ -1,8 +1,9 @@
 import type { nanoid } from 'nanoid';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DEFAULT_PRAGMA, type LintErrors } from '../../types.js';
 import { getFileComments } from '../../util/comments.js';
+import { DEFAULT_PRAGMA } from '../../util/constants.js';
+import type { LintErrors } from '../../util/types.js';
 import { parseDisableComment } from '../../validate/parseDisableComment.js';
 import { addLegacyStatements } from '../addLegacyStatements.js';
 

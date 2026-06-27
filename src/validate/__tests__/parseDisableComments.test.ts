@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  type Comment,
-  DEFAULT_PRAGMA,
-  type ValidationError,
-} from '../../types.js';
+import { DEFAULT_PRAGMA } from '../../util/constants.js';
+import type { Comment, ValidationError } from '../../util/types.js';
 import { parseDisableComment } from '../parseDisableComment.js';
 
 const ID = 'a1b2c3d4';

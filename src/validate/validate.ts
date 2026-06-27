@@ -1,14 +1,16 @@
 import { readFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
+import { getFileComments } from '../util/comments.js';
+import { readConfig } from '../util/config.js';
+import { readDatabase } from '../util/db.js';
+import { getFileList } from '../util/files.js';
+import { error, info, setVerbose, time } from '../util/logging.js';
 import type {
   CommonOptions,
   LegacyComment,
   ValidationError,
-} from '../types.js';
-import { getFileComments } from '../util/comments.js';
-import { fromFile } from '../util/db.js';
-import { getFileList } from '../util/files.js';
-import { error, info, setVerbose, time } from '../util/logging.js';
+} from '../util/types.js';
 import type { CompareInfo } from './getCompareInfo.js';
 import { getCompareInfo } from './getCompareInfo.js';
 import { parseDisableComment } from './parseDisableComment.js';
@@ -16,22 +18,18 @@ import { validateIds } from './validateIds.js';
 
 export function validate({
   verbose,
-  databaseFile,
-  pragma,
-  rootDir,
+  config,
   update,
-  compareBranch,
   compare,
 }: CommonOptions & {
   update: boolean;
-  compareBranch: string | undefined;
   compare: boolean;
 }) {
   setVerbose(verbose);
-  const database = fromFile({
-    databaseFile,
-    createIfMissing: false,
-  });
+
+  const { pragma, databaseFile, compareBranch } = readConfig(config);
+  const rootDir = dirname(config);
+  const database = readDatabase(databaseFile);
   const files = time('getting file list', () => getFileList(rootDir));
 
   const legacyComments: LegacyComment[] = [];

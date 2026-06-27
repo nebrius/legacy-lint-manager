@@ -1,6 +1,6 @@
 import { parseSync } from 'oxc-parser';
 
-import type { Comment } from '../types.js';
+import type { Comment } from './types.js';
 
 // Note: these entries MUST be specified from longest to shortest
 // to ensure proper prefix matching. If not, we might only strip out

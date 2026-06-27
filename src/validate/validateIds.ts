@@ -1,5 +1,5 @@
-import type { LegacyComment, ValidationError } from '../types.js';
 import type { Database } from '../util/db.js';
+import type { LegacyComment, ValidationError } from '../util/types.js';
 import type { CompareInfo } from './getCompareInfo.js';
 
 export function validateIds({

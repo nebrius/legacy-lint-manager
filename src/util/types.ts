@@ -1,9 +1,5 @@
-export const DEFAULT_PRAGMA = 'This lint error is legacied. DO NOT COPY';
-
 export type CommonOptions = {
-  pragma: string;
-  databaseFile: string;
-  rootDir: string;
+  config: string;
   verbose: boolean;
 };
 

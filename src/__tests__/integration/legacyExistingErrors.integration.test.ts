@@ -5,7 +5,7 @@ import { Readable } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DEFAULT_PRAGMA } from '../../types.js';
+import { DEFAULT_PRAGMA } from '../../util/constants.js';
 
 const INTEGRATION_DIR = import.meta.dirname;
 const FIXTURES_DIR = join(INTEGRATION_DIR, 'fixtures');
@@ -15,7 +15,8 @@ const SOURCES_DIR = join(FIXTURES_DIR, 'legacy-sources');
 // repo.
 const WORK_DIR = join(FIXTURES_DIR, 'work');
 const WORK_SRC = join(WORK_DIR, 'src');
-const WORKING_DB = join(WORK_DIR, 'lint-legacies.json');
+const CONFIG_FILE = join(WORK_DIR, 'legacy-lint.config.jsonc');
+const WORKING_DATA = join(WORK_DIR, 'legacy-lint.data.json');
 
 const REPO_ROOT = join(INTEGRATION_DIR, '..', '..', '..');
 const ESLINT_BIN = join(REPO_ROOT, 'node_modules', '.bin', 'eslint');
@@ -26,7 +27,7 @@ const DEBUGGER_FILE = join(WORK_SRC, 'usesDebugger.ts');
 const REL_FILES = ['src/usesConsole.ts', 'src/usesDebugger.ts'];
 
 // usesVar.ts holds a no-var warning (line 2) and a no-console error (line 3),
-// so it exercises the warning-vs-error split that --ignore-warnings toggles.
+// so it exercises the warning-vs-error split that ignoreWarnings toggles.
 const VAR_FILE = join(WORK_SRC, 'usesVar.ts');
 const VAR_REL_FILES = ['src/usesVar.ts'];
 
@@ -52,6 +53,21 @@ function runOxlint(files: string[] = REL_FILES): string {
   return runLinter(OXLINT_BIN, ['-f', 'json', ...files]);
 }
 
+// Write a config file pointing at the work-dir data file. databaseFile is an
+// absolute path so readDatabase resolves it regardless of the process cwd.
+function writeConfig(ignoreWarnings = false) {
+  writeFileSync(
+    CONFIG_FILE,
+    JSON.stringify({
+      ignoreWarnings,
+      pragma: DEFAULT_PRAGMA,
+      databaseFile: WORKING_DATA,
+      nonDisableableRules: [],
+      compareBranch: 'main',
+    })
+  );
+}
+
 // generateIds.ts holds a process-global Set that getIds() reads in full, and
 // vitest shares the module instance across tests in this file. Resetting
 // modules + dynamically importing gives each test a fresh idSet so the two runs
@@ -62,16 +78,9 @@ async function loadCommand() {
   return mod.legacyExistingErrors;
 }
 
-function readDatabase(): {
-  ids: string[];
-  ignoreWarnings?: boolean;
-  nonDisableableRules?: string[];
-} {
-  return JSON.parse(readFileSync(WORKING_DB, 'utf-8')) as {
-    ids: string[];
-    ignoreWarnings?: boolean;
-    nonDisableableRules?: string[];
-  };
+// The data file is now a bare array of ids.
+function readDataIds(): string[] {
+  return JSON.parse(readFileSync(WORKING_DATA, 'utf-8')) as string[];
 }
 
 // True when the file has a legacy-disable comment for the given rule (matching
@@ -99,8 +108,10 @@ function idsInFile(path: string): string[] {
 beforeEach(() => {
   rmSync(WORK_DIR, { recursive: true, force: true });
   cpSync(SOURCES_DIR, WORK_DIR, { recursive: true });
-  // The database must exist with valid JSON before the command runs.
-  writeFileSync(WORKING_DB, JSON.stringify({ ids: [] }));
+  // The data file must exist with valid JSON before the command runs; the
+  // config file points at it. Tests override the config via writeConfig().
+  writeFileSync(WORKING_DATA, JSON.stringify([]));
+  writeConfig();
 });
 
 afterEach(() => {
@@ -114,13 +125,7 @@ describe('legacy-errors (integration)', () => {
     const json = runEslint();
 
     await legacyExistingErrors(
-      {
-        pragma: DEFAULT_PRAGMA,
-        databaseFile: WORKING_DB,
-        rootDir: WORK_DIR,
-        verbose: false,
-        nonDisableableRules: undefined,
-      },
+      { config: CONFIG_FILE, verbose: false },
       Readable.from([json])
     );
 
@@ -133,30 +138,7 @@ describe('legacy-errors (integration)', () => {
 
     const fileIds = [...idsInFile(CONSOLE_FILE), ...idsInFile(DEBUGGER_FILE)];
     expect(fileIds).toHaveLength(2);
-    expect(readDatabase().ids.sort()).toEqual([...fileIds].sort());
-  });
-
-  it('creates the database when it does not yet exist', async () => {
-    // The command builds the database from scratch (createIfMissing: true), so
-    // remove the file the beforeEach seeded to prove it is created here.
-    rmSync(WORKING_DB, { force: true });
-    const legacyExistingErrors = await loadCommand();
-    const json = runEslint();
-
-    await legacyExistingErrors(
-      {
-        pragma: DEFAULT_PRAGMA,
-        databaseFile: WORKING_DB,
-        rootDir: WORK_DIR,
-        verbose: false,
-        nonDisableableRules: undefined,
-      },
-      Readable.from([json])
-    );
-
-    const fileIds = [...idsInFile(CONSOLE_FILE), ...idsInFile(DEBUGGER_FILE)];
-    expect(fileIds).toHaveLength(2);
-    expect(readDatabase().ids.sort()).toEqual([...fileIds].sort());
+    expect(readDataIds().sort()).toEqual([...fileIds].sort());
   });
 
   it('legacies real Oxlint errors and records their ids', async () => {
@@ -169,13 +151,7 @@ describe('legacy-errors (integration)', () => {
     process.chdir(WORK_DIR);
     try {
       await legacyExistingErrors(
-        {
-          pragma: DEFAULT_PRAGMA,
-          databaseFile: WORKING_DB,
-          rootDir: WORK_DIR,
-          verbose: false,
-          nonDisableableRules: undefined,
-        },
+        { config: CONFIG_FILE, verbose: false },
         Readable.from([json])
       );
     } finally {
@@ -191,80 +167,41 @@ describe('legacy-errors (integration)', () => {
 
     const fileIds = [...idsInFile(CONSOLE_FILE), ...idsInFile(DEBUGGER_FILE)];
     expect(fileIds).toHaveLength(2);
-    expect(readDatabase().ids.sort()).toEqual([...fileIds].sort());
+    expect(readDataIds().sort()).toEqual([...fileIds].sort());
   });
 
-  it('legacies an ESLint warning when ignoreWarnings is not set (default false)', async () => {
+  it('legacies an ESLint warning when the config sets ignoreWarnings false', async () => {
+    writeConfig(false);
     const legacyExistingErrors = await loadCommand();
     const json = runEslint(VAR_REL_FILES);
 
     await legacyExistingErrors(
-      {
-        pragma: DEFAULT_PRAGMA,
-        databaseFile: WORKING_DB,
-        rootDir: WORK_DIR,
-        verbose: false,
-        nonDisableableRules: undefined,
-      },
+      { config: CONFIG_FILE, verbose: false },
       Readable.from([json])
     );
 
-    // Both the no-var warning and the no-console error get legacied, and the
-    // database records the resolved default.
+    // Both the no-var warning and the no-console error get legacied.
     expect(hasLegacyComment(VAR_FILE, 'no-var')).toBe(true);
     expect(hasLegacyComment(VAR_FILE, 'no-console')).toBe(true);
-    expect(readDatabase().ignoreWarnings).toBe(false);
   });
 
-  it('does not legacy an ESLint warning when ignoreWarnings is true', async () => {
+  it('does not legacy an ESLint warning when the config sets ignoreWarnings true', async () => {
+    writeConfig(true);
     const legacyExistingErrors = await loadCommand();
     const json = runEslint(VAR_REL_FILES);
 
     await legacyExistingErrors(
-      {
-        pragma: DEFAULT_PRAGMA,
-        databaseFile: WORKING_DB,
-        rootDir: WORK_DIR,
-        verbose: false,
-        ignoreWarnings: true,
-        nonDisableableRules: undefined,
-      },
+      { config: CONFIG_FILE, verbose: false },
       Readable.from([json])
     );
 
     // The no-console error is still legacied; the no-var warning is skipped.
     expect(hasLegacyComment(VAR_FILE, 'no-console')).toBe(true);
     expect(hasLegacyComment(VAR_FILE, 'no-var')).toBe(false);
-    expect(readDatabase().ignoreWarnings).toBe(true);
   });
 
-  it('uses the database ignoreWarnings value when the flag is omitted', async () => {
-    // Pre-seed the database with ignoreWarnings: true; running without the flag
-    // must honor the stored value rather than resetting it to the default.
-    writeFileSync(
-      WORKING_DB,
-      JSON.stringify({ ids: [], ignoreWarnings: true })
-    );
-    const legacyExistingErrors = await loadCommand();
-    const json = runEslint(VAR_REL_FILES);
-
-    await legacyExistingErrors(
-      {
-        pragma: DEFAULT_PRAGMA,
-        databaseFile: WORKING_DB,
-        rootDir: WORK_DIR,
-        verbose: false,
-        nonDisableableRules: undefined,
-      },
-      Readable.from([json])
-    );
-
-    expect(hasLegacyComment(VAR_FILE, 'no-console')).toBe(true);
-    expect(hasLegacyComment(VAR_FILE, 'no-var')).toBe(false);
-    expect(readDatabase().ignoreWarnings).toBe(true);
-  });
-
-  it('does not legacy an Oxlint warning when ignoreWarnings is true', async () => {
+  it('does not legacy an Oxlint warning when the config sets ignoreWarnings true', async () => {
+    writeConfig(true);
     const legacyExistingErrors = await loadCommand();
     const json = runOxlint(VAR_REL_FILES);
 
@@ -272,14 +209,7 @@ describe('legacy-errors (integration)', () => {
     process.chdir(WORK_DIR);
     try {
       await legacyExistingErrors(
-        {
-          pragma: DEFAULT_PRAGMA,
-          databaseFile: WORKING_DB,
-          rootDir: WORK_DIR,
-          verbose: false,
-          ignoreWarnings: true,
-          nonDisableableRules: undefined,
-        },
+        { config: CONFIG_FILE, verbose: false },
         Readable.from([json])
       );
     } finally {
@@ -288,51 +218,5 @@ describe('legacy-errors (integration)', () => {
 
     expect(hasLegacyComment(VAR_FILE, 'eslint/no-console')).toBe(true);
     expect(hasLegacyComment(VAR_FILE, 'eslint/no-var')).toBe(false);
-    expect(readDatabase().ignoreWarnings).toBe(true);
-  });
-
-  it('persists the nonDisableableRules passed via the flag to the database', async () => {
-    const legacyExistingErrors = await loadCommand();
-    const json = runEslint();
-
-    await legacyExistingErrors(
-      {
-        pragma: DEFAULT_PRAGMA,
-        databaseFile: WORKING_DB,
-        rootDir: WORK_DIR,
-        verbose: false,
-        nonDisableableRules: ['no-console', 'no-debugger'],
-      },
-      Readable.from([json])
-    );
-
-    expect(readDatabase().nonDisableableRules).toEqual([
-      'no-console',
-      'no-debugger',
-    ]);
-  });
-
-  it('uses the database nonDisableableRules value when the flag is omitted', async () => {
-    // Pre-seed the database with nonDisableableRules; running without the flag
-    // must honor the stored value rather than resetting it to the default.
-    writeFileSync(
-      WORKING_DB,
-      JSON.stringify({ ids: [], nonDisableableRules: ['no-console'] })
-    );
-    const legacyExistingErrors = await loadCommand();
-    const json = runEslint();
-
-    await legacyExistingErrors(
-      {
-        pragma: DEFAULT_PRAGMA,
-        databaseFile: WORKING_DB,
-        rootDir: WORK_DIR,
-        verbose: false,
-        nonDisableableRules: undefined,
-      },
-      Readable.from([json])
-    );
-
-    expect(readDatabase().nonDisableableRules).toEqual(['no-console']);
   });
 });

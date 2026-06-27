@@ -1,33 +1,17 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 import TypeBox from 'typebox';
-import Value from 'typebox/value';
 
 import { InternalError } from './error.js';
 import { error } from './logging.js';
+import { validateSchema } from './validateSchema.js';
 
-const DatabaseSchema = TypeBox.Object(
-  {
-    ignoreWarnings: TypeBox.Optional(TypeBox.Boolean()),
-    nonDisableableRules: TypeBox.Optional(TypeBox.Array(TypeBox.String())),
-    ids: TypeBox.Array(TypeBox.String()),
-  },
-  { additionalProperties: false }
-);
+const DatabaseSchema = TypeBox.Array(TypeBox.String());
 
 type DatabaseContents = TypeBox.Static<typeof DatabaseSchema>;
 
-export function fromFile({
-  databaseFile,
-  createIfMissing,
-}: {
-  databaseFile: string;
-  createIfMissing: boolean;
-}) {
+export function readDatabase(databaseFile: string) {
   if (!existsSync(databaseFile)) {
-    if (createIfMissing) {
-      return new DatabaseInstance(databaseFile, { ids: [] });
-    }
     error(`Database file ${databaseFile} does not exist`);
     process.exit(1);
   }
@@ -40,24 +24,22 @@ export function fromFile({
   );
 }
 
-export function fromContents(databaseContents: unknown) {
-  return new DatabaseInstance(undefined, validateDatabase(databaseContents));
+export function createDatabase({
+  filePath,
+  databaseContents,
+}: {
+  filePath: string | undefined;
+  databaseContents: unknown;
+}) {
+  return new DatabaseInstance(filePath, validateDatabase(databaseContents));
 }
 
 function validateDatabase(databaseContents: unknown) {
-  if (!Value.Check(DatabaseSchema, databaseContents)) {
-    let errorMessage = 'Invalid database file:';
-    const errors = Value.Errors(DatabaseSchema, databaseContents);
-    if (errors.length === 1) {
-      errorMessage += ' ' + errors[0].message;
-    } else {
-      for (const err of errors) {
-        errorMessage += `\n  ${err.message}`;
-      }
-    }
-    throw new Error(errorMessage);
-  }
-  return databaseContents;
+  return validateSchema({
+    schema: DatabaseSchema,
+    data: databaseContents,
+    errorPrefix: 'Invalid database file:',
+  });
 }
 
 class DatabaseInstance {
@@ -69,34 +51,15 @@ class DatabaseInstance {
     databaseContents: DatabaseContents
   ) {
     this.databaseFile = databaseFile;
-    this.database = databaseContents;
-
-    // Make sure id order is always stable
-    this.database.ids = this.database.ids.sort();
+    this.database = databaseContents.sort();
   }
 
   public getIds() {
-    return this.database.ids;
+    return this.database;
   }
 
   public setIds(ids: string[]) {
-    this.database.ids = ids;
-  }
-
-  public getIgnoreWarnings() {
-    return this.database.ignoreWarnings ?? false;
-  }
-
-  public setIgnoreWarnings(ignoreWarnings: boolean) {
-    this.database.ignoreWarnings = ignoreWarnings;
-  }
-
-  public getNonDisableableRules() {
-    return this.database.nonDisableableRules ?? [];
-  }
-
-  public setNonDisableableRules(nonDisableableRules: string[]) {
-    this.database.nonDisableableRules = nonDisableableRules;
+    this.database = ids.sort();
   }
 
   public save() {
@@ -105,17 +68,6 @@ class DatabaseInstance {
       throw new InternalError('this.databaseFile is undefined');
     }
     /* v8 ignore end */
-
-    // This is only possible if this is a new database and the user didn't
-    // explicitly set it via the --ignore-warnings CLI flag
-    if (this.database.ignoreWarnings === undefined) {
-      this.database.ignoreWarnings = false;
-    }
-    // This is only possible if this is a new database and the user didn't
-    // explicitly set it via the --non-disableable-rules CLI flag
-    if (this.database.nonDisableableRules === undefined) {
-      this.database.nonDisableableRules = [];
-    }
     writeFileSync(this.databaseFile, JSON.stringify(this.database));
   }
 }

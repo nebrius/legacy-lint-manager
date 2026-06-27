@@ -1,4 +1,4 @@
-import type { Comment, LegacyComment, ValidationError } from '../types.js';
+import type { Comment, LegacyComment, ValidationError } from '../util/types.js';
 
 export function parseDisableComment({
   comment,

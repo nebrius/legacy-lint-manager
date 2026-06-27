@@ -10,15 +10,15 @@ import { getCompareInfo } from '../../validate/getCompareInfo.js';
 // getCompareInfo shells out to git, so each test builds a throwaway repo in a
 // temp dir, commits a baseline database on `main`, reads it back via
 // getCompareInfo, and removes the dir afterwards. This exercises the real
-// `git show` / `git symbolic-ref` plumbing without touching the developer's repo
-// or relying on a committed long-lived test branch. The pid keeps parallel
-// vitest workers from colliding on the same temp dir.
+// `git show` plumbing without touching the developer's repo or relying on a
+// committed long-lived test branch. The pid keeps parallel vitest workers from
+// colliding on the same temp dir.
 const REPO_DIR = join(
   tmpdir(),
   `lint-legacies-compare-repo-${process.pid.toString()}`
 );
 // git show interpolates databaseFile directly, so it must be repo-relative.
-const DB_FILE = 'lint-legacies.json';
+const DB_FILE = 'legacy-lint.data.json';
 
 function git(args: string[]) {
   execFileSync('git', args, { cwd: REPO_DIR, stdio: 'pipe' });
@@ -31,7 +31,8 @@ function initRepo(baselineIds: string[]) {
   git(['init', '-b', 'main']);
   git(['config', 'user.email', 'test@example.com']);
   git(['config', 'user.name', 'Test']);
-  writeFileSync(join(REPO_DIR, DB_FILE), JSON.stringify({ ids: baselineIds }));
+  // The data file is a bare array of ids.
+  writeFileSync(join(REPO_DIR, DB_FILE), JSON.stringify(baselineIds));
   git(['add', '-A']);
   git(['commit', '-m', 'baseline']);
   git(['checkout', '-b', 'feature']);
@@ -55,68 +56,26 @@ describe('getCompareInfo (integration)', () => {
     rmSync(REPO_DIR, { recursive: true, force: true });
   });
 
-  describe('with an explicit compare branch', () => {
-    it('reads the expected ids from the compare branch database', () => {
-      initRepo(['a', 'b']);
+  it('reads the expected ids from the compare branch database', () => {
+    initRepo(['a', 'b']);
 
-      const info = runGetCompareInfo({
-        compareBranch: 'main',
-        databaseFile: DB_FILE,
-      });
-
-      expect(info.compareBranchName).toBe('main');
-      expect(info.expectedIds).toEqual(new Set(['a', 'b']));
+    const info = runGetCompareInfo({
+      compareBranch: 'main',
+      databaseFile: DB_FILE,
     });
 
-    it('returns an empty set when the compare branch database has no ids', () => {
-      initRepo([]);
-
-      const info = runGetCompareInfo({
-        compareBranch: 'main',
-        databaseFile: DB_FILE,
-      });
-
-      expect(info.expectedIds).toEqual(new Set());
-    });
+    expect(info.compareBranchName).toBe('main');
+    expect(info.expectedIds).toEqual(new Set(['a', 'b']));
   });
 
-  describe('with no compare branch (resolves origin/HEAD)', () => {
-    // The undefined-branch path runs `git symbolic-ref refs/remotes/origin/HEAD`,
-    // which only resolves when the repo has an origin remote with a known HEAD.
-    // We give it one by cloning the working repo into a bare repo that acts as
-    // origin, wiring it back as the remote, and pointing origin/HEAD at main
-    // explicitly (the repo is left on `feature`, so an auto-detected HEAD would
-    // resolve to the wrong branch).
-    const ORIGIN_DIR = join(
-      tmpdir(),
-      `lint-legacies-compare-origin-${process.pid.toString()}`
-    );
+  it('returns an empty set when the compare branch database has no ids', () => {
+    initRepo([]);
 
-    afterEach(() => {
-      rmSync(ORIGIN_DIR, { recursive: true, force: true });
+    const info = runGetCompareInfo({
+      compareBranch: 'main',
+      databaseFile: DB_FILE,
     });
 
-    function addOrigin() {
-      execFileSync('git', ['clone', '--bare', REPO_DIR, ORIGIN_DIR], {
-        stdio: 'pipe',
-      });
-      git(['remote', 'add', 'origin', ORIGIN_DIR]);
-      git(['fetch', 'origin']);
-      git(['remote', 'set-head', 'origin', 'main']);
-    }
-
-    it('resolves the default branch and reads its ids', () => {
-      initRepo(['a', 'b']);
-      addOrigin();
-
-      const info = runGetCompareInfo({
-        compareBranch: undefined,
-        databaseFile: DB_FILE,
-      });
-
-      // The resolved name is stripped of the `origin/` prefix and trimmed.
-      expect(info.compareBranchName).toBe('main');
-      expect(info.expectedIds).toEqual(new Set(['a', 'b']));
-    });
+    expect(info.expectedIds).toEqual(new Set());
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import type { LegacyComment, ValidationError } from '../../types.js';
-import { fromContents } from '../../util/db.js';
+import { createDatabase } from '../../util/db.js';
+import type { LegacyComment, ValidationError } from '../../util/types.js';
 import type { CompareInfo } from '../getCompareInfo.js';
 import { validateIds } from '../validateIds.js';
 
@@ -20,7 +20,7 @@ describe('validateIds', () => {
   describe('partitioning ids into used and unused', () => {
     it('returns empty arrays when the database is empty and there are no comments', () => {
       const result = validateIds({
-        database: fromContents({ ids: [] }),
+        database: createDatabase({ filePath: undefined, databaseContents: [] }),
         validationErrors: [],
         legacyComments: [],
         compareData: undefined,
@@ -30,7 +30,10 @@ describe('validateIds', () => {
 
     it('treats every database id as unused when there are no comments', () => {
       const result = validateIds({
-        database: fromContents({ ids: ['id1', 'id2', 'id3'] }),
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: ['id1', 'id2', 'id3'],
+        }),
         validationErrors: [],
         legacyComments: [],
         compareData: undefined,
@@ -41,7 +44,10 @@ describe('validateIds', () => {
     it('marks an id as used when a matching comment is found', () => {
       const validationErrors: ValidationError[] = [];
       const result = validateIds({
-        database: fromContents({ ids: ['id1', 'id2'] }),
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: ['id1', 'id2'],
+        }),
         validationErrors,
         legacyComments: [makeLegacy({ id: 'id1' })],
         compareData: undefined,
@@ -55,7 +61,10 @@ describe('validateIds', () => {
       // preserves that order, so the results come back sorted regardless of the
       // order in which the comments are encountered.
       const result = validateIds({
-        database: fromContents({ ids: ['a', 'b', 'c', 'd'] }),
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: ['a', 'b', 'c', 'd'],
+        }),
         validationErrors: [],
         legacyComments: [makeLegacy({ id: 'c' }), makeLegacy({ id: 'a' })],
         compareData: undefined,
@@ -68,7 +77,10 @@ describe('validateIds', () => {
     it('records an error when a comment id is not in the database', () => {
       const validationErrors: ValidationError[] = [];
       const result = validateIds({
-        database: fromContents({ ids: ['id1'] }),
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: ['id1'],
+        }),
         validationErrors,
         legacyComments: [
           makeLegacy({
@@ -97,7 +109,10 @@ describe('validateIds', () => {
     it('records an error for the second use of the same id', () => {
       const validationErrors: ValidationError[] = [];
       const result = validateIds({
-        database: fromContents({ ids: ['dup', 'other'] }),
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: ['dup', 'other'],
+        }),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'dup', file: 'a.ts', startLine: 1, endLine: 1 }),
@@ -120,7 +135,10 @@ describe('validateIds', () => {
     it('records an error for every use beyond the first', () => {
       const validationErrors: ValidationError[] = [];
       validateIds({
-        database: fromContents({ ids: ['dup'] }),
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: ['dup'],
+        }),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'dup', file: 'a.ts', startLine: 1, endLine: 1 }),
@@ -157,7 +175,10 @@ describe('validateIds', () => {
     it('records a file:line error when a registered id is absent from the compare branch', () => {
       const validationErrors: ValidationError[] = [];
       const result = validateIds({
-        database: fromContents({ ids: ['new'] }),
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: ['new'],
+        }),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'new', file: 'src/a.ts', startLine: 7, endLine: 7 }),
@@ -179,7 +200,10 @@ describe('validateIds', () => {
     it('passes ids that exist on both the database and the compare branch', () => {
       const validationErrors: ValidationError[] = [];
       const result = validateIds({
-        database: fromContents({ ids: ['known'] }),
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: ['known'],
+        }),
         validationErrors,
         legacyComments: [makeLegacy({ id: 'known' })],
         compareData: makeCompareData(['known']),
@@ -191,7 +215,10 @@ describe('validateIds', () => {
     it('flags only the ids missing from the compare branch', () => {
       const validationErrors: ValidationError[] = [];
       validateIds({
-        database: fromContents({ ids: ['old', 'new'] }),
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: ['old', 'new'],
+        }),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'old', file: 'a.ts', startLine: 1, endLine: 1 }),
@@ -214,7 +241,10 @@ describe('validateIds', () => {
     it('handles used, unused, unregistered, and duplicate ids together', () => {
       const validationErrors: ValidationError[] = [];
       const result = validateIds({
-        database: fromContents({ ids: ['dup', 'unused', 'used'] }),
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: ['dup', 'unused', 'used'],
+        }),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'used', file: 'a.ts', startLine: 1, endLine: 1 }),
@@ -248,7 +278,10 @@ describe('validateIds', () => {
         { message: 'pre-existing', file: 'x.ts', line: 9 },
       ];
       validateIds({
-        database: fromContents({ ids: ['id1'] }),
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: ['id1'],
+        }),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'ghost', file: 'y.ts', startLine: 10, endLine: 10 }),

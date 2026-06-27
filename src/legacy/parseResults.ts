@@ -1,8 +1,8 @@
 import TypeBox from 'typebox';
 import Value from 'typebox/value';
 
-import type { LintErrors } from '../types.js';
 import { InternalError } from '../util/error.js';
+import type { LintErrors } from '../util/types.js';
 
 const EslintSchema = TypeBox.Array(
   TypeBox.Object({

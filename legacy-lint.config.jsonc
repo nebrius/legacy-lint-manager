@@ -1,0 +1,7 @@
+{
+  "ignoreWarnings": false,
+  "pragma": "This lint error is legacied. DO NOT COPY",
+  "databaseFile": "legacy-lint.data.json",
+  "compareBranch": "main",
+  "nonDisableableRules": []
+}

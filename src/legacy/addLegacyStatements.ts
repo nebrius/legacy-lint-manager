@@ -1,6 +1,6 @@
-import type { LineContext, LintErrors } from '../types.js';
 import { getFileComments } from '../util/comments.js';
 import { InternalError } from '../util/error.js';
+import type { LineContext, LintErrors } from '../util/types.js';
 import { parseDisableComment } from '../validate/parseDisableComment.js';
 import { generateId } from './generateIds.js';
 import { getFileContexts } from './getFileContexts.js';
