@@ -1,2 +1,6 @@
 - Add support for non-disablable rules aside from legacies
 - Add ability to bypass the legacy check if the lint config was changed
+- Add ESLint/Oxlint config file page to config file
+- Support monorepos with nested config files but single database
+- Init tests
+- List all rules in init command as read from config file
