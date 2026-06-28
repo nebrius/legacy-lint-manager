@@ -4,17 +4,19 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { Config } from '../config.js';
 import { createConfig, readConfig } from '../config.js';
 
 const CONFIG_FILE = join(tmpdir(), 'legacy-lint-config-test.jsonc');
 const MISSING_CONFIG = join(tmpdir(), 'legacy-lint-config-missing.jsonc');
 
-const VALID_CONFIG = {
+const VALID_CONFIG: Config = {
   ignoreWarnings: false,
   pragma: 'This lint error is legacied. DO NOT COPY',
   databaseFile: 'legacy-lint.data.json',
   nonDisableableRules: ['no-console'],
   compareBranch: 'main',
+  linterType: 'eslint',
 };
 
 function mockExit() {
@@ -48,6 +50,7 @@ describe('config', () => {
           '  "databaseFile": "db.json",',
           '  "nonDisableableRules": [],',
           '  "compareBranch": "main",',
+          '  "linterType": "eslint",',
           '}',
         ].join('\n')
       );
@@ -58,7 +61,27 @@ describe('config', () => {
         databaseFile: 'db.json',
         nonDisableableRules: [],
         compareBranch: 'main',
+        linterType: 'eslint',
       });
+    });
+
+    it('reads back oxlint as a valid linterType', () => {
+      createConfig({
+        data: { ...VALID_CONFIG, linterType: 'oxlint' },
+        filePath: CONFIG_FILE,
+      });
+      expect(readConfig(CONFIG_FILE)).toEqual({
+        ...VALID_CONFIG,
+        linterType: 'oxlint',
+      });
+    });
+
+    it('throws when linterType is not a supported linter', () => {
+      writeFileSync(
+        CONFIG_FILE,
+        JSON.stringify({ ...VALID_CONFIG, linterType: 'tslint' })
+      );
+      expect(() => readConfig(CONFIG_FILE)).toThrow('Invalid config file');
     });
 
     it('exits when the config file does not exist', () => {

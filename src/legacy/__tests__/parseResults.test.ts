@@ -56,7 +56,9 @@ describe('parseResults', () => {
       const results = [
         eslintFile('src/a.ts', [eslintMessage('no-console', 1)]),
       ];
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map([['src/a.ts', new Map([[0, ['no-console']]])]]),
       });
@@ -69,7 +71,9 @@ describe('parseResults', () => {
           eslintMessage('no-debugger', 3),
         ]),
       ];
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map([
           ['src/a.ts', new Map([[2, ['no-console', 'no-debugger']]])],
@@ -84,7 +88,9 @@ describe('parseResults', () => {
           eslintMessage('no-debugger', 5),
         ]),
       ];
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map([
           [
@@ -105,7 +111,9 @@ describe('parseResults', () => {
           eslintMessage('no-console', 2),
         ]),
       ];
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map([
           ['src/a.ts', new Map([[1, ['no-console', 'no-console']]])],
@@ -118,7 +126,9 @@ describe('parseResults', () => {
         eslintFile('src/a.ts', [eslintMessage('no-console', 2)]),
         eslintFile('src/b.ts', [eslintMessage('no-debugger', 4)]),
       ];
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map([
           ['src/a.ts', new Map([[1, ['no-console']]])],
@@ -132,14 +142,22 @@ describe('parseResults', () => {
         eslintFile('src/clean.ts', []),
         eslintFile('src/dirty.ts', [eslintMessage('no-console', 2)]),
       ];
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map([['src/dirty.ts', new Map([[1, ['no-console']]])]]),
       });
     });
 
     it('returns an empty error map for an empty results array', () => {
-      expect(parseResults({ results: [], ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({
+          results: [],
+          ignoreWarnings: false,
+          linterType: 'eslint',
+        })
+      ).toEqual({
         type: 'eslint',
         errors: new Map(),
       });
@@ -168,7 +186,9 @@ describe('parseResults', () => {
           source: 'function addOne(i) {}\n',
         },
       ];
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map([
           ['/abs/path/file.js', new Map([[0, ['no-unused-vars']]])],
@@ -178,7 +198,9 @@ describe('parseResults', () => {
 
     it('records warnings (severity 1) like errors when ignoreWarnings is false', () => {
       const results = [eslintFile('w.ts', [eslintMessage('no-console', 2, 1)])];
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map([['w.ts', new Map([[1, ['no-console']]])]]),
       });
@@ -191,7 +213,9 @@ describe('parseResults', () => {
           eslintMessage('no-debugger', 5, 2),
         ]),
       ];
-      expect(parseResults({ results, ignoreWarnings: true })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: true, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map([['mixed.ts', new Map([[4, ['no-debugger']]])]]),
       });
@@ -203,7 +227,9 @@ describe('parseResults', () => {
       const results = [
         { filePath: 'nosev.ts', messages: [{ ruleId: 'no-console', line: 2 }] },
       ];
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map(),
       });
@@ -214,7 +240,9 @@ describe('parseResults', () => {
     // message is skipped rather than recorded or treated as a parse failure.
     it('skips a message whose ruleId is null (fatal parse error)', () => {
       const results = [eslintFile('broken.ts', [eslintMessage(null, 1)])];
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map(),
       });
@@ -222,7 +250,9 @@ describe('parseResults', () => {
 
     it('skips a message that has no line', () => {
       const results = [eslintFile('broken.ts', [eslintMessage('no-console')])];
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map(),
       });
@@ -235,7 +265,9 @@ describe('parseResults', () => {
           eslintMessage('no-console', 2),
         ]),
       ];
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map([['mixed.ts', new Map([[1, ['no-console']]])]]),
       });
@@ -248,7 +280,9 @@ describe('parseResults', () => {
         eslintFile('good.ts', [eslintMessage('no-console', 2)]),
         eslintFile('bad.ts', [eslintMessage(null)]),
       ];
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
         type: 'eslint',
         errors: new Map([['good.ts', new Map([[1, ['no-console']]])]]),
       });
@@ -260,7 +294,9 @@ describe('parseResults', () => {
       const results = oxlintResults([
         oxlintDiagnostic('eslint(no-debugger)', 'test.js', [spanLabel(5)]),
       ]);
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
         type: 'oxlint',
         errors: new Map([['test.js', new Map([[4, ['eslint/no-debugger']]])]]),
       });
@@ -272,7 +308,9 @@ describe('parseResults', () => {
           spanLabel(10),
         ]),
       ]);
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
         type: 'oxlint',
         errors: new Map([
           ['test.ts', new Map([[9, ['typescript/no-explicit-any']]])],
@@ -285,7 +323,9 @@ describe('parseResults', () => {
         oxlintDiagnostic(undefined, 'broken.ts', [spanLabel(2)]),
         oxlintDiagnostic('eslint(no-console)', 'broken.ts', [spanLabel(5)]),
       ]);
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
         type: 'oxlint',
         errors: new Map([['broken.ts', new Map([[4, ['eslint/no-console']]])]]),
       });
@@ -295,7 +335,9 @@ describe('parseResults', () => {
       const results = oxlintResults([
         oxlintDiagnostic(undefined, 'broken.ts', [spanLabel(2)]),
       ]);
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
         type: 'oxlint',
         errors: new Map(),
       });
@@ -306,7 +348,9 @@ describe('parseResults', () => {
         oxlintDiagnostic('eslint(no-console)', 'test.js', [spanLabel(7)]),
         oxlintDiagnostic('eslint(no-debugger)', 'test.js', [spanLabel(7)]),
       ]);
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
         type: 'oxlint',
         errors: new Map([
           [
@@ -322,7 +366,9 @@ describe('parseResults', () => {
         oxlintDiagnostic('eslint(no-console)', 'a.ts', [spanLabel(3)]),
         oxlintDiagnostic('eslint(no-debugger)', 'b.ts', [spanLabel(9)]),
       ]);
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
         type: 'oxlint',
         errors: new Map([
           ['a.ts', new Map([[2, ['eslint/no-console']]])],
@@ -339,7 +385,9 @@ describe('parseResults', () => {
           spanLabel(5),
         ]),
       ]);
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
         type: 'oxlint',
         errors: new Map([['test.js', new Map([[4, ['eslint/no-console']]])]]),
       });
@@ -352,7 +400,9 @@ describe('parseResults', () => {
           spanLabel(8),
         ]),
       ]);
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
         type: 'oxlint',
         errors: new Map([['test.js', new Map([[7, ['eslint/no-console']]])]]),
       });
@@ -360,7 +410,11 @@ describe('parseResults', () => {
 
     it('returns an empty error map for an empty diagnostics array', () => {
       expect(
-        parseResults({ results: oxlintResults([]), ignoreWarnings: false })
+        parseResults({
+          results: oxlintResults([]),
+          ignoreWarnings: false,
+          linterType: 'oxlint',
+        })
       ).toEqual({
         type: 'oxlint',
         errors: new Map(),
@@ -387,7 +441,9 @@ describe('parseResults', () => {
         threads_count: 1,
         start_time: 0.0186,
       };
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
         type: 'oxlint',
         errors: new Map([['test.js', new Map([[4, ['eslint/no-debugger']]])]]),
       });
@@ -398,7 +454,9 @@ describe('parseResults', () => {
       const results = oxlintResults([
         oxlintDiagnostic('eslint(no-debugger)', 'test.js', [spanLabel(1)]),
       ]);
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
         type: 'oxlint',
         errors: new Map([['test.js', new Map([[0, ['eslint/no-debugger']]])]]),
       });
@@ -413,7 +471,9 @@ describe('parseResults', () => {
           'warning'
         ),
       ]);
-      expect(parseResults({ results, ignoreWarnings: false })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
         type: 'oxlint',
         errors: new Map([['w.ts', new Map([[1, ['eslint/no-console']]])]]),
       });
@@ -434,7 +494,9 @@ describe('parseResults', () => {
           'error'
         ),
       ]);
-      expect(parseResults({ results, ignoreWarnings: true })).toEqual({
+      expect(
+        parseResults({ results, ignoreWarnings: true, linterType: 'oxlint' })
+      ).toEqual({
         type: 'oxlint',
         errors: new Map([['mixed.ts', new Map([[4, ['eslint/no-debugger']]])]]),
       });
@@ -442,49 +504,77 @@ describe('parseResults', () => {
   });
 
   describe('unrecognized input', () => {
-    // A non-array is treated as Oxlint (object-shaped) input, so the failing
-    // schema check reports an Oxlint parse error.
+    // With linterType 'oxlint', malformed input is run against the Oxlint
+    // schema, so the failing check reports an Oxlint parse error.
     it('throws for an empty object', () => {
       expect(() =>
-        parseResults({ results: {}, ignoreWarnings: false })
+        parseResults({
+          results: {},
+          ignoreWarnings: false,
+          linterType: 'oxlint',
+        })
       ).toThrow('Could not parse piped Oxlint results');
     });
 
     it('throws for null', () => {
       expect(() =>
-        parseResults({ results: null, ignoreWarnings: false })
+        parseResults({
+          results: null,
+          ignoreWarnings: false,
+          linterType: 'oxlint',
+        })
       ).toThrow('Could not parse piped Oxlint results');
     });
 
     it('throws for undefined', () => {
       expect(() =>
-        parseResults({ results: undefined, ignoreWarnings: false })
+        parseResults({
+          results: undefined,
+          ignoreWarnings: false,
+          linterType: 'oxlint',
+        })
       ).toThrow('Could not parse piped Oxlint results');
     });
 
     it('throws for a primitive string', () => {
       expect(() =>
-        parseResults({ results: 'oops', ignoreWarnings: false })
+        parseResults({
+          results: 'oops',
+          ignoreWarnings: false,
+          linterType: 'oxlint',
+        })
       ).toThrow('Could not parse piped Oxlint results');
     });
 
     it('throws for a primitive number', () => {
       expect(() =>
-        parseResults({ results: 42, ignoreWarnings: false })
+        parseResults({
+          results: 42,
+          ignoreWarnings: false,
+          linterType: 'oxlint',
+        })
       ).toThrow('Could not parse piped Oxlint results');
     });
 
     it('throws for a boolean', () => {
       expect(() =>
-        parseResults({ results: true, ignoreWarnings: false })
+        parseResults({
+          results: true,
+          ignoreWarnings: false,
+          linterType: 'oxlint',
+        })
       ).toThrow('Could not parse piped Oxlint results');
     });
 
-    // An array is treated as ESLint input, so a failing schema check reports an
-    // ESLint parse error.
+    // With linterType 'eslint', malformed input is run against the ESLint
+    // schema, so the failing check reports an ESLint parse error.
     it('throws for an array whose entries are not ESLint messages', () => {
       expect(() =>
-        parseResults({ results: [{ foo: 'bar' }], ignoreWarnings: false })
+        parseResults({
+          results: [{ foo: 'bar' }],
+          ignoreWarnings: false,
+          linterType: 'eslint',
+        })
       ).toThrow('Could not parse piped ESLint results');
     });
 
@@ -492,9 +582,9 @@ describe('parseResults', () => {
       // `ruleId` is required (only nullable), so omitting it entirely still
       // fails the schema, unlike a null ruleId, which is skipped.
       const results = [{ filePath: 'a.ts', messages: [{ line: 1 }] }];
-      expect(() => parseResults({ results, ignoreWarnings: false })).toThrow(
-        'Could not parse piped ESLint results'
-      );
+      expect(() =>
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toThrow('Could not parse piped ESLint results');
     });
 
     it('throws when an Oxlint diagnostic is missing its filename', () => {
@@ -503,9 +593,9 @@ describe('parseResults', () => {
           { message: 'm', code: 'eslint(no-console)', labels: [spanLabel(5)] },
         ],
       };
-      expect(() => parseResults({ results, ignoreWarnings: false })).toThrow(
-        'Could not parse piped Oxlint results'
-      );
+      expect(() =>
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toThrow('Could not parse piped Oxlint results');
     });
 
     it('throws when an Oxlint diagnostic is missing its labels', () => {
@@ -514,9 +604,9 @@ describe('parseResults', () => {
           { message: 'm', code: 'eslint(no-console)', filename: 'a.ts' },
         ],
       };
-      expect(() => parseResults({ results, ignoreWarnings: false })).toThrow(
-        'Could not parse piped Oxlint results'
-      );
+      expect(() =>
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toThrow('Could not parse piped Oxlint results');
     });
 
     it('throws when Oxlint diagnostics is not an array', () => {
@@ -524,6 +614,7 @@ describe('parseResults', () => {
         parseResults({
           results: { diagnostics: 'nope' },
           ignoreWarnings: false,
+          linterType: 'oxlint',
         })
       ).toThrow('Could not parse piped Oxlint results');
     });

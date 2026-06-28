@@ -32,6 +32,7 @@ function runCli(scenario: string) {
       databaseFile: WORKING_DATA,
       nonDisableableRules: [],
       compareBranch: 'main',
+      linterType: 'eslint',
     })
   );
   execFileSync(

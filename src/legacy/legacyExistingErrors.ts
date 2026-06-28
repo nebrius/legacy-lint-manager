@@ -15,11 +15,13 @@ export async function legacyExistingErrors(
   inputStream: Readable
 ) {
   setVerbose(options.verbose);
-  const { ignoreWarnings, databaseFile, pragma } = readConfig(options.config);
+  const { ignoreWarnings, databaseFile, pragma, linterType } = readConfig(
+    options.config
+  );
   const database = readDatabase(databaseFile);
   const results = await time('reading results', () => readResults(inputStream));
   const lintErrors = time('parsing results', () =>
-    parseResults({ results, ignoreWarnings })
+    parseResults({ results, ignoreWarnings, linterType })
   );
   time('adding legacy statements', () => {
     for (const filePath of lintErrors.errors.keys()) {

@@ -55,7 +55,7 @@ function runOxlint(files: string[] = REL_FILES): string {
 
 // Write a config file pointing at the work-dir data file. databaseFile is an
 // absolute path so readDatabase resolves it regardless of the process cwd.
-function writeConfig(ignoreWarnings = false) {
+function writeConfig(ignoreWarnings = false, linterType = 'eslint') {
   writeFileSync(
     CONFIG_FILE,
     JSON.stringify({
@@ -64,6 +64,7 @@ function writeConfig(ignoreWarnings = false) {
       databaseFile: WORKING_DATA,
       nonDisableableRules: [],
       compareBranch: 'main',
+      linterType,
     })
   );
 }
@@ -142,6 +143,7 @@ describe('legacy-errors (integration)', () => {
   });
 
   it('legacies real Oxlint errors and records their ids', async () => {
+    writeConfig(false, 'oxlint');
     const legacyExistingErrors = await loadCommand();
     const json = runOxlint();
 
@@ -201,7 +203,7 @@ describe('legacy-errors (integration)', () => {
   });
 
   it('does not legacy an Oxlint warning when the config sets ignoreWarnings true', async () => {
-    writeConfig(true);
+    writeConfig(true, 'oxlint');
     const legacyExistingErrors = await loadCommand();
     const json = runOxlint(VAR_REL_FILES);
 

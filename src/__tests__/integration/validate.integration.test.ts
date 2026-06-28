@@ -35,6 +35,7 @@ function writeConfig(databaseFile = WORKING_DATA) {
       databaseFile,
       nonDisableableRules: [],
       compareBranch: 'main',
+      linterType: 'eslint',
     })
   );
 }
@@ -168,6 +169,7 @@ describe('validate (integration)', () => {
           databaseFile: MALFORMED_DATA,
           nonDisableableRules: [],
           compareBranch: 'main',
+          linterType: 'eslint',
         })
       );
       // A 7-char id; the parser requires exactly 8, so this is malformed.

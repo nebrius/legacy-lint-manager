@@ -1,6 +1,7 @@
 import TypeBox from 'typebox';
 import Value from 'typebox/value';
 
+import type { Config } from '../util/config.js';
 import { InternalError } from '../util/error.js';
 import type { LintErrors } from '../util/types.js';
 
@@ -45,16 +46,16 @@ const OXLINT_CODE_REGEX = /^(.*?)\((.*?)\)$/;
 export function parseResults({
   results,
   ignoreWarnings,
+  linterType,
 }: {
   results: unknown;
   ignoreWarnings: boolean;
+  linterType: Config['linterType'];
 }): LintErrors {
-  // ESLint diagnostics come in array form, while Oxlint errors come in an
-  // object form, making it simple to determine which framework the results are
-  if (Array.isArray(results)) {
+  if (linterType === 'eslint') {
     if (!Value.Check(EslintSchema, results)) {
       const errors = Value.Errors(EslintSchema, results);
-      throw new InternalError(
+      throw new Error(
         'Could not parse piped ESLint results: ' +
           JSON.stringify(Array.from(errors), null, 2)
       );
@@ -125,7 +126,7 @@ export function parseResults({
         const prettyError = JSON.stringify(diagnostic, null, 2)
           .split('\n')
           .join('  \n');
-        throw new InternalError(
+        throw new Error(
           `Could not determine line number for diagnostic:\n  ${prettyError}`
         );
       }

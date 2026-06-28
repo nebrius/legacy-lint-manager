@@ -13,14 +13,18 @@ const ConfigSchema = TypeBox.Object(
     databaseFile: TypeBox.String(),
     nonDisableableRules: TypeBox.Array(TypeBox.String()),
     compareBranch: TypeBox.String(),
+    linterType: TypeBox.Union([
+      TypeBox.Literal('eslint'),
+      TypeBox.Literal('oxlint'),
+    ]),
   },
   { additionalProperties: false }
 );
 
-type ConfigData = TypeBox.Static<typeof ConfigSchema>;
+export type Config = TypeBox.Static<typeof ConfigSchema>;
 
 type Options = {
-  data: ConfigData;
+  data: Config;
   filePath: string;
 };
 
