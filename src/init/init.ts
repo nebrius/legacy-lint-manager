@@ -85,7 +85,7 @@ async function getLinterType(rootDir: string): Promise<{
   if (!type) {
     type = await wrap(() =>
       select({
-        message: 'Pick a project type.',
+        message: 'Which linter do you use?',
         options: [
           { value: 'eslint', label: 'ESLint' },
           { value: 'oxlint', label: 'Oxlint' },
@@ -110,7 +110,7 @@ async function getLinterType(rootDir: string): Promise<{
 async function getIgnoreWarnings(): Promise<boolean> {
   return wrap(() =>
     confirm({
-      message: 'Ignore warnings?',
+      message: 'Ignore lint warnings?',
       initialValue: false,
     })
   );
@@ -119,7 +119,7 @@ async function getIgnoreWarnings(): Promise<boolean> {
 async function getPragma(): Promise<string> {
   return wrap(() =>
     text({
-      message: 'What should disable comments be prefixed with?',
+      message: 'What should legacied disable comments be prefixed with?',
       defaultValue: DEFAULT_PRAGMA,
       placeholder: DEFAULT_PRAGMA,
     })
@@ -130,7 +130,7 @@ async function getDatabaseFile(): Promise<string> {
   return wrap(() =>
     text({
       message:
-        'Where should the database file be stored relative to the config file?',
+        'Where should the database file be stored, relative to the config file?',
       defaultValue: DEFAULT_DATABASE_FILE_NAME,
       placeholder: DEFAULT_DATABASE_FILE_NAME,
     })
@@ -151,7 +151,8 @@ function getCompareBranch(rootDir: string) {
 
   return wrap(() =>
     text({
-      message: 'What branch contains the canonical list of legacy issues?',
+      message:
+        'What branch should CI compare the legacied errors list be compared against?',
       defaultValue: defaultCompareBranch,
       placeholder: defaultCompareBranch,
       validate: (value) => {
@@ -176,7 +177,7 @@ async function getNonDisableableRules(eslintRules: string[] | undefined) {
   if (eslintRules) {
     return wrap(() =>
       autocompleteMultiselect({
-        message: 'Which rules should not be disableable?',
+        message: 'Which rules should be flagged if disabled?',
         options: eslintRules.map((rule) => ({
           value: rule,
           label: rule,
@@ -188,7 +189,7 @@ async function getNonDisableableRules(eslintRules: string[] | undefined) {
   } else {
     const rules = await wrap(() =>
       text({
-        message: 'Which rules should not be disableable?',
+        message: 'Which rules should be flagged if disabled?',
         placeholder: 'Example: "no-console, no-debugger"',
         defaultValue: '',
       })
