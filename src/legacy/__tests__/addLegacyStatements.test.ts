@@ -323,8 +323,10 @@ describe('addLegacyStatements', () => {
         entries: [[1, ['no-magic-numbers']]],
       });
       const parsed = parseGeneratedLine(result, 1);
-      expect(parsed?.rules).toEqual(['no-magic-numbers']);
-      expect(parsed?.id).toBe(issuedIds[0]);
+      expect(parsed?.type === 'legacy' && parsed.legaciedRules).toEqual([
+        'no-magic-numbers',
+      ]);
+      expect(parsed?.type === 'legacy' && parsed.id).toBe(issuedIds[0]);
     });
 
     it('produces a merged comment the parser reads back with the reused id', () => {
@@ -333,12 +335,18 @@ describe('addLegacyStatements', () => {
         fileContents: `const a = 1;\n${existing}\nconst x = 2;`,
         entries: [[2, ['new-rule']]],
       });
-      // The parseable rule list is the `(newRules)` group, which carries only
-      // the newly-merged rule; the full union lives in the disable directive
-      // itself. The id is the reused legacy id.
+      // The `(newRules)` group carries only the newly-merged rule, so that is
+      // what comes back as legaciedRules. The pre-existing `old-rule` is still
+      // disabled by the directive but not named in the pragma, so it surfaces as
+      // a non-legacied rule. The id is the reused legacy id.
       const parsed = parseGeneratedLine(result, 1);
-      expect(parsed?.rules).toEqual(['new-rule']);
-      expect(parsed?.id).toBe('keepid03');
+      expect(parsed?.type === 'legacy' && parsed.legaciedRules).toEqual([
+        'new-rule',
+      ]);
+      expect(parsed?.type === 'legacy' && parsed.nonLegaciedRules).toEqual([
+        'old-rule',
+      ]);
+      expect(parsed?.type === 'legacy' && parsed.id).toBe('keepid03');
     });
   });
 });

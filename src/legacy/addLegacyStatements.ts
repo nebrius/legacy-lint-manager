@@ -76,7 +76,9 @@ export function addLegacyStatements({
             line,
             lineContexts,
             indentation,
-            id: generateId(parsedComment?.id),
+            id: generateId(
+              parsedComment?.type === 'legacy' ? parsedComment.id : undefined
+            ),
           })
         );
         continue outer;

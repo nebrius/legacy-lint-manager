@@ -1,16 +1,24 @@
 import type { Database } from '../util/db.js';
-import type { LegacyComment, ValidationError } from '../util/types.js';
+import type {
+  LegacyComment,
+  NonLegacyComment,
+  ValidationError,
+} from '../util/types.js';
 import type { CompareInfo } from './getCompareInfo.js';
 
-export function validateIds({
+export function validateDisableComments({
   database,
+  nonDisableableRules,
   validationErrors,
   legacyComments,
+  nonLegacyComments,
   compareData,
 }: {
   database: Database;
+  nonDisableableRules: string[];
   validationErrors: ValidationError[];
   legacyComments: LegacyComment[];
+  nonLegacyComments: NonLegacyComment[];
   compareData: CompareInfo | undefined;
 }) {
   // Create the map form of the database used to set what was found in code
@@ -45,6 +53,32 @@ export function validateIds({
         file: comment.file,
         line: comment.startLine,
       });
+    }
+  }
+
+  // Validate non-disableable rules are not used in legacy comments
+  for (const comment of legacyComments) {
+    for (const rule of comment.nonLegaciedRules) {
+      if (nonDisableableRules.includes(rule)) {
+        validationErrors.push({
+          message: `Rule "${rule}" cannot be disabled.`,
+          file: comment.file,
+          line: comment.startLine,
+        });
+      }
+    }
+  }
+
+  // Validate non-disableable rules are not used in non-legacy comments
+  for (const comment of nonLegacyComments) {
+    for (const rule of comment.rules) {
+      if (nonDisableableRules.includes(rule)) {
+        validationErrors.push({
+          message: `Rule "${rule}" cannot be disabled.`,
+          file: comment.file,
+          line: comment.startLine,
+        });
+      }
     }
   }
 

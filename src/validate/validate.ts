@@ -9,12 +9,13 @@ import { error, info, setVerbose, time } from '../util/logging.js';
 import type {
   CommonOptions,
   LegacyComment,
+  NonLegacyComment,
   ValidationError,
 } from '../util/types.js';
 import type { CompareInfo } from './getCompareInfo.js';
 import { getCompareInfo } from './getCompareInfo.js';
 import { parseDisableComment } from './parseDisableComment.js';
-import { validateIds } from './validateIds.js';
+import { validateDisableComments } from './validateDisableComments.js';
 
 export function validate({
   verbose,
@@ -27,12 +28,14 @@ export function validate({
 }) {
   setVerbose(verbose);
 
-  const { pragma, databaseFile, compareBranch } = readConfig(config);
+  const { pragma, databaseFile, compareBranch, nonDisableableRules } =
+    readConfig(config);
   const rootDir = dirname(config);
   const database = readDatabase(databaseFile);
   const files = time('getting file list', () => getFileList(rootDir));
 
   const legacyComments: LegacyComment[] = [];
+  const nonLegacyComments: NonLegacyComment[] = [];
   const validationErrors: ValidationError[] = [];
   time('getting file comments', () => {
     for (const file of files) {
@@ -47,7 +50,11 @@ export function validate({
           pragma,
         });
         if (parsedDisableComment) {
-          legacyComments.push(parsedDisableComment);
+          if (parsedDisableComment.type === 'legacy') {
+            legacyComments.push(parsedDisableComment);
+          } else {
+            nonLegacyComments.push(parsedDisableComment);
+          }
         }
       }
     }
@@ -72,10 +79,12 @@ export function validate({
   }
 
   const results = time('validating IDs', () =>
-    validateIds({
+    validateDisableComments({
+      nonDisableableRules,
       database,
       validationErrors,
       legacyComments,
+      nonLegacyComments,
       compareData,
     })
   );

@@ -1,5 +1,6 @@
 - Add support for non-disablable rules aside from legacies
-- Add ability to bypass the legacy check if the lint config was changed
-- Support monorepos with nested config files but single database
+- prevent non-legacied rules on a line with legacies from being added to the legacies pragma. Maybe id contains hash of rules?
+- List all enabled rules in database, and allow new additions if they're new rules (Sidestepping the need for a temporary CI disable)
+- Support monorepos with nested config files but single database (perhaps keying by package name with list of enabled rules per-package)
 - Init tests
 - Update get file list code to take into account eslint ignore setups. You can get this from ConfigArray.

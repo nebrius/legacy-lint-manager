@@ -1,4 +1,9 @@
-import type { Comment, LegacyComment, ValidationError } from '../util/types.js';
+import type {
+  Comment,
+  LegacyComment,
+  NonLegacyComment,
+  ValidationError,
+} from '../util/types.js';
 
 export function parseDisableComment({
   comment,
@@ -8,11 +13,17 @@ export function parseDisableComment({
   comment: Comment;
   pragma: string;
   validationErrors: ValidationError[];
-}): LegacyComment | undefined {
+}): LegacyComment | NonLegacyComment | undefined {
   // If this is a regular ESLint/Oxlint disable comment and not a legacy pragma,
   // then ignore it.
   if (!comment.comment?.startsWith(pragma)) {
-    return undefined;
+    return {
+      type: 'nonlegacy',
+      file: comment.file,
+      startLine: comment.startLine,
+      endLine: comment.endLine,
+      rules: comment.rules,
+    };
   }
 
   // Since legacy comments are generated, we can be strict about whitespace
@@ -31,10 +42,12 @@ export function parseDisableComment({
   const id = match[2];
 
   return {
+    type: 'legacy',
     file: comment.file,
     startLine: comment.startLine,
     endLine: comment.endLine,
-    rules,
+    legaciedRules: rules,
+    nonLegaciedRules: comment.rules.filter((rule) => !rules.includes(rule)),
     id,
   };
 }

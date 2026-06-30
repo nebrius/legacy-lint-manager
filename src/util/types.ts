@@ -3,22 +3,28 @@ export type CommonOptions = {
   verbose: boolean;
 };
 
-export type Comment = {
-  type: 'next-line' | 'same-line' | 'block';
-  rules: string[];
-  disabledAll: boolean;
-  comment?: string;
+type CommentBase = {
   file: string;
   startLine: number;
   endLine: number;
+  rules: string[];
 };
 
-export type LegacyComment = {
-  file: string;
-  startLine: number;
-  endLine: number;
-  rules: string[];
+export type Comment = CommentBase & {
+  type: 'next-line' | 'same-line' | 'block';
+  disabledAll: boolean;
+  comment?: string;
+};
+
+export type LegacyComment = Omit<CommentBase, 'rules'> & {
+  type: 'legacy';
+  legaciedRules: string[];
+  nonLegaciedRules: string[];
   id: string;
+};
+
+export type NonLegacyComment = CommentBase & {
+  type: 'nonlegacy';
 };
 
 export type ValidationError = {

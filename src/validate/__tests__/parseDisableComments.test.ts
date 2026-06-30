@@ -25,40 +25,58 @@ function legacyText(rules: string, id = ID, pragma = DEFAULT_PRAGMA) {
 
 describe('parseDisableComment', () => {
   describe('non-legacy comments', () => {
-    it('returns undefined and records no error when there is no explanatory text', () => {
+    it('returns a non-legacy comment and records no error when there is no explanatory text', () => {
       const validationErrors: ValidationError[] = [];
       const result = parseDisableComment({
         comment: makeComment({ comment: undefined }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
       });
-      expect(result).toBeUndefined();
+      expect(result).toEqual({
+        type: 'nonlegacy',
+        file: 'test.ts',
+        startLine: 1,
+        endLine: 1,
+        rules: [],
+      });
       expect(validationErrors).toEqual([]);
     });
 
-    it('returns undefined for a regular explanatory comment that is not a legacy pragma', () => {
+    it('returns a non-legacy comment for a regular explanatory comment that is not a legacy pragma', () => {
       const validationErrors: ValidationError[] = [];
       const result = parseDisableComment({
         comment: makeComment({ comment: 'because reasons' }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
       });
-      expect(result).toBeUndefined();
+      expect(result).toEqual({
+        type: 'nonlegacy',
+        file: 'test.ts',
+        startLine: 1,
+        endLine: 1,
+        rules: [],
+      });
       expect(validationErrors).toEqual([]);
     });
 
-    it('returns undefined for an empty explanatory comment', () => {
+    it('returns a non-legacy comment for an empty explanatory comment', () => {
       const validationErrors: ValidationError[] = [];
       const result = parseDisableComment({
         comment: makeComment({ comment: '' }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
       });
-      expect(result).toBeUndefined();
+      expect(result).toEqual({
+        type: 'nonlegacy',
+        file: 'test.ts',
+        startLine: 1,
+        endLine: 1,
+        rules: [],
+      });
       expect(validationErrors).toEqual([]);
     });
 
-    it('ignores a comment that only contains the pragma later in the text', () => {
+    it('treats a comment that only contains the pragma later in the text as non-legacy', () => {
       const validationErrors: ValidationError[] = [];
       const result = parseDisableComment({
         comment: makeComment({
@@ -67,7 +85,27 @@ describe('parseDisableComment', () => {
         pragma: DEFAULT_PRAGMA,
         validationErrors,
       });
-      expect(result).toBeUndefined();
+      expect(result?.type).toBe('nonlegacy');
+      expect(validationErrors).toEqual([]);
+    });
+
+    it('carries the disabled rules through to the non-legacy comment', () => {
+      const validationErrors: ValidationError[] = [];
+      const result = parseDisableComment({
+        comment: makeComment({
+          rules: ['no-console', 'no-debugger'],
+          comment: undefined,
+        }),
+        pragma: DEFAULT_PRAGMA,
+        validationErrors,
+      });
+      expect(result).toEqual({
+        type: 'nonlegacy',
+        file: 'test.ts',
+        startLine: 1,
+        endLine: 1,
+        rules: ['no-console', 'no-debugger'],
+      });
       expect(validationErrors).toEqual([]);
     });
   });
@@ -91,10 +129,12 @@ describe('parseDisableComment', () => {
           validationErrors,
         });
         expect(result).toEqual({
+          type: 'legacy',
           file: 'test.ts',
           startLine: 1,
           endLine: 1,
-          rules: ['no-console'],
+          legaciedRules: ['no-console'],
+          nonLegaciedRules: [],
           id: ID,
         });
         expect(validationErrors).toEqual([]);
@@ -107,7 +147,10 @@ describe('parseDisableComment', () => {
           pragma,
           validationErrors,
         });
-        expect(result?.rules).toEqual(['no-console', 'no-debugger']);
+        expect(result?.type === 'legacy' && result.legaciedRules).toEqual([
+          'no-console',
+          'no-debugger',
+        ]);
         expect(validationErrors).toEqual([]);
       });
 
@@ -120,7 +163,10 @@ describe('parseDisableComment', () => {
           pragma,
           validationErrors,
         });
-        expect(result?.rules).toEqual(['no-console', 'no-debugger']);
+        expect(result?.type === 'legacy' && result.legaciedRules).toEqual([
+          'no-console',
+          'no-debugger',
+        ]);
         expect(validationErrors).toEqual([]);
       });
 
@@ -131,7 +177,7 @@ describe('parseDisableComment', () => {
           pragma,
           validationErrors,
         });
-        expect(result?.id).toBe('Ab2_Cd-4');
+        expect(result?.type === 'legacy' && result.id).toBe('Ab2_Cd-4');
         expect(validationErrors).toEqual([]);
       });
 
@@ -148,10 +194,12 @@ describe('parseDisableComment', () => {
           validationErrors,
         });
         expect(result).toEqual({
+          type: 'legacy',
           file: 'src/foo/bar.ts',
           startLine: 42,
           endLine: 42,
-          rules: ['no-console'],
+          legaciedRules: ['no-console'],
+          nonLegaciedRules: [],
           id: ID,
         });
         expect(validationErrors).toEqual([]);
@@ -258,6 +306,72 @@ describe('parseDisableComment', () => {
     });
   });
 
+  describe('splitting legacied from non-legacied rules', () => {
+    // A single disable directive can disable several rules while the legacy
+    // pragma only legacies a subset. The rules that the directive disables but
+    // the pragma does not name are "non-legacied" and treated as fresh disables.
+    it('puts directive rules absent from the pragma into nonLegaciedRules', () => {
+      const validationErrors: ValidationError[] = [];
+      const result = parseDisableComment({
+        comment: makeComment({
+          rules: ['no-console', 'no-debugger'],
+          comment: legacyText('no-console'),
+        }),
+        pragma: DEFAULT_PRAGMA,
+        validationErrors,
+      });
+      expect(result).toEqual({
+        type: 'legacy',
+        file: 'test.ts',
+        startLine: 1,
+        endLine: 1,
+        legaciedRules: ['no-console'],
+        nonLegaciedRules: ['no-debugger'],
+        id: ID,
+      });
+      expect(validationErrors).toEqual([]);
+    });
+
+    it('leaves nonLegaciedRules empty when the pragma legacies every disabled rule', () => {
+      const validationErrors: ValidationError[] = [];
+      const result = parseDisableComment({
+        comment: makeComment({
+          rules: ['no-console', 'no-debugger'],
+          comment: legacyText('no-console,no-debugger'),
+        }),
+        pragma: DEFAULT_PRAGMA,
+        validationErrors,
+      });
+      expect(result?.type === 'legacy' && result.nonLegaciedRules).toEqual([]);
+      expect(validationErrors).toEqual([]);
+    });
+
+    it('only filters the directive rules, so a pragma rule absent from the directive is still legacied', () => {
+      // nonLegaciedRules is derived from the directive's rules, not the pragma's,
+      // so a rule named in the pragma but not disabled by the directive simply
+      // appears in legaciedRules and never in nonLegaciedRules.
+      const validationErrors: ValidationError[] = [];
+      const result = parseDisableComment({
+        comment: makeComment({
+          rules: ['no-console'],
+          comment: legacyText('no-console,no-debugger'),
+        }),
+        pragma: DEFAULT_PRAGMA,
+        validationErrors,
+      });
+      expect(result).toEqual({
+        type: 'legacy',
+        file: 'test.ts',
+        startLine: 1,
+        endLine: 1,
+        legaciedRules: ['no-console', 'no-debugger'],
+        nonLegaciedRules: [],
+        id: ID,
+      });
+      expect(validationErrors).toEqual([]);
+    });
+  });
+
   describe('documented edge-case behavior', () => {
     it('produces a single empty-string rule for an empty rule list', () => {
       const validationErrors: ValidationError[] = [];
@@ -266,7 +380,7 @@ describe('parseDisableComment', () => {
         pragma: DEFAULT_PRAGMA,
         validationErrors,
       });
-      expect(result?.rules).toEqual(['']);
+      expect(result?.type === 'legacy' && result.legaciedRules).toEqual(['']);
       expect(validationErrors).toEqual([]);
     });
   });
