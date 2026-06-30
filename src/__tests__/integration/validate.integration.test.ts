@@ -208,4 +208,83 @@ describe('validate (integration)', () => {
       );
     });
   });
+
+  // A plain (non-legacy) disable comment takes the else branch of validate's
+  // comment-collection loop: it is gathered into nonLegacyComments and only
+  // reported when it disables a non-disableable rule. The project is built in a
+  // temp dir so these throwaway sources never touch the shared fixture.
+  describe('with a non-legacy disable comment', () => {
+    const NONLEGACY_PROJECT = join(tmpdir(), 'lint-legacies-nonlegacy-project');
+    const NONLEGACY_SRC = join(NONLEGACY_PROJECT, 'src');
+    const NONLEGACY_FILE = join(NONLEGACY_SRC, 'plain.ts');
+    const NONLEGACY_CONFIG = join(
+      NONLEGACY_PROJECT,
+      'legacy-lint.config.jsonc'
+    );
+    const NONLEGACY_DATA = join(NONLEGACY_PROJECT, 'legacy-lint.data.json');
+
+    function setup(nonDisableableRules: string[]) {
+      mkdirSync(NONLEGACY_SRC, { recursive: true });
+      writeFileSync(NONLEGACY_DATA, JSON.stringify([]));
+      writeFileSync(
+        NONLEGACY_CONFIG,
+        JSON.stringify({
+          ignoreWarnings: false,
+          pragma: DEFAULT_PRAGMA,
+          databaseFile: NONLEGACY_DATA,
+          nonDisableableRules,
+          compareBranch: 'main',
+          linterType: 'eslint',
+        })
+      );
+      // A regular disable comment with no legacy pragma.
+      writeFileSync(
+        NONLEGACY_FILE,
+        [
+          'export function logSomething(): void {',
+          '  // eslint-disable-next-line no-console',
+          "  console.log('x');",
+          '}',
+          '',
+        ].join('\n')
+      );
+    }
+
+    function runNonLegacyValidate() {
+      validate({
+        config: NONLEGACY_CONFIG,
+        verbose: false,
+        update: false,
+        compare: false,
+      });
+    }
+
+    afterEach(() => {
+      rmSync(NONLEGACY_PROJECT, { recursive: true, force: true });
+    });
+
+    it('passes cleanly when the disabled rule is not non-disableable', () => {
+      setup([]);
+      expect(() => {
+        runNonLegacyValidate();
+      }).not.toThrow();
+    });
+
+    it('exits 1 and reports the rule when it is non-disableable', () => {
+      setup(['no-console']);
+      const exitSpy = mockExit();
+      const errorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      expect(() => {
+        runNonLegacyValidate();
+      }).toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errorSpy).toHaveBeenCalledWith('Validation errors:');
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Rule "no-console" cannot be disabled.')
+      );
+    });
+  });
 });
