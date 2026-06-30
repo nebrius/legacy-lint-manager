@@ -1,5 +1,6 @@
 import { execSync, spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
+import type { Readable, Writable } from 'node:stream';
 
 import {
   autocompleteMultiselect,
@@ -22,18 +23,25 @@ import { createDatabase } from '../util/db.js';
 import { getEslintRules } from './getEslintRules.js';
 import { getLintConfigFiles } from './getLintConfigFiles.js';
 
-export async function init() {
+type IO = {
+  input: Readable;
+  output: Writable;
+};
+
+// init takes in IO so that we can override it in tests
+export async function init(io: IO) {
   intro(`legacy-lint-manager`);
   const rootDir = process.cwd();
 
-  const linterType = await getLinterType(rootDir);
-  const ignoreWarnings = await getIgnoreWarnings();
-  const pragma = await getPragma();
+  const linterType = await getLinterType(rootDir, io);
+  const ignoreWarnings = await getIgnoreWarnings(io);
+  const pragma = await getPragma(io);
   const nonDisableableRules = await getNonDisableableRules(
-    linterType.eslintRules
+    linterType.eslintRules,
+    io
   );
-  const compareBranch = await getCompareBranch(rootDir);
-  const databaseFile = await getDatabaseFile();
+  const compareBranch = await getCompareBranch(rootDir, io);
+  const databaseFile = await getDatabaseFile(io);
 
   const configFilePath = join(rootDir, DEFAULT_CONFIG_FILE_NAME);
   createConfig({
@@ -69,7 +77,10 @@ async function wrap<T>(fn: () => Promise<T | symbol>): Promise<T> {
   return result;
 }
 
-async function getLinterType(rootDir: string): Promise<{
+async function getLinterType(
+  rootDir: string,
+  io: IO
+): Promise<{
   type: 'eslint' | 'oxlint';
   eslintRules?: string[];
 }> {
@@ -90,6 +101,7 @@ async function getLinterType(rootDir: string): Promise<{
           { value: 'eslint', label: 'ESLint' },
           { value: 'oxlint', label: 'Oxlint' },
         ],
+        ...io,
       })
     );
   }
@@ -107,37 +119,40 @@ async function getLinterType(rootDir: string): Promise<{
   }
 }
 
-async function getIgnoreWarnings(): Promise<boolean> {
+async function getIgnoreWarnings(io: IO): Promise<boolean> {
   return wrap(() =>
     confirm({
       message: 'Ignore lint warnings?',
       initialValue: false,
+      ...io,
     })
   );
 }
 
-async function getPragma(): Promise<string> {
+async function getPragma(io: IO): Promise<string> {
   return wrap(() =>
     text({
       message: 'What should legacied disable comments be prefixed with?',
       defaultValue: DEFAULT_PRAGMA,
       placeholder: DEFAULT_PRAGMA,
+      ...io,
     })
   );
 }
 
-async function getDatabaseFile(): Promise<string> {
+async function getDatabaseFile(io: IO): Promise<string> {
   return wrap(() =>
     text({
       message:
         'Where should the database file be stored, relative to the config file?',
       defaultValue: DEFAULT_DATABASE_FILE_NAME,
       placeholder: DEFAULT_DATABASE_FILE_NAME,
+      ...io,
     })
   );
 }
 
-function getCompareBranch(rootDir: string) {
+function getCompareBranch(rootDir: string, io: IO) {
   // Get the default branch if an explicit branch was not provided
   const defaultCompareBranch = execSync(
     'git symbolic-ref refs/remotes/origin/HEAD --short',
@@ -169,11 +184,15 @@ function getCompareBranch(rootDir: string) {
           return `Branch "${value}" does not exist`;
         }
       },
+      ...io,
     })
   );
 }
 
-async function getNonDisableableRules(eslintRules: string[] | undefined) {
+async function getNonDisableableRules(
+  eslintRules: string[] | undefined,
+  io: IO
+) {
   if (eslintRules) {
     return wrap(() =>
       autocompleteMultiselect({
@@ -184,6 +203,7 @@ async function getNonDisableableRules(eslintRules: string[] | undefined) {
         })),
         placeholder: 'Type to search...',
         maxItems: 10,
+        ...io,
       })
     );
   } else {
@@ -192,6 +212,7 @@ async function getNonDisableableRules(eslintRules: string[] | undefined) {
         message: 'Which rules should be flagged if disabled?',
         placeholder: 'Example: "no-console, no-debugger"',
         defaultValue: '',
+        ...io,
       })
     );
     return rules.split(',').map((rule) => rule.trim());

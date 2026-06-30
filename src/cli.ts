@@ -45,7 +45,10 @@ addCommonOptions(program.command('legacy-errors'))
 addCommonOptions(program.command('init'))
   .description('Create a new configuration file')
   .action(() => {
-    void init();
+    void init({
+      input: process.stdin,
+      output: process.stdout,
+    });
   });
 
 program.parse();

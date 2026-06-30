@@ -14,9 +14,6 @@ export default defineConfig({
         // out-of-process smoke test, which the in-process v8 collector cannot
         // instrument.
         'src/cli.ts',
-        // init.ts is the interactive command (clack prompts + git); its tests
-        // are handled separately, so it is excluded from the coverage target.
-        'src/init/init.ts',
       ],
     },
   },
