@@ -180,7 +180,7 @@ describe('addLegacyStatements', () => {
   });
 
   describe('merge into an existing next-line comment', () => {
-    it('reuses the legacy id, unions rules, and reports only the new rules', () => {
+    it('reuses the legacy id and carries the previously-legacied rule into the parenthetical', () => {
       // Legacy ids must be unique per test: the function's module-level idSet
       // persists across the run and would otherwise regenerate a reused id that
       // was already issued elsewhere.
@@ -191,9 +191,12 @@ describe('addLegacyStatements', () => {
       });
       // The merged comment keeps the original id, so nanoid is never consumed.
       expect(nanoidMock).not.toHaveBeenCalled();
+      // The parenthetical is the union of the newly-legacied rule and the
+      // rule that was already legacied; previously-legacied rules must not be
+      // dropped from the tracked set on re-legacy.
       expect(result.split('\n')).toEqual([
         'const a = 1;',
-        `// eslint-disable-next-line old-rule, new-rule -- ${DEFAULT_PRAGMA} (new-rule) keepid01`,
+        `// eslint-disable-next-line new-rule, old-rule -- ${DEFAULT_PRAGMA} (new-rule, old-rule) keepid01`,
         'const x = 2;',
       ]);
     });
@@ -204,13 +207,34 @@ describe('addLegacyStatements', () => {
         fileContents: `const a = 1;\n${existing}\nconst x = 2;`,
         entries: [[2, ['shared', 'new-rule']]],
       });
+      // `shared` was already legacied, so re-legacying it is a no-op union; the
+      // parenthetical stays the union of all legacied rules (shared already in
+      // it, new-rule added, old-rule carried forward).
       expect(result.split('\n')[1]).toBe(
-        `// eslint-disable-next-line shared, old-rule, new-rule -- ${DEFAULT_PRAGMA} (shared, new-rule) keepid02`
+        `// eslint-disable-next-line shared, new-rule, old-rule -- ${DEFAULT_PRAGMA} (shared, new-rule, old-rule) keepid02`
       );
     });
 
-    it('merges into a non-legacy disable-next-line comment but generates a fresh id', () => {
-      // A plain disable comment whose explanation does not match the pragma.
+    it('re-legacies a comment with a mix of legacied and non-legacied rules, preserving both sets', () => {
+      // The genuine mixed case: the existing legacy comment's directive lists
+      // `a, b` but only `b` is inside the parenthetical, so `b` is legacied and
+      // `a` is a human-added rule the manager does not track. Re-legacying with
+      // a new error `c` must add `c` to the legacied set, keep `b` legacied, and
+      // leave `a` untouched as non-legacied.
+      const existing = `// eslint-disable-next-line a, b -- ${DEFAULT_PRAGMA} (b) keepid09`;
+      const result = run({
+        fileContents: `const foo = 1;\n${existing}\nconst x = 2;`,
+        entries: [[2, ['c']]],
+      });
+      expect(nanoidMock).not.toHaveBeenCalled();
+      expect(result.split('\n')[1]).toBe(
+        `// eslint-disable-next-line c, b, a -- ${DEFAULT_PRAGMA} (c, b) keepid09`
+      );
+    });
+
+    it('converts a non-legacy disable comment, keeping its rule as non-legacied and dropping its explanation', () => {
+      // A plain, human-authored disable comment whose explanation does not
+      // match the pragma.
       const existing =
         '// eslint-disable-next-line old-rule -- because reasons';
       const result = run({
@@ -219,9 +243,21 @@ describe('addLegacyStatements', () => {
       });
       // No legacy id to reuse, so a fresh id is generated.
       expect(nanoidMock).toHaveBeenCalledTimes(1);
+      // `new-rule` is the newly-legacied rule (it lands in the parenthetical);
+      // the human's pre-existing `old-rule` is preserved in the directive as a
+      // non-legacied rule, so its suppression is not lost.
+      //
+      // The human explanation (`-- because reasons`) is intentionally dropped:
+      // once a line is legacied, the pragma comment is a machine-owned
+      // generated artifact parsed by a strict, whitespace-sensitive regex
+      // (see parseDisableComment.ts), so there is no slot for arbitrary prose.
+      // This drop is deliberate but temporary — TODO.md item 7 tracks lifting
+      // such comments to a separate line above the legacy disable. Update this
+      // test when that lands.
       expect(result.split('\n')[1]).toBe(
-        `// eslint-disable-next-line old-rule, new-rule -- ${DEFAULT_PRAGMA} (new-rule) ${issuedIds[0]}`
+        `// eslint-disable-next-line new-rule, old-rule -- ${DEFAULT_PRAGMA} (new-rule) ${issuedIds[0]}`
       );
+      expect(result).not.toContain('because reasons');
     });
 
     it('does not merge into a same-line disable comment, inserting a net-new comment instead', () => {
@@ -269,7 +305,7 @@ describe('addLegacyStatements', () => {
       expect(nanoidMock).toHaveBeenCalledTimes(1);
       expect(result.split('\n')).toEqual([
         'const a = 1;',
-        `// eslint-disable-next-line old-rule, new-rule -- ${DEFAULT_PRAGMA} (new-rule) keepid05`,
+        `// eslint-disable-next-line new-rule, old-rule -- ${DEFAULT_PRAGMA} (new-rule, old-rule) keepid05`,
         'const b = 2;',
         `// eslint-disable-next-line rule-c -- ${DEFAULT_PRAGMA} (rule-c) ${issuedIds[0]}`,
         'const c = 3;',
@@ -335,18 +371,37 @@ describe('addLegacyStatements', () => {
         fileContents: `const a = 1;\n${existing}\nconst x = 2;`,
         entries: [[2, ['new-rule']]],
       });
-      // The `(newRules)` group carries only the newly-merged rule, so that is
-      // what comes back as legaciedRules. The pre-existing `old-rule` is still
-      // disabled by the directive but not named in the pragma, so it surfaces as
-      // a non-legacied rule. The id is the reused legacy id.
+      // The existing comment was fully legacied (`(old-rule)`), so re-legacying
+      // with `new-rule` unions the two into the parenthetical. Both come back as
+      // legaciedRules and nothing is non-legacied. The id is the reused legacy
+      // id.
       const parsed = parseGeneratedLine(result, 1);
       expect(parsed?.type === 'legacy' && parsed.legaciedRules).toEqual([
         'new-rule',
-      ]);
-      expect(parsed?.type === 'legacy' && parsed.nonLegaciedRules).toEqual([
         'old-rule',
       ]);
+      expect(parsed?.type === 'legacy' && parsed.nonLegaciedRules).toEqual([]);
       expect(parsed?.type === 'legacy' && parsed.id).toBe('keepid03');
+    });
+
+    it('round-trips a re-legacied mixed comment back into the correct legacied/non-legacied buckets', () => {
+      // Existing directive `a, b` with only `b` legacied; re-legacy adds `c`.
+      // The regenerated comment must parse back with `c` and `b` legacied and
+      // the human's `a` still non-legacied — the property the refactor fixed.
+      const existing = `// eslint-disable-next-line a, b -- ${DEFAULT_PRAGMA} (b) keepid10`;
+      const result = run({
+        fileContents: `const foo = 1;\n${existing}\nconst x = 2;`,
+        entries: [[2, ['c']]],
+      });
+      const parsed = parseGeneratedLine(result, 1);
+      expect(parsed?.type === 'legacy' && parsed.legaciedRules).toEqual([
+        'c',
+        'b',
+      ]);
+      expect(parsed?.type === 'legacy' && parsed.nonLegaciedRules).toEqual([
+        'a',
+      ]);
+      expect(parsed?.type === 'legacy' && parsed.id).toBe('keepid10');
     });
   });
 });

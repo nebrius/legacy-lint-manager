@@ -65,19 +65,43 @@ export function addLegacyStatements({
           // checking if this is a legacy comment or not
           validationErrors: [],
         });
+
+        let legaciedRules: string[];
+        let nonLegaciedRules: string[];
+        if (parsedComment?.type === 'legacy') {
+          legaciedRules = Array.from(
+            new Set([...rules, ...parsedComment.legaciedRules])
+          );
+          nonLegaciedRules = parsedComment.nonLegaciedRules;
+        } else if (parsedComment?.type === 'nonlegacy') {
+          legaciedRules = rules.filter(
+            (rule) => !parsedComment.rules.includes(rule)
+          );
+          nonLegaciedRules = parsedComment.rules;
+          /* v8 ignore start */
+        } else {
+          // TODO: At this point this should never happen, but it also means
+          // we need to do a full validation before even starting legacying
+          // so that we don't leave users in a broken state
+          throw new InternalError(
+            'Expected legacy or nonlegacy comment, got no comment at all'
+          );
+        }
+        /* v8 ignore end */
+
         fileContentsByLine.splice(
           fileComment.startLine,
           fileComment.endLine - fileComment.startLine + 1,
           computeDisableComment({
             type: lintErrors.type,
-            existingRules: fileComment.rules,
-            newRules: rules,
+            legaciedRules,
+            nonLegaciedRules,
             pragma,
             line,
             lineContexts,
             indentation,
             id: generateId(
-              parsedComment?.type === 'legacy' ? parsedComment.id : undefined
+              parsedComment.type === 'legacy' ? parsedComment.id : undefined
             ),
           })
         );
@@ -90,8 +114,8 @@ export function addLegacyStatements({
       0,
       computeDisableComment({
         type: lintErrors.type,
-        existingRules: [],
-        newRules: rules,
+        legaciedRules: rules,
+        nonLegaciedRules: [],
         pragma,
         line,
         lineContexts,
@@ -116,8 +140,8 @@ function getIndentation(line: string) {
 
 function computeDisableComment({
   type,
-  existingRules,
-  newRules,
+  legaciedRules,
+  nonLegaciedRules,
   pragma,
   line,
   lineContexts,
@@ -125,15 +149,17 @@ function computeDisableComment({
   id,
 }: {
   type: 'eslint' | 'oxlint';
-  existingRules: string[];
-  newRules: string[];
+  legaciedRules: string[];
+  nonLegaciedRules: string[];
   pragma: string;
   line: number;
   lineContexts: LineContext[];
   indentation: string;
   id: string;
 }) {
-  const combinedRules = Array.from(new Set([...existingRules, ...newRules]));
+  const combinedRules = Array.from(
+    new Set([...legaciedRules, ...nonLegaciedRules])
+  );
   const context = lineContexts[line] as LineContext | undefined;
 
   /* v8 ignore start */
@@ -142,7 +168,7 @@ function computeDisableComment({
   }
   /* v8 ignore stop */
 
-  const innerComment = `${type}-disable-next-line ${combinedRules.join(', ')} -- ${pragma} (${newRules.join(', ')}) ${id}`;
+  const innerComment = `${type}-disable-next-line ${combinedRules.join(', ')} -- ${pragma} (${legaciedRules.join(', ')}) ${id}`;
   if (context === 'jsx') {
     return `${indentation}{/* ${innerComment} */}`;
   } else {
