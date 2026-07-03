@@ -240,4 +240,40 @@ describe('legacy-errors (integration)', () => {
     expect(hasLegacyComment(VAR_FILE, 'eslint/no-console')).toBe(true);
     expect(hasLegacyComment(VAR_FILE, 'eslint/no-var')).toBe(false);
   });
+
+  it('skips a file with a malformed legacy comment, leaving it unchanged', async () => {
+    // The no-debugger disable on line 2 is a legacy comment with a 5-char id
+    // (must be 8), so it is malformed. It sits immediately before the no-console
+    // error on line 3 but disables an unrelated rule, so eslint still reports
+    // the error and addLegacyStatements hits the malformed comment while merging.
+    const MALFORMED_FILE = join(WORK_SRC, 'usesMalformed.ts');
+    const source = [
+      'export function logSomething(): void {',
+      `  // eslint-disable-next-line no-debugger -- ${DEFAULT_PRAGMA} (no-debugger) short`,
+      "  console.log('legacy console usage');",
+      '}',
+      '',
+    ].join('\n');
+    writeFileSync(MALFORMED_FILE, source);
+
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const legacyExistingErrors = await loadCommand();
+    const json = runEslint(['src/usesMalformed.ts']);
+
+    await legacyExistingErrors(
+      { config: CONFIG_FILE, verbose: false },
+      Readable.from([json])
+    );
+
+    // The file is skipped, so it is left byte-for-byte unchanged on disk...
+    expect(readFileSync(MALFORMED_FILE, 'utf-8')).toBe(source);
+    // ...and the malformed comment is reported.
+    expect(
+      errorSpy.mock.calls.some(([msg]) =>
+        String(msg).includes('Malformed legacy comment:')
+      )
+    ).toBe(true);
+  });
 });

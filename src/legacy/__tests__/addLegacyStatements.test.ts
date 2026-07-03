@@ -1,10 +1,10 @@
 import type { nanoid } from 'nanoid';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getFileComments } from '../../util/comments.js';
 import { DEFAULT_PRAGMA } from '../../util/constants.js';
+import { parseDisableComment } from '../../util/parseDisableComment.js';
 import type { LintErrors } from '../../util/types.js';
-import { parseDisableComment } from '../../validate/parseDisableComment.js';
 import { addLegacyStatements } from '../addLegacyStatements.js';
 import { getIds } from '../generateIds.js';
 
@@ -16,6 +16,7 @@ vi.mock('nanoid', () => ({ nanoid: () => nanoidMock() }));
 
 const FILE = 'test.ts';
 const JSX_FILE = 'test.tsx';
+const ROOT = '/repo';
 
 // The function under test keeps a module-level idSet to dedupe generated ids
 // across calls; it persists for the whole test run. To keep that from coupling
@@ -51,25 +52,40 @@ function makeLintErrors(
   return { type, errors: new Map([[filePath, new Map(entries)]]) };
 }
 
-function run({
+function runRaw({
   type = 'eslint',
   fileContents,
   entries,
   pragma = DEFAULT_PRAGMA,
   filePath = FILE,
+  rootDir = ROOT,
 }: {
   type?: LintErrors['type'];
   fileContents: string;
   entries: Array<[number, string[]]>;
   pragma?: string;
   filePath?: string;
+  rootDir?: string;
 }) {
   return addLegacyStatements({
     pragma,
     lintErrors: makeLintErrors(type, entries, filePath),
     fileContents,
     filePath,
+    rootDir,
   });
+}
+
+// Most tests exercise the happy path, where the file is always rewritten, so
+// they can treat the result as a plain string. addLegacyStatements only returns
+// undefined when it skips a file for a malformed legacy comment; those tests use
+// runRaw directly to observe that.
+function run(args: Parameters<typeof runRaw>[0]): string {
+  const result = runRaw(args);
+  if (result === undefined) {
+    throw new Error('Expected addLegacyStatements to return file contents');
+  }
+  return result;
 }
 
 describe('addLegacyStatements', () => {
@@ -416,6 +432,95 @@ describe('addLegacyStatements', () => {
         'a',
       ]);
       expect(parsed?.type === 'legacy' && parsed.id).toBe('keepid10');
+    });
+  });
+
+  describe('malformed legacy comment', () => {
+    // A next-line legacy comment whose id is 5 chars ("short") instead of the
+    // required 8, so parseDisableComment records a validation error.
+    const MALFORMED = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) short`;
+
+    // Capture everything written to console.error (both printValidationErrors
+    // and the skip-notice funnel through logging.error -> console.error).
+    function captureErrors() {
+      const messages: string[] = [];
+      vi.spyOn(console, 'error').mockImplementation((msg: string) => {
+        messages.push(msg);
+      });
+      return messages;
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('returns undefined and consumes no id when the legacy comment on the error line is malformed', () => {
+      captureErrors();
+      const result = runRaw({
+        fileContents: `const a = 1;\n${MALFORMED}\nconst x = 2;`,
+        entries: [[2, ['new-rule']]],
+      });
+      // The file is skipped, so the caller writes nothing, and we bail before
+      // generating an id.
+      expect(result).toBeUndefined();
+      expect(nanoidMock).not.toHaveBeenCalled();
+    });
+
+    it('reports the malformed comment and a skip notice', () => {
+      const messages = captureErrors();
+      runRaw({
+        fileContents: `const a = 1;\n${MALFORMED}\nconst x = 2;`,
+        entries: [[2, ['new-rule']]],
+      });
+      // printValidationErrors prints the parser detail; the skip notice follows.
+      expect(
+        messages.some((m) => m.includes('Malformed legacy comment:'))
+      ).toBe(true);
+      expect(messages).toContain('Errors in this file will not be legacied');
+    });
+
+    it('skips the entire file, leaving valid errors on other lines un-legacied', () => {
+      captureErrors();
+      // Reverse iteration processes the line-3 error first (whose preceding
+      // comment is malformed) and bails, so the line-0 error is never legacied.
+      const result = runRaw({
+        fileContents: `const a = 1;\nconst b = 2;\n${MALFORMED}\nconst c = 3;`,
+        entries: [
+          [0, ['rule-a']],
+          [3, ['new-rule']],
+        ],
+      });
+      expect(result).toBeUndefined();
+      expect(nanoidMock).not.toHaveBeenCalled();
+    });
+
+    it('strips rootDir from the reported file path', () => {
+      const messages = captureErrors();
+      runRaw({
+        fileContents: `const a = 1;\n${MALFORMED}\nconst x = 2;`,
+        entries: [[2, ['new-rule']]],
+        filePath: `${ROOT}/src/app.ts`,
+        rootDir: ROOT,
+      });
+      // The header is the repo-relative path, with no trace of rootDir.
+      expect(messages).toContain('src/app.ts:');
+      expect(messages.some((m) => m.includes(ROOT))).toBe(false);
+    });
+
+    it('does not block legacying when a malformed legacy comment is not adjacent to an error line', () => {
+      captureErrors();
+      // The malformed comment sits on line 1, but the only error is on line 3,
+      // so the merge branch (which checks line - 1) never inspects it and
+      // legacying proceeds normally.
+      const result = runRaw({
+        fileContents: `const a = 1;\n${MALFORMED}\nconst b = 2;\nconst c = 3;`,
+        entries: [[3, ['new-rule']]],
+      });
+      expect(result).toBeDefined();
+      // The stray malformed comment is left untouched...
+      expect(result).toContain(MALFORMED);
+      // ...and the line-3 error is legacied as a net-new comment.
+      expect(result).toContain(`new-rule -- ${DEFAULT_PRAGMA} (new-rule)`);
     });
   });
 });

@@ -1,7 +1,13 @@
 import { getFileComments } from '../util/comments.js';
 import { InternalError } from '../util/error.js';
-import type { LineContext, LintErrors } from '../util/types.js';
-import { parseDisableComment } from '../validate/parseDisableComment.js';
+import { error } from '../util/logging.js';
+import { parseDisableComment } from '../util/parseDisableComment.js';
+import { printValidationErrors } from '../util/printValidationErrors.js';
+import type {
+  LineContext,
+  LintErrors,
+  ValidationError,
+} from '../util/types.js';
 import { generateId } from './generateIds.js';
 import { getFileContexts } from './getFileContexts.js';
 
@@ -10,11 +16,13 @@ export function addLegacyStatements({
   lintErrors,
   fileContents,
   filePath,
+  rootDir,
 }: {
   pragma: string;
   lintErrors: LintErrors;
   fileContents: string;
   filePath: string;
+  rootDir: string;
 }) {
   const fileContentsByLine = fileContents.split('\n');
   const {
@@ -56,15 +64,26 @@ export function addLegacyStatements({
         fileComment.type === 'next-line'
       ) {
         // Parse the comment to see if this is a previously existing legacy
-        // comment, or if it's just a standard disable comment
+        // comment, or if it's just a standard disable comment. We also ensure
+        // that this isn't a malformed legacy comment, in which case stop, print
+        // the error, and skip this file entirely
+        const validationErrors: ValidationError[] = [];
         const parsedComment = parseDisableComment({
           comment: fileComment,
           pragma,
 
           // We don't care about validation errors here, since we're just
           // checking if this is a legacy comment or not
-          validationErrors: [],
+          validationErrors,
         });
+        if (validationErrors.length > 0) {
+          printValidationErrors({
+            validationErrors,
+            rootDir,
+          });
+          error('Errors in this file will not be legacied');
+          return undefined;
+        }
 
         let legaciedRules: string[];
         let nonLegaciedRules: string[];

@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
-import { dirname, sep } from 'node:path';
+import { dirname } from 'node:path';
 
 import { getFileComments } from '../util/comments.js';
 import { readConfig } from '../util/config.js';
 import { readDatabase } from '../util/db.js';
 import { getFileList } from '../util/files.js';
 import { error, info, setVerbose, time } from '../util/logging.js';
+import { parseDisableComment } from '../util/parseDisableComment.js';
+import { printValidationErrors } from '../util/printValidationErrors.js';
 import type {
   CommonOptions,
   LegacyComment,
@@ -14,7 +16,6 @@ import type {
 } from '../util/types.js';
 import type { CompareInfo } from './getCompareInfo.js';
 import { getCompareInfo } from './getCompareInfo.js';
-import { parseDisableComment } from './parseDisableComment.js';
 import { validateDisableComments } from './validateDisableComments.js';
 
 export function validate({
@@ -88,30 +89,12 @@ export function validate({
     })
   );
 
-  // Print errors if any were found
+  // Print errors if any were found and exit with error code
   if (validationErrors.length > 0) {
-    const groupedErrors = new Map<string, ValidationError[]>();
-    for (const validationError of validationErrors) {
-      if (validationError.location) {
-        if (!groupedErrors.has(validationError.location.file)) {
-          groupedErrors.set(validationError.location.file, []);
-        }
-        groupedErrors.get(validationError.location.file)?.push(validationError);
-      } else {
-        if (!groupedErrors.has('Global')) {
-          groupedErrors.set('Global', []);
-        }
-        groupedErrors.get('Global')?.push(validationError);
-      }
-    }
-    for (const [file, errors] of groupedErrors) {
-      error(`${file.replace(rootDir + sep, '')}:`);
-      for (const err of errors) {
-        error(
-          `  ${err.location?.line ? `${err.location.line.toString()}: ` : ''}${err.message}`
-        );
-      }
-    }
+    printValidationErrors({
+      validationErrors,
+      rootDir,
+    });
     process.exit(1);
   }
 

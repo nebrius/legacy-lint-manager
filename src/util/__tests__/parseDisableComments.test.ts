@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_PRAGMA } from '../../util/constants.js';
-import type { Comment, ValidationError } from '../../util/types.js';
+import { DEFAULT_PRAGMA } from '../constants.js';
 import { parseDisableComment } from '../parseDisableComment.js';
+import type { Comment, ValidationError } from '../types.js';
 
 const ID = 'a1b2c3d4';
 

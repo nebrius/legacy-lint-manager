@@ -3,7 +3,7 @@ import type {
   LegacyComment,
   NonLegacyComment,
   ValidationError,
-} from '../util/types.js';
+} from './types.js';
 
 export function parseDisableComment({
   comment,

@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import type { Readable } from 'node:stream';
 
 import { readConfig } from '../util/config.js';
@@ -32,9 +33,13 @@ export async function legacyExistingErrors(
         lintErrors,
         fileContents,
         filePath,
+        rootDir: dirname(options.config),
       });
-      // Save the file
-      writeFileSync(filePath, updatedFileContents);
+      // Save the file if we have results to save. If we don't, that means there
+      // was a malformed legacy comment and we should skip this file.
+      if (updatedFileContents) {
+        writeFileSync(filePath, updatedFileContents);
+      }
     }
   });
 
