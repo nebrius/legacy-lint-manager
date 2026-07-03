@@ -21,23 +21,33 @@ const MISSING_DB = join(tmpdir(), 'lint-legacies-db-missing.json');
 
 describe('Database', () => {
   describe('readDatabase', () => {
-    it('loads the ids from a valid database file', () => {
+    it('loads the id/rules pairs from a valid database file', () => {
       const database = readDatabase(databasePath('valid.json'));
-      expect(database.getIds()).toEqual(['18gh38s6', 'abc12345', 'xyz98765']);
+      expect(database.getIds()).toEqual(
+        new Map([
+          ['18gh38s6', ['no-console']],
+          ['abc12345', ['no-debugger']],
+          ['xyz98765', ['no-console']],
+        ])
+      );
     });
 
     it('loads a database file with an empty ids array', () => {
       const database = readDatabase(databasePath('empty.json'));
-      expect(database.getIds()).toEqual([]);
+      expect(database.getIds()).toEqual(new Map());
     });
 
-    it('sorts the ids when loading the database file', () => {
+    it('preserves the on-disk order when loading (sorting happens at save time)', () => {
       const database = readDatabase(databasePath('unsorted-ids.json'));
-      expect(database.getIds()).toEqual(['a1b2c3d4', 'm5x9q2w1', 'z9y8x7w6']);
+      expect([...database.getIds().keys()]).toEqual([
+        'm5x9q2w1',
+        'z9y8x7w6',
+        'a1b2c3d4',
+      ]);
     });
 
     describe('with an invalid database file', () => {
-      it('throws when the array contains a non-string', () => {
+      it('throws when a rule entry is not a string', () => {
         expect(() => readDatabase(databasePath('non-string-ids.json'))).toThrow(
           'Invalid database file: must be string'
         );
@@ -75,32 +85,53 @@ describe('Database', () => {
   });
 
   describe('createDatabase', () => {
-    it('builds an instance from an in-memory array, sorting the ids', () => {
+    it('builds an instance from in-memory tuples, preserving their order', () => {
       const database = createDatabase({
         filePath: undefined,
-        databaseContents: ['zebra', 'apple'],
+        databaseContents: [
+          ['zebra', ['no-console']],
+          ['apple', ['no-debugger']],
+        ],
       });
-      expect(database.getIds()).toEqual(['apple', 'zebra']);
+      expect(database.getIds()).toEqual(
+        new Map([
+          ['zebra', ['no-console']],
+          ['apple', ['no-debugger']],
+        ])
+      );
     });
 
     it('throws when the contents are invalid', () => {
       expect(() =>
-        createDatabase({ filePath: undefined, databaseContents: [42] })
+        createDatabase({
+          filePath: undefined,
+          databaseContents: [['id', [42]]],
+        })
       ).toThrow('Invalid database file: must be string');
     });
   });
 
   describe('setIds', () => {
-    it('replaces the ids returned by getIds, re-sorting them', () => {
+    it('replaces the ids returned by getIds', () => {
       const database = readDatabase(databasePath('valid.json'));
-      database.setIds(['zebra', 'apple']);
-      expect(database.getIds()).toEqual(['apple', 'zebra']);
+      database.setIds(
+        new Map([
+          ['zebra', ['no-console']],
+          ['apple', ['no-debugger']],
+        ])
+      );
+      expect(database.getIds()).toEqual(
+        new Map([
+          ['zebra', ['no-console']],
+          ['apple', ['no-debugger']],
+        ])
+      );
     });
 
     it('can clear all ids', () => {
       const database = readDatabase(databasePath('valid.json'));
-      database.setIds([]);
-      expect(database.getIds()).toEqual([]);
+      database.setIds(new Map());
+      expect(database.getIds()).toEqual(new Map());
     });
   });
 
@@ -109,28 +140,49 @@ describe('Database', () => {
       rmSync(WORKING_DB, { force: true });
     });
 
-    it('persists the in-memory ids to disk as a bare array a fresh Database re-reads', () => {
+    it('persists the ids to disk as sorted tuples a fresh Database re-reads', () => {
       cpSync(databasePath('valid.json'), WORKING_DB);
       const database = readDatabase(WORKING_DB);
-      database.setIds(['new2', 'new1']);
+      database.setIds(
+        new Map([
+          ['new2', ['no-console']],
+          ['new1', ['no-debugger']],
+        ])
+      );
       database.save();
 
-      // A freshly-constructed Database reads exactly what was written (both the
-      // load and setIds paths sort, so assert against the sorted form).
-      expect(readDatabase(WORKING_DB).getIds()).toEqual(['new1', 'new2']);
+      // save() sorts the entries by id, so both the raw file and a freshly
+      // constructed Database come back in sorted-id order.
       expect(JSON.parse(readFileSync(WORKING_DB, 'utf-8'))).toEqual([
-        'new1',
-        'new2',
+        ['new1', ['no-debugger']],
+        ['new2', ['no-console']],
+      ]);
+      expect(readDatabase(WORKING_DB).getIds()).toEqual(
+        new Map([
+          ['new1', ['no-debugger']],
+          ['new2', ['no-console']],
+        ])
+      );
+    });
+
+    it('sorts each entry’s rules when saving', () => {
+      cpSync(databasePath('valid.json'), WORKING_DB);
+      const database = readDatabase(WORKING_DB);
+      database.setIds(new Map([['id1', ['no-debugger', 'no-console']]]));
+      database.save();
+
+      expect(JSON.parse(readFileSync(WORKING_DB, 'utf-8'))).toEqual([
+        ['id1', ['no-console', 'no-debugger']],
       ]);
     });
 
     it('persists an empty ids array', () => {
       cpSync(databasePath('valid.json'), WORKING_DB);
       const database = readDatabase(WORKING_DB);
-      database.setIds([]);
+      database.setIds(new Map());
       database.save();
 
-      expect(readDatabase(WORKING_DB).getIds()).toEqual([]);
+      expect(readDatabase(WORKING_DB).getIds()).toEqual(new Map());
       expect(JSON.parse(readFileSync(WORKING_DB, 'utf-8'))).toEqual([]);
     });
   });

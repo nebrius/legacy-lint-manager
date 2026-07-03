@@ -24,15 +24,16 @@ function git(args: string[]) {
   execFileSync('git', args, { cwd: REPO_DIR, stdio: 'pipe' });
 }
 
-// Build a repo on `main` whose committed database holds the given baseline ids,
-// then move to a `feature` branch (the working branch getCompareInfo reads from).
-function initRepo(baselineIds: string[]) {
+// Build a repo on `main` whose committed database holds the given baseline
+// entries, then move to a `feature` branch (the working branch getCompareInfo
+// reads from).
+function initRepo(baseline: [string, string[]][]) {
   mkdirSync(REPO_DIR, { recursive: true });
   git(['init', '-b', 'main']);
   git(['config', 'user.email', 'test@example.com']);
   git(['config', 'user.name', 'Test']);
-  // The data file is a bare array of ids.
-  writeFileSync(join(REPO_DIR, DB_FILE), JSON.stringify(baselineIds));
+  // The data file is an array of [id, rules] tuples.
+  writeFileSync(join(REPO_DIR, DB_FILE), JSON.stringify(baseline));
   git(['add', '-A']);
   git(['commit', '-m', 'baseline']);
   git(['checkout', '-b', 'feature']);
@@ -56,8 +57,11 @@ describe('getCompareInfo (integration)', () => {
     rmSync(REPO_DIR, { recursive: true, force: true });
   });
 
-  it('reads the expected ids from the compare branch database', () => {
-    initRepo(['a', 'b']);
+  it('reads the expected ids and rules from the compare branch database', () => {
+    initRepo([
+      ['a', ['no-console']],
+      ['b', ['no-debugger']],
+    ]);
 
     const info = runGetCompareInfo({
       compareBranch: 'main',
@@ -65,10 +69,15 @@ describe('getCompareInfo (integration)', () => {
     });
 
     expect(info.compareBranchName).toBe('main');
-    expect(info.expectedIds).toEqual(new Set(['a', 'b']));
+    expect(info.compareDatabase.getIds()).toEqual(
+      new Map([
+        ['a', ['no-console']],
+        ['b', ['no-debugger']],
+      ])
+    );
   });
 
-  it('returns an empty set when the compare branch database has no ids', () => {
+  it('returns an empty database when the compare branch database has no ids', () => {
     initRepo([]);
 
     const info = runGetCompareInfo({
@@ -76,6 +85,6 @@ describe('getCompareInfo (integration)', () => {
       databaseFile: DB_FILE,
     });
 
-    expect(info.expectedIds).toEqual(new Set());
+    expect(info.compareDatabase.getIds()).toEqual(new Map());
   });
 });

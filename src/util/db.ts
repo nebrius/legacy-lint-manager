@@ -6,7 +6,9 @@ import { InternalError } from './error.js';
 import { error } from './logging.js';
 import { validateSchema } from './validateSchema.js';
 
-const DatabaseSchema = TypeBox.Array(TypeBox.String());
+const DatabaseSchema = TypeBox.Array(
+  TypeBox.Tuple([TypeBox.String(), TypeBox.Array(TypeBox.String())])
+);
 
 type DatabaseContents = TypeBox.Static<typeof DatabaseSchema>;
 
@@ -42,24 +44,36 @@ function validateDatabase(databaseContents: unknown) {
   });
 }
 
+function convertDatabaseContentsToMap(databaseContents: DatabaseContents) {
+  return new Map(databaseContents);
+}
+
+function convertMapToDatabaseContents(database: Map<string, string[]>) {
+  const result: DatabaseContents = [];
+  for (const [id, rules] of database) {
+    result.push([id, rules.sort()]);
+  }
+  return result.sort(([a], [b]) => a.localeCompare(b));
+}
+
 class DatabaseInstance {
   private databaseFile: string | undefined;
-  private database: TypeBox.Static<typeof DatabaseSchema>;
+  private database: Map<string, string[]>;
 
   constructor(
     databaseFile: string | undefined,
     databaseContents: DatabaseContents
   ) {
     this.databaseFile = databaseFile;
-    this.database = databaseContents.sort();
+    this.database = convertDatabaseContentsToMap(databaseContents);
   }
 
   public getIds() {
     return this.database;
   }
 
-  public setIds(ids: string[]) {
-    this.database = ids.sort();
+  public setIds(ids: Map<string, string[]>) {
+    this.database = ids;
   }
 
   public save() {
@@ -68,7 +82,10 @@ class DatabaseInstance {
       throw new InternalError('this.databaseFile is undefined');
     }
     /* v8 ignore end */
-    writeFileSync(this.databaseFile, JSON.stringify(this.database));
+    writeFileSync(
+      this.databaseFile,
+      JSON.stringify(convertMapToDatabaseContents(this.database))
+    );
   }
 }
 

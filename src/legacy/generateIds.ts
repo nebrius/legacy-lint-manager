@@ -1,7 +1,14 @@
 import { nanoid } from 'nanoid';
 
-const idSet = new Set<string>();
-export function generateId(previousId?: string) {
+const ids = new Map<string, string[]>();
+
+export function generateId({
+  previousId,
+  rules,
+}: {
+  previousId?: string;
+  rules: string[];
+}) {
   let id = previousId ?? nanoid(8);
 
   // It is very unlikely that we'll ever have a collision, but given that
@@ -10,13 +17,13 @@ export function generateId(previousId?: string) {
   // a previous ID encountered a collision, but this is an acceptable trade-off
   // given that to always preserve IDs requires first knowing the entire list
   // before we generate a single ID, which would be much more computationally
-  while (idSet.has(id)) {
+  while (ids.has(id)) {
     id = nanoid(8);
   }
-  idSet.add(id);
+  ids.set(id, rules);
   return id;
 }
 
 export function getIds() {
-  return Array.from(idSet).sort();
+  return ids;
 }

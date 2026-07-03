@@ -1,1 +1,1 @@
-["c0nsole1", "debugg02", "unused01"]
+[["c0nsole1", ["no-console"]], ["debugg02", ["no-debugger"]], ["unused01", ["no-console"]]]

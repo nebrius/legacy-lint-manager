@@ -69,9 +69,9 @@ function writeConfig(ignoreWarnings = false, linterType = 'eslint') {
   );
 }
 
-// generateIds.ts holds a process-global Set that getIds() reads in full, and
+// generateIds.ts holds a process-global Map that getIds() reads in full, and
 // vitest shares the module instance across tests in this file. Resetting
-// modules + dynamically importing gives each test a fresh idSet so the two runs
+// modules + dynamically importing gives each test a fresh map so the two runs
 // don't bleed ids into each other's database.
 async function loadCommand() {
   vi.resetModules();
@@ -79,9 +79,12 @@ async function loadCommand() {
   return mod.legacyExistingErrors;
 }
 
-// The data file is now a bare array of ids.
-function readDataIds(): string[] {
-  return JSON.parse(readFileSync(WORKING_DATA, 'utf-8')) as string[];
+// The data file is now an array of [id, rules] tuples.
+function readData(): [string, string[]][] {
+  return JSON.parse(readFileSync(WORKING_DATA, 'utf-8')) as [
+    string,
+    string[],
+  ][];
 }
 
 // True when the file has a legacy-disable comment for the given rule (matching
@@ -139,7 +142,15 @@ describe('legacy-errors (integration)', () => {
 
     const fileIds = [...idsInFile(CONSOLE_FILE), ...idsInFile(DEBUGGER_FILE)];
     expect(fileIds).toHaveLength(2);
-    expect(readDataIds().sort()).toEqual([...fileIds].sort());
+    const data = readData();
+    expect(data.map(([id]) => id).sort()).toEqual([...fileIds].sort());
+    // Each recorded id carries the rule its comment legacied.
+    expect(new Map(data)).toEqual(
+      new Map([
+        [idsInFile(CONSOLE_FILE)[0], ['no-console']],
+        [idsInFile(DEBUGGER_FILE)[0], ['no-debugger']],
+      ])
+    );
   });
 
   it('legacies real Oxlint errors and records their ids', async () => {
@@ -169,7 +180,15 @@ describe('legacy-errors (integration)', () => {
 
     const fileIds = [...idsInFile(CONSOLE_FILE), ...idsInFile(DEBUGGER_FILE)];
     expect(fileIds).toHaveLength(2);
-    expect(readDataIds().sort()).toEqual([...fileIds].sort());
+    const data = readData();
+    expect(data.map(([id]) => id).sort()).toEqual([...fileIds].sort());
+    // Oxlint reports rules under the `eslint/` prefix, so that is what is recorded.
+    expect(new Map(data)).toEqual(
+      new Map([
+        [idsInFile(CONSOLE_FILE)[0], ['eslint/no-console']],
+        [idsInFile(DEBUGGER_FILE)[0], ['eslint/no-debugger']],
+      ])
+    );
   });
 
   it('legacies an ESLint warning when the config sets ignoreWarnings false', async () => {

@@ -29,8 +29,10 @@ export type NonLegacyComment = CommentBase & {
 
 export type ValidationError = {
   message: string;
-  file: string;
-  line: number;
+  location?: {
+    file: string;
+    line: number;
+  };
 };
 
 // Mapping from file path to line number to rules

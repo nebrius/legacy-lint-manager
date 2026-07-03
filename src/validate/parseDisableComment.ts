@@ -32,8 +32,10 @@ export function parseDisableComment({
   if (!match) {
     validationErrors.push({
       message: `Malformed legacy comment: ${comment.comment}`,
-      file: comment.file,
-      line: comment.startLine,
+      location: {
+        file: comment.file,
+        line: comment.startLine,
+      },
     });
     return undefined;
   }

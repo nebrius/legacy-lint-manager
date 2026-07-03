@@ -1,9 +1,10 @@
 import { execSync } from 'node:child_process';
 
+import type { Database } from '../util/db.js';
 import { createDatabase } from '../util/db.js';
 
 export type CompareInfo = {
-  expectedIds: Set<string>;
+  compareDatabase: Database;
   compareBranchName: string;
 };
 
@@ -27,7 +28,7 @@ export function getCompareInfo({
   });
 
   return {
-    expectedIds: new Set(compareDatabase.getIds()),
+    compareDatabase,
     compareBranchName: compareBranch,
   };
 }

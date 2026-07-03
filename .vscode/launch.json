@@ -15,13 +15,13 @@
       "outFiles": ["${workspaceFolder}/dist/**/*.js"]
     },
     {
-      "type": "node-terminal",
+      "type": "node",
       "request": "launch",
-      "name": "Legacy (hive-kube)",
-      "command": "npx eslint --format=json \"**/*.{ts,tsx,mts,js,jsx,mjs,cjs}\" --format=json | node /Users/bryan/Projects/legacy-lint-manager/dist/cli.js legacy-errors --verbose",
-      "cwd": "/Users/bryan/Projects/hive-kube/services/control_plane/cp_frontend_service",
-      "preLaunchTask": "npm: build",
+      "name": "Validate and update",
       "skipFiles": ["<node_internals>/**"],
+      "program": "${workspaceFolder}/dist/cli.js",
+      "args": ["validate", "--verbose", "--update"],
+      "preLaunchTask": "npm: build",
       "outFiles": ["${workspaceFolder}/dist/**/*.js"]
     },
     {

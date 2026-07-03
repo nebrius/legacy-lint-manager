@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, sep } from 'node:path';
 
 import { getFileComments } from '../util/comments.js';
 import { readConfig } from '../util/config.js';
@@ -62,21 +62,20 @@ export function validate({
 
   // Get the list of expected IDs, if comparing against a branch is enabled
   let compareData: CompareInfo | undefined;
+  // Note: since compare reads a file from another branch, it can't be easily
+  // tested in unit tests. There is an integration test at
+  // src/__tests__/integration/getCompareInfo.integration.test.ts that exercises
+  // this code path, but code coverage doesn't work on integration tests
+  /* v8 ignore start */
   if (compare) {
-    // Note: due to the nature of compare (reading a file across branches), we
-    // can't easily write a unit test for this code path. There is an
-    // integration test at src/__tests__/integration/getCompareInfo.integration.test.ts
-    // that exercises this code path, but code coverage can't track it due
-    // to the use of a subprocess used to call the CLI.
-    /* v8 ignore start */
     time('Getting list of expected IDs from compare branch', () => {
       compareData = getCompareInfo({
         compareBranch,
         databaseFile,
       });
     });
-    /* v8 ignore end */
   }
+  /* v8 ignore end */
 
   const results = time('validating IDs', () =>
     validateDisableComments({
@@ -91,20 +90,37 @@ export function validate({
 
   // Print errors if any were found
   if (validationErrors.length > 0) {
-    error('Validation errors:');
+    const groupedErrors = new Map<string, ValidationError[]>();
     for (const validationError of validationErrors) {
-      error(`${validationError.file}:${validationError.line.toString()}`);
-      error(`  ${validationError.message}`);
+      if (validationError.location) {
+        if (!groupedErrors.has(validationError.location.file)) {
+          groupedErrors.set(validationError.location.file, []);
+        }
+        groupedErrors.get(validationError.location.file)?.push(validationError);
+      } else {
+        if (!groupedErrors.has('Global')) {
+          groupedErrors.set('Global', []);
+        }
+        groupedErrors.get('Global')?.push(validationError);
+      }
+    }
+    for (const [file, errors] of groupedErrors) {
+      error(`${file.replace(rootDir + sep, '')}:`);
+      for (const err of errors) {
+        error(
+          `  ${err.location?.line ? `${err.location.line.toString()}: ` : ''}${err.message}`
+        );
+      }
     }
     process.exit(1);
   }
 
   // Check if there were any unused IDs. Unused IDs are legacied errors listed
   // in the DB that couldn't be found in code, aka errors that were fixed
-  if (results.unusedIds.length > 0) {
+  if (results.wereErrorsFixed) {
     if (update) {
       info('Legacied lint errors were fixed, updating database...');
-      database.setIds(results.usedIds.sort());
+      database.setIds(results.ids);
       database.save();
     } else {
       error(

@@ -6,6 +6,7 @@ import { DEFAULT_PRAGMA } from '../../util/constants.js';
 import type { LintErrors } from '../../util/types.js';
 import { parseDisableComment } from '../../validate/parseDisableComment.js';
 import { addLegacyStatements } from '../addLegacyStatements.js';
+import { getIds } from '../generateIds.js';
 
 // nanoid is mocked so generated ids are deterministic (enabling exact-string
 // assertions) and so we can deliberately force a collision to exercise the
@@ -199,6 +200,19 @@ describe('addLegacyStatements', () => {
         `// eslint-disable-next-line new-rule, old-rule -- ${DEFAULT_PRAGMA} (new-rule, old-rule) keepid01`,
         'const x = 2;',
       ]);
+    });
+
+    it('records the full union of legacied rules against the reused id in the ids map', () => {
+      const existing = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) keepid20`;
+      run({
+        fileContents: `const a = 1;\n${existing}\nconst x = 2;`,
+        entries: [[2, ['new-rule']]],
+      });
+      // The database entry for a merged legacy tracks every legacied rule (the
+      // new lint error unioned with the previously-legacied rule), not just the
+      // new one — otherwise re-legacying would silently drop the old rule from
+      // the database.
+      expect(getIds().get('keepid20')).toEqual(['new-rule', 'old-rule']);
     });
 
     it('dedupes a rule that already exists in the legacy comment', () => {

@@ -223,8 +223,10 @@ describe('parseDisableComment', () => {
         expect(validationErrors).toEqual([
           {
             message: `Malformed legacy comment: ${commentText}`,
-            file: 'x.ts',
-            line: 7,
+            location: {
+              file: 'x.ts',
+              line: 7,
+            },
           },
         ]);
       }
@@ -267,7 +269,7 @@ describe('parseDisableComment', () => {
 
       it('appends an error per malformed comment without clobbering existing errors', () => {
         const validationErrors: ValidationError[] = [
-          { message: 'pre-existing', file: 'a.ts', line: 1 },
+          { message: 'pre-existing', location: { file: 'a.ts', line: 1 } },
         ];
         parseDisableComment({
           comment: makeComment({
@@ -290,16 +292,14 @@ describe('parseDisableComment', () => {
           validationErrors,
         });
         expect(validationErrors).toEqual([
-          { message: 'pre-existing', file: 'a.ts', line: 1 },
+          { message: 'pre-existing', location: { file: 'a.ts', line: 1 } },
           {
             message: `Malformed legacy comment: ${pragma}`,
-            file: 'b.ts',
-            line: 2,
+            location: { file: 'b.ts', line: 2 },
           },
           {
             message: `Malformed legacy comment: ${pragma} (x)`,
-            file: 'c.ts',
-            line: 3,
+            location: { file: 'c.ts', line: 3 },
           },
         ]);
       });

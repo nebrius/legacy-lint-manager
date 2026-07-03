@@ -35,6 +35,18 @@ function makeNonLegacy(
   };
 }
 
+// A compare branch is represented by its own database. Build it the same way as
+// the working database so the compare-branch lookups exercise the real Database.
+function makeCompareData(contents: [string, string[]][]): CompareInfo {
+  return {
+    compareDatabase: createDatabase({
+      filePath: undefined,
+      databaseContents: contents,
+    }),
+    compareBranchName: 'main',
+  };
+}
+
 // Most tests only care about a few inputs; this wrapper fills the rest with inert
 // defaults so each call can focus on the inputs it actually exercises.
 function callValidate(
@@ -52,48 +64,69 @@ function callValidate(
 }
 
 describe('validateDisableComments', () => {
-  describe('partitioning ids into used and unused', () => {
-    it('returns empty arrays when the database is empty and there are no comments', () => {
+  describe('tracking which database ids were found in code', () => {
+    it('returns an empty map and no fixes when the database is empty and there are no comments', () => {
       const result = callValidate();
-      expect(result).toEqual({ usedIds: [], unusedIds: [] });
+      expect(result).toEqual({ ids: new Map(), wereErrorsFixed: false });
     });
 
-    it('treats every database id as unused when there are no comments', () => {
+    it('reports errors as fixed when a database id has no matching comment', () => {
       const result = callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: ['id1', 'id2', 'id3'],
+          databaseContents: [
+            ['id1', ['no-console']],
+            ['id2', ['no-console']],
+            ['id3', ['no-console']],
+          ],
         }),
       });
-      expect(result).toEqual({ usedIds: [], unusedIds: ['id1', 'id2', 'id3'] });
+      // No comment matches any id, so every id counts as a fixed (removed) error.
+      expect(result).toEqual({ ids: new Map(), wereErrorsFixed: true });
     });
 
-    it('marks an id as used when a matching comment is found', () => {
+    it('keeps an id when a matching comment is found', () => {
       const validationErrors: ValidationError[] = [];
       const result = callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: ['id1', 'id2'],
+          databaseContents: [
+            ['id1', ['no-console']],
+            ['id2', ['no-console']],
+          ],
         }),
         validationErrors,
         legacyComments: [makeLegacy({ id: 'id1' })],
       });
-      expect(result).toEqual({ usedIds: ['id1'], unusedIds: ['id2'] });
+      // id1 was found in code (kept), id2 was not (a fixed error).
+      expect(result).toEqual({
+        ids: new Map([['id1', ['no-console']]]),
+        wereErrorsFixed: true,
+      });
       expect(validationErrors).toEqual([]);
     });
 
-    it('returns used and unused ids in database order, not comment order', () => {
-      // The database always provides its ids pre-sorted, and
-      // validateDisableComments preserves that order, so the results come back
-      // sorted regardless of the order in which the comments are encountered.
+    it('carries each kept id’s rules through from the database', () => {
       const result = callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: ['a', 'b', 'c', 'd'],
+          databaseContents: [
+            ['a', ['no-console', 'no-debugger']],
+            ['b', ['no-var']],
+          ],
         }),
-        legacyComments: [makeLegacy({ id: 'c' }), makeLegacy({ id: 'a' })],
+        legacyComments: [
+          makeLegacy({ id: 'a', legaciedRules: ['no-console', 'no-debugger'] }),
+          makeLegacy({ id: 'b', legaciedRules: ['no-var'] }),
+        ],
       });
-      expect(result).toEqual({ usedIds: ['a', 'c'], unusedIds: ['b', 'd'] });
+      expect(result).toEqual({
+        ids: new Map([
+          ['a', ['no-console', 'no-debugger']],
+          ['b', ['no-var']],
+        ]),
+        wereErrorsFixed: false,
+      });
     });
   });
 
@@ -103,7 +136,7 @@ describe('validateDisableComments', () => {
       const result = callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: ['id1'],
+          databaseContents: [['id1', ['no-console']]],
         }),
         validationErrors,
         legacyComments: [
@@ -118,13 +151,12 @@ describe('validateDisableComments', () => {
       expect(validationErrors).toEqual([
         {
           message: 'Unregistered legacy error. New errors cannot be legacied.',
-          file: 'src/a.ts',
-          line: 12,
+          location: { file: 'src/a.ts', line: 12 },
         },
       ]);
-      // An unregistered id never enters the database map, so it appears in
-      // neither the used nor unused lists.
-      expect(result).toEqual({ usedIds: [], unusedIds: ['id1'] });
+      // An unregistered id never enters the database map, so it is not kept, and
+      // the registered id1 (never found) counts as a fixed error.
+      expect(result).toEqual({ ids: new Map(), wereErrorsFixed: true });
     });
   });
 
@@ -134,7 +166,10 @@ describe('validateDisableComments', () => {
       const result = callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: ['dup', 'other'],
+          databaseContents: [
+            ['dup', ['no-console']],
+            ['other', ['no-console']],
+          ],
         }),
         validationErrors,
         legacyComments: [
@@ -146,12 +181,14 @@ describe('validateDisableComments', () => {
         {
           message:
             'Duplicate legacy ID "dup". Each legacy ID can only be used once.',
-          file: 'b.ts',
-          line: 2,
+          location: { file: 'b.ts', line: 2 },
         },
       ]);
-      // A duplicated id is still counted as used exactly once.
-      expect(result).toEqual({ usedIds: ['dup'], unusedIds: ['other'] });
+      // A duplicated id is still kept exactly once; "other" was never found.
+      expect(result).toEqual({
+        ids: new Map([['dup', ['no-console']]]),
+        wereErrorsFixed: true,
+      });
     });
 
     it('records an error for every use beyond the first', () => {
@@ -159,7 +196,7 @@ describe('validateDisableComments', () => {
       callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: ['dup'],
+          databaseContents: [['dup', ['no-console']]],
         }),
         validationErrors,
         legacyComments: [
@@ -172,33 +209,109 @@ describe('validateDisableComments', () => {
         {
           message:
             'Duplicate legacy ID "dup". Each legacy ID can only be used once.',
-          file: 'b.ts',
-          line: 2,
+          location: { file: 'b.ts', line: 2 },
         },
         {
           message:
             'Duplicate legacy ID "dup". Each legacy ID can only be used once.',
-          file: 'c.ts',
-          line: 3,
+          location: { file: 'c.ts', line: 3 },
         },
       ]);
     });
   });
 
-  describe('comparing against a branch', () => {
-    function makeCompareData(expectedIds: string[]): CompareInfo {
-      return {
-        expectedIds: new Set(expectedIds),
-        compareBranchName: 'main',
-      };
-    }
-
-    it('records a file:line error when a registered id is absent from the compare branch', () => {
+  describe('rules must be defined in the database', () => {
+    it('records an error when a comment legacies a rule the database does not list for that id', () => {
+      // The comment claims to legacy a rule that was never recorded against this
+      // id, which would smuggle a new violation in under an existing legacy.
       const validationErrors: ValidationError[] = [];
       const result = callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: ['new'],
+          databaseContents: [['id1', ['no-console']]],
+        }),
+        validationErrors,
+        legacyComments: [
+          makeLegacy({
+            id: 'id1',
+            legaciedRules: ['no-console', 'no-debugger'],
+            file: 'src/a.ts',
+            startLine: 4,
+            endLine: 4,
+          }),
+        ],
+      });
+      expect(validationErrors).toEqual([
+        {
+          message:
+            'Rule "no-debugger" for legacy ID "id1" is not defined in the database.',
+          location: { file: 'src/a.ts', line: 4 },
+        },
+      ]);
+      // The id is still found in code, so it is kept with its database rules.
+      expect(result).toEqual({
+        ids: new Map([['id1', ['no-console']]]),
+        wereErrorsFixed: false,
+      });
+    });
+
+    it('records one error per undefined rule', () => {
+      const validationErrors: ValidationError[] = [];
+      callValidate({
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: [['id1', ['no-console']]],
+        }),
+        validationErrors,
+        legacyComments: [
+          makeLegacy({
+            id: 'id1',
+            legaciedRules: ['no-console', 'no-debugger', 'no-var'],
+            file: 'src/a.ts',
+            startLine: 4,
+            endLine: 4,
+          }),
+        ],
+      });
+      expect(validationErrors).toEqual([
+        {
+          message:
+            'Rule "no-debugger" for legacy ID "id1" is not defined in the database.',
+          location: { file: 'src/a.ts', line: 4 },
+        },
+        {
+          message:
+            'Rule "no-var" for legacy ID "id1" is not defined in the database.',
+          location: { file: 'src/a.ts', line: 4 },
+        },
+      ]);
+    });
+
+    it('does not flag rules that are a subset of the database rules', () => {
+      // Legacying fewer rules than the database lists is fine (the extra rules
+      // were fixed), so no error is recorded.
+      const validationErrors: ValidationError[] = [];
+      callValidate({
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: [['id1', ['no-console', 'no-debugger']]],
+        }),
+        validationErrors,
+        legacyComments: [
+          makeLegacy({ id: 'id1', legaciedRules: ['no-console'] }),
+        ],
+      });
+      expect(validationErrors).toEqual([]);
+    });
+  });
+
+  describe('comparing against a branch', () => {
+    it('records a global error when a database id is absent from the compare branch', () => {
+      const validationErrors: ValidationError[] = [];
+      const result = callValidate({
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: [['new', ['no-console']]],
         }),
         validationErrors,
         legacyComments: [
@@ -206,31 +319,37 @@ describe('validateDisableComments', () => {
         ],
         compareData: makeCompareData([]),
       });
+      // The compare check walks the database, not the comments, so the error is
+      // global (no file:line location).
       expect(validationErrors).toEqual([
         {
           message:
-            'Legacy ID "new" is not present in main. New legacied statements are not allowed',
-          file: 'src/a.ts',
-          line: 7,
+            'Legacy ID "new" does not exist in the database on main. New legacy entries cannot be added.',
         },
       ]);
-      // A new-on-this-branch id is never marked used, so it lands in neither list.
-      expect(result).toEqual({ usedIds: [], unusedIds: ['new'] });
+      // The id was still found in code, so it is kept.
+      expect(result).toEqual({
+        ids: new Map([['new', ['no-console']]]),
+        wereErrorsFixed: false,
+      });
     });
 
-    it('passes ids that exist on both the database and the compare branch', () => {
+    it('keeps ids that exist on both the database and the compare branch', () => {
       const validationErrors: ValidationError[] = [];
       const result = callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: ['known'],
+          databaseContents: [['known', ['no-console']]],
         }),
         validationErrors,
         legacyComments: [makeLegacy({ id: 'known' })],
-        compareData: makeCompareData(['known']),
+        compareData: makeCompareData([['known', ['no-console']]]),
       });
       expect(validationErrors).toEqual([]);
-      expect(result).toEqual({ usedIds: ['known'], unusedIds: [] });
+      expect(result).toEqual({
+        ids: new Map([['known', ['no-console']]]),
+        wereErrorsFixed: false,
+      });
     });
 
     it('flags only the ids missing from the compare branch', () => {
@@ -238,23 +357,128 @@ describe('validateDisableComments', () => {
       callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: ['old', 'new'],
+          databaseContents: [
+            ['old', ['no-console']],
+            ['new', ['no-console']],
+          ],
         }),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'old', file: 'a.ts', startLine: 1, endLine: 1 }),
           makeLegacy({ id: 'new', file: 'b.ts', startLine: 2, endLine: 2 }),
         ],
-        compareData: makeCompareData(['old']),
+        compareData: makeCompareData([['old', ['no-console']]]),
       });
       expect(validationErrors).toEqual([
         {
           message:
-            'Legacy ID "new" is not present in main. New legacied statements are not allowed',
-          file: 'b.ts',
-          line: 2,
+            'Legacy ID "new" does not exist in the database on main. New legacy entries cannot be added.',
         },
       ]);
+    });
+
+    describe('rule subset check against the compare branch', () => {
+      it('passes when the database’s rules are a subset of the compare branch’s rules', () => {
+        // Removing a rule from an existing legacy id is allowed, so the current
+        // rules only need to be a subset of the compare branch's.
+        const validationErrors: ValidationError[] = [];
+        const result = callValidate({
+          database: createDatabase({
+            filePath: undefined,
+            databaseContents: [['id1', ['no-console']]],
+          }),
+          validationErrors,
+          legacyComments: [makeLegacy({ id: 'id1' })],
+          compareData: makeCompareData([
+            ['id1', ['no-console', 'no-debugger']],
+          ]),
+        });
+        expect(validationErrors).toEqual([]);
+        expect(result).toEqual({
+          ids: new Map([['id1', ['no-console']]]),
+          wereErrorsFixed: false,
+        });
+      });
+
+      it('records a global error when the database gained a rule not on the compare branch', () => {
+        // Adding a new rule to an existing legacy id would sneak a new violation
+        // past the "only legacied errors" guarantee, so it is rejected.
+        const validationErrors: ValidationError[] = [];
+        callValidate({
+          database: createDatabase({
+            filePath: undefined,
+            databaseContents: [['id1', ['no-console', 'no-debugger']]],
+          }),
+          validationErrors,
+          legacyComments: [
+            makeLegacy({
+              id: 'id1',
+              legaciedRules: ['no-console', 'no-debugger'],
+            }),
+          ],
+          compareData: makeCompareData([['id1', ['no-console']]]),
+        });
+        expect(validationErrors).toEqual([
+          {
+            message:
+              'Rule "no-debugger" for legacy ID "id1" is not defined in the database on main. New rules cannot be added to existing legacy entries.',
+          },
+        ]);
+      });
+
+      it('records one global error per rule that is new relative to the compare branch', () => {
+        const validationErrors: ValidationError[] = [];
+        callValidate({
+          database: createDatabase({
+            filePath: undefined,
+            databaseContents: [
+              ['id1', ['no-console', 'no-debugger', 'no-var']],
+            ],
+          }),
+          validationErrors,
+          legacyComments: [
+            makeLegacy({
+              id: 'id1',
+              legaciedRules: ['no-console', 'no-debugger', 'no-var'],
+            }),
+          ],
+          compareData: makeCompareData([['id1', ['no-console']]]),
+        });
+        expect(validationErrors).toEqual([
+          {
+            message:
+              'Rule "no-debugger" for legacy ID "id1" is not defined in the database on main. New rules cannot be added to existing legacy entries.',
+          },
+          {
+            message:
+              'Rule "no-var" for legacy ID "id1" is not defined in the database on main. New rules cannot be added to existing legacy entries.',
+          },
+        ]);
+      });
+
+      it('does not run the compare check when there is no compare branch', () => {
+        // Without compareData the database rules are carried through untouched,
+        // so extra rules relative to any baseline are not flagged.
+        const validationErrors: ValidationError[] = [];
+        const result = callValidate({
+          database: createDatabase({
+            filePath: undefined,
+            databaseContents: [['id1', ['no-console', 'no-debugger']]],
+          }),
+          validationErrors,
+          legacyComments: [
+            makeLegacy({
+              id: 'id1',
+              legaciedRules: ['no-console', 'no-debugger'],
+            }),
+          ],
+        });
+        expect(validationErrors).toEqual([]);
+        expect(result).toEqual({
+          ids: new Map([['id1', ['no-console', 'no-debugger']]]),
+          wereErrorsFixed: false,
+        });
+      });
     });
   });
 
@@ -271,12 +495,11 @@ describe('validateDisableComments', () => {
       expect(validationErrors).toEqual([
         {
           message: 'Rule "no-console" cannot be disabled.',
-          file: 'src/a.ts',
-          line: 5,
+          location: { file: 'src/a.ts', line: 5 },
         },
       ]);
-      // Non-legacy comments never participate in id partitioning.
-      expect(result).toEqual({ usedIds: [], unusedIds: [] });
+      // Non-legacy comments never participate in id tracking.
+      expect(result).toEqual({ ids: new Map(), wereErrorsFixed: false });
     });
 
     it('records no error when a non-legacy comment disables a rule that is not non-disableable', () => {
@@ -315,13 +538,11 @@ describe('validateDisableComments', () => {
       expect(validationErrors).toEqual([
         {
           message: 'Rule "no-console" cannot be disabled.',
-          file: 'a.ts',
-          line: 3,
+          location: { file: 'a.ts', line: 3 },
         },
         {
           message: 'Rule "no-debugger" cannot be disabled.',
-          file: 'a.ts',
-          line: 3,
+          location: { file: 'a.ts', line: 3 },
         },
       ]);
     });
@@ -345,13 +566,11 @@ describe('validateDisableComments', () => {
       expect(validationErrors).toEqual([
         {
           message: 'Rule "no-console" cannot be disabled.',
-          file: 'a.ts',
-          line: 1,
+          location: { file: 'a.ts', line: 1 },
         },
         {
           message: 'Rule "no-console" cannot be disabled.',
-          file: 'c.ts',
-          line: 3,
+          location: { file: 'c.ts', line: 3 },
         },
       ]);
     });
@@ -363,7 +582,7 @@ describe('validateDisableComments', () => {
       callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: ['a1b2c3d4'],
+          databaseContents: [['a1b2c3d4', ['no-console']]],
         }),
         nonDisableableRules: ['no-debugger'],
         validationErrors,
@@ -380,10 +599,30 @@ describe('validateDisableComments', () => {
       expect(validationErrors).toEqual([
         {
           message: 'Rule "no-debugger" cannot be disabled.',
-          file: 'src/a.ts',
-          line: 8,
+          location: { file: 'src/a.ts', line: 8 },
         },
       ]);
+    });
+
+    it('leaves a legacy comment’s non-legacied rule alone when it is not non-disableable', () => {
+      // A rule the comment disables outright (not legacied) is only an error
+      // when it is on the non-disableable list; otherwise it is a normal disable.
+      const validationErrors: ValidationError[] = [];
+      callValidate({
+        database: createDatabase({
+          filePath: undefined,
+          databaseContents: [['a1b2c3d4', ['no-console']]],
+        }),
+        nonDisableableRules: ['no-debugger'],
+        validationErrors,
+        legacyComments: [
+          makeLegacy({
+            legaciedRules: ['no-console'],
+            nonLegaciedRules: ['no-alert'],
+          }),
+        ],
+      });
+      expect(validationErrors).toEqual([]);
     });
 
     it('exempts a non-disableable rule that is legacied (old violations are allowed)', () => {
@@ -393,7 +632,7 @@ describe('validateDisableComments', () => {
       const result = callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: ['a1b2c3d4'],
+          databaseContents: [['a1b2c3d4', ['no-console']]],
         }),
         nonDisableableRules: ['no-console'],
         validationErrors,
@@ -402,12 +641,15 @@ describe('validateDisableComments', () => {
         ],
       });
       expect(validationErrors).toEqual([]);
-      expect(result).toEqual({ usedIds: ['a1b2c3d4'], unusedIds: [] });
+      expect(result).toEqual({
+        ids: new Map([['a1b2c3d4', ['no-console']]]),
+        wereErrorsFixed: false,
+      });
     });
 
     it('appends non-disableable errors without clobbering existing ones', () => {
       const validationErrors: ValidationError[] = [
-        { message: 'pre-existing', file: 'x.ts', line: 9 },
+        { message: 'pre-existing', location: { file: 'x.ts', line: 9 } },
       ];
       callValidate({
         nonDisableableRules: ['no-console'],
@@ -417,23 +659,26 @@ describe('validateDisableComments', () => {
         ],
       });
       expect(validationErrors).toEqual([
-        { message: 'pre-existing', file: 'x.ts', line: 9 },
+        { message: 'pre-existing', location: { file: 'x.ts', line: 9 } },
         {
           message: 'Rule "no-console" cannot be disabled.',
-          file: 'y.ts',
-          line: 10,
+          location: { file: 'y.ts', line: 10 },
         },
       ]);
     });
   });
 
   describe('combined scenarios', () => {
-    it('handles used, unused, unregistered, and duplicate ids together', () => {
+    it('handles kept, fixed, unregistered, and duplicate ids together', () => {
       const validationErrors: ValidationError[] = [];
       const result = callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: ['dup', 'unused', 'used'],
+          databaseContents: [
+            ['dup', ['no-console']],
+            ['unused', ['no-console']],
+            ['used', ['no-console']],
+          ],
         }),
         validationErrors,
         legacyComments: [
@@ -444,32 +689,33 @@ describe('validateDisableComments', () => {
         ],
       });
       expect(result).toEqual({
-        usedIds: ['dup', 'used'],
-        unusedIds: ['unused'],
+        ids: new Map([
+          ['dup', ['no-console']],
+          ['used', ['no-console']],
+        ]),
+        wereErrorsFixed: true,
       });
       expect(validationErrors).toEqual([
         {
           message:
             'Duplicate legacy ID "dup". Each legacy ID can only be used once.',
-          file: 'c.ts',
-          line: 3,
+          location: { file: 'c.ts', line: 3 },
         },
         {
           message: 'Unregistered legacy error. New errors cannot be legacied.',
-          file: 'd.ts',
-          line: 4,
+          location: { file: 'd.ts', line: 4 },
         },
       ]);
     });
 
     it('appends to existing validation errors without clobbering them', () => {
       const validationErrors: ValidationError[] = [
-        { message: 'pre-existing', file: 'x.ts', line: 9 },
+        { message: 'pre-existing', location: { file: 'x.ts', line: 9 } },
       ];
       callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: ['id1'],
+          databaseContents: [['id1', ['no-console']]],
         }),
         validationErrors,
         legacyComments: [
@@ -477,11 +723,10 @@ describe('validateDisableComments', () => {
         ],
       });
       expect(validationErrors).toEqual([
-        { message: 'pre-existing', file: 'x.ts', line: 9 },
+        { message: 'pre-existing', location: { file: 'x.ts', line: 9 } },
         {
           message: 'Unregistered legacy error. New errors cannot be legacied.',
-          file: 'y.ts',
-          line: 10,
+          location: { file: 'y.ts', line: 10 },
         },
       ]);
     });

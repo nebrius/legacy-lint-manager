@@ -44,9 +44,12 @@ function useDatabase(scenario: string) {
   cpSync(join(DATABASES_DIR, scenario), WORKING_DATA);
 }
 
-// The data file is now a bare array of ids.
-function readDataIds(): string[] {
-  return JSON.parse(readFileSync(WORKING_DATA, 'utf-8')) as string[];
+// The data file is now an array of [id, rules] tuples.
+function readData(): [string, string[]][] {
+  return JSON.parse(readFileSync(WORKING_DATA, 'utf-8')) as [
+    string,
+    string[],
+  ][];
 }
 
 function runValidate(update: boolean) {
@@ -95,7 +98,10 @@ describe('validate (integration)', () => {
       runValidate(false);
     }).not.toThrow();
     // The database is left untouched on a clean run.
-    expect(readDataIds()).toEqual(['c0nsole1', 'debugg02']);
+    expect(readData()).toEqual([
+      ['c0nsole1', ['no-console']],
+      ['debugg02', ['no-debugger']],
+    ]);
   });
 
   describe('when a legacied error was fixed (an unused id remains)', () => {
@@ -104,7 +110,11 @@ describe('validate (integration)', () => {
       useDatabase('has-unused.json');
       vi.spyOn(console, 'info').mockImplementation(() => undefined);
       runValidate(true);
-      expect(readDataIds()).toEqual(['c0nsole1', 'debugg02']);
+      // unused01 is dropped; the surviving ids keep their recorded rules.
+      expect(readData()).toEqual([
+        ['c0nsole1', ['no-console']],
+        ['debugg02', ['no-debugger']],
+      ]);
     });
 
     it('exits with an error and leaves the database untouched without --update', () => {
@@ -120,7 +130,11 @@ describe('validate (integration)', () => {
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
       expect(errorSpy).toHaveBeenCalled();
-      expect(readDataIds()).toEqual(['c0nsole1', 'debugg02', 'unused01']);
+      expect(readData()).toEqual([
+        ['c0nsole1', ['no-console']],
+        ['debugg02', ['no-debugger']],
+        ['unused01', ['no-console']],
+      ]);
     });
   });
 
@@ -136,7 +150,10 @@ describe('validate (integration)', () => {
       runValidate(false);
     }).toThrow('process.exit called');
     expect(exitSpy).toHaveBeenCalledWith(1);
-    expect(errorSpy).toHaveBeenCalledWith('Validation errors:');
+    // debugg02 is not registered in the database, so its comment is reported.
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Unregistered legacy error.')
+    );
   });
 
   // A malformed legacy comment takes a different validate branch than an
@@ -198,13 +215,14 @@ describe('validate (integration)', () => {
         });
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
-      expect(errorSpy).toHaveBeenCalledWith('Validation errors:');
-      // The comment is on the visually-2nd line, but validate prints the
-      // 0-indexed startLine verbatim, so the header reads `:1` (an off-by-one
+      // Errors are grouped under a per-file header (relative to the config's
+      // rootDir), then listed indented and prefixed with the offending line
+      // number. The comment sits on the visually-2nd line, but validate prints
+      // the 0-indexed startLine verbatim, so the line reads `1:` (an off-by-one
       // in the user-facing output).
-      expect(errorSpy).toHaveBeenCalledWith(`${MALFORMED_FILE}:1`);
+      expect(errorSpy).toHaveBeenCalledWith(`${join('src', 'bad.ts')}:`);
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Malformed legacy comment:')
+        expect.stringContaining('1: Malformed legacy comment:')
       );
     });
   });
@@ -281,7 +299,6 @@ describe('validate (integration)', () => {
         runNonLegacyValidate();
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
-      expect(errorSpy).toHaveBeenCalledWith('Validation errors:');
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Rule "no-console" cannot be disabled.')
       );
