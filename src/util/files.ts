@@ -4,8 +4,7 @@ import { dirname, extname, join, relative } from 'node:path';
 import type { Ignore } from 'ignore';
 import ignore from 'ignore';
 
-// Remember to update the README when changing this list
-const DEFAULT_IGNORE_DIRECTORIES = ['node_modules', 'dist', 'build', 'out'];
+const DEFAULT_IGNORE_DIRECTORIES = ['node_modules'];
 const CODE_EXTENSIONS = [
   '.ts',
   '.tsx',

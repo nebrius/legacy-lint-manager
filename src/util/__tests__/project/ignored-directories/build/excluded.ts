@@ -1,4 +1,0 @@
-// fixture file for getFileList tests
-// Lives in a "build" directory, which is in DEFAULT_IGNORE_DIRECTORIES and
-// should never be returned by getFileList.
-export const excluded = 'excluded';
