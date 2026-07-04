@@ -304,4 +304,86 @@ describe('validate (integration)', () => {
       );
     });
   });
+
+  // A blanket disable (no rule list) is caught in parseComments, before any id
+  // validation runs: it is rejected outright whenever any rule is
+  // non-disableable, since it would silently turn those rules off. The project
+  // is built in a temp dir so these throwaway sources never touch the shared
+  // fixture.
+  describe('with a disable-all comment', () => {
+    const DISABLE_ALL_PROJECT = join(
+      tmpdir(),
+      'lint-legacies-disable-all-project'
+    );
+    const DISABLE_ALL_SRC = join(DISABLE_ALL_PROJECT, 'src');
+    const DISABLE_ALL_FILE = join(DISABLE_ALL_SRC, 'blanket.ts');
+    const DISABLE_ALL_CONFIG = join(
+      DISABLE_ALL_PROJECT,
+      'legacy-lint.config.jsonc'
+    );
+    const DISABLE_ALL_DATA = join(DISABLE_ALL_PROJECT, 'legacy-lint.data.json');
+
+    function setup(nonDisableableRules: string[]) {
+      mkdirSync(DISABLE_ALL_SRC, { recursive: true });
+      writeFileSync(DISABLE_ALL_DATA, JSON.stringify([]));
+      writeFileSync(
+        DISABLE_ALL_CONFIG,
+        JSON.stringify({
+          ignoreWarnings: false,
+          pragma: DEFAULT_PRAGMA,
+          databaseFile: DISABLE_ALL_DATA,
+          nonDisableableRules,
+          compareBranch: 'main',
+          linterType: 'eslint',
+        })
+      );
+      // A blanket disable with no rule list.
+      writeFileSync(
+        DISABLE_ALL_FILE,
+        [
+          '// eslint-disable',
+          'export function logSomething(): void {',
+          "  console.log('x');",
+          '}',
+          '',
+        ].join('\n')
+      );
+    }
+
+    function runDisableAllValidate() {
+      validate({
+        config: DISABLE_ALL_CONFIG,
+        verbose: false,
+        update: false,
+        compare: false,
+      });
+    }
+
+    afterEach(() => {
+      rmSync(DISABLE_ALL_PROJECT, { recursive: true, force: true });
+    });
+
+    it('passes cleanly when no rules are non-disableable', () => {
+      setup([]);
+      expect(() => {
+        runDisableAllValidate();
+      }).not.toThrow();
+    });
+
+    it('exits 1 and reports the disable-all when a rule is non-disableable', () => {
+      setup(['no-console']);
+      const exitSpy = mockExit();
+      const errorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      expect(() => {
+        runDisableAllValidate();
+      }).toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Disabling all rules is not allowed')
+      );
+    });
+  });
 });

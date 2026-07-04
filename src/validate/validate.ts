@@ -1,21 +1,14 @@
-import { readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-import { getFileComments } from '../util/comments.js';
 import { readConfig } from '../util/config.js';
 import { readDatabase } from '../util/db.js';
 import { getFileList } from '../util/files.js';
 import { error, info, setVerbose, time } from '../util/logging.js';
-import { parseDisableComment } from '../util/parseDisableComment.js';
 import { printValidationErrors } from '../util/printValidationErrors.js';
-import type {
-  CommonOptions,
-  LegacyComment,
-  NonLegacyComment,
-  ValidationError,
-} from '../util/types.js';
+import type { CommonOptions, ValidationError } from '../util/types.js';
 import type { CompareInfo } from './getCompareInfo.js';
 import { getCompareInfo } from './getCompareInfo.js';
+import { parseComments } from './parseComments.js';
 import { validateDisableComments } from './validateDisableComments.js';
 
 export function validate({
@@ -35,31 +28,17 @@ export function validate({
   const database = readDatabase(databaseFile);
   const files = time('getting file list', () => getFileList(rootDir));
 
-  const legacyComments: LegacyComment[] = [];
-  const nonLegacyComments: NonLegacyComment[] = [];
   const validationErrors: ValidationError[] = [];
-  time('getting file comments', () => {
-    for (const file of files) {
-      const comments = getFileComments({
-        filePath: file,
-        fileContents: readFileSync(file, 'utf-8'),
-      });
-      for (const comment of comments.comments) {
-        const parsedDisableComment = parseDisableComment({
-          comment,
-          validationErrors,
-          pragma,
-        });
-        if (parsedDisableComment) {
-          if (parsedDisableComment.type === 'legacy') {
-            legacyComments.push(parsedDisableComment);
-          } else {
-            nonLegacyComments.push(parsedDisableComment);
-          }
-        }
-      }
-    }
-  });
+  const { legacyComments, nonLegacyComments } = time(
+    'getting file comments',
+    () =>
+      parseComments({
+        files,
+        nonDisableableRules,
+        validationErrors,
+        pragma,
+      })
+  );
 
   // Get the list of expected IDs, if comparing against a branch is enabled
   let compareData: CompareInfo | undefined;

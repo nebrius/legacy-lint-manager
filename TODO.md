@@ -1,3 +1,5 @@
+- Make ignored folders (build, dist, out) scoped to just the root-folder, not nested, but ignore node_modules at any depth
+    - Or alternately dump this logic all together and rely explicitly on gitignore. There aren't the same weird edge cases that improt integrity has
 - Detect lint config changes compared to base branch and allow new legacy additions (Sidestepping the need for a temporary CI disable). Should be an object compare, not a hash compare, but have to be careful w/ ESLint due to dep changes changing injected values.
 - Support monorepos with nested config files but single database (perhaps keying by package name with list of enabled rules per-package)
 - (Low priority) Update get file list code to take into account eslint ignore setups. You can get this from ConfigArray.
