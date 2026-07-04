@@ -89,6 +89,40 @@ describe('parseDisableComment', () => {
       expect(validationErrors).toEqual([]);
     });
 
+    it('returns a non-legacy comment for a block disable without the pragma', () => {
+      const validationErrors: ValidationError[] = [];
+      const result = parseDisableComment({
+        comment: makeComment({ type: 'block', comment: 'because reasons' }),
+        pragma: DEFAULT_PRAGMA,
+        validationErrors,
+      });
+      expect(result).toEqual({
+        type: 'nonlegacy',
+        file: 'test.ts',
+        startLine: 1,
+        endLine: 1,
+        rules: [],
+      });
+      expect(validationErrors).toEqual([]);
+    });
+
+    it('returns a non-legacy comment for a same-line disable without the pragma', () => {
+      const validationErrors: ValidationError[] = [];
+      const result = parseDisableComment({
+        comment: makeComment({ type: 'same-line', comment: undefined }),
+        pragma: DEFAULT_PRAGMA,
+        validationErrors,
+      });
+      expect(result).toEqual({
+        type: 'nonlegacy',
+        file: 'test.ts',
+        startLine: 1,
+        endLine: 1,
+        rules: [],
+      });
+      expect(validationErrors).toEqual([]);
+    });
+
     it('carries the disabled rules through to the non-legacy comment', () => {
       const validationErrors: ValidationError[] = [];
       const result = parseDisableComment({
@@ -203,6 +237,88 @@ describe('parseDisableComment', () => {
           id: ID,
         });
         expect(validationErrors).toEqual([]);
+      });
+    });
+
+    describe('non-next-line legacy comments', () => {
+      // Legacy comments are only valid on `*-disable-next-line` directives.
+      // Allowing the pragma on a block `*-disable` (or `*-disable-line`) would
+      // let a user widen a legacied disable to cover new violations, so the
+      // pragma on any other directive type is rejected outright.
+      const NEXT_LINE_MESSAGE = 'Legacy comment must use *-disable-next-line';
+
+      function expectRejected(comment: Comment) {
+        const validationErrors: ValidationError[] = [];
+        const result = parseDisableComment({
+          comment,
+          pragma,
+          validationErrors,
+        });
+        expect(result).toBeUndefined();
+        expect(validationErrors).toEqual([
+          {
+            message: NEXT_LINE_MESSAGE,
+            location: {
+              file: comment.file,
+              line: comment.startLine,
+            },
+          },
+        ]);
+      }
+
+      it('rejects a well-formed legacy pragma on a block disable', () => {
+        expectRejected(
+          makeComment({ type: 'block', comment: legacy('no-console') })
+        );
+      });
+
+      it('rejects a well-formed legacy pragma on a same-line disable', () => {
+        expectRejected(
+          makeComment({ type: 'same-line', comment: legacy('no-console') })
+        );
+      });
+
+      it('rejects a malformed pragma on a block disable with the next-line error, not the malformed error', () => {
+        // The directive-type guard runs before the strict format check, so a
+        // pragma on the wrong directive type is reported as such even when its
+        // text would also fail the format check.
+        expectRejected(makeComment({ type: 'block', comment: pragma }));
+      });
+
+      it('reports the error on the start line of a multi-line block disable', () => {
+        expectRejected(
+          makeComment({
+            type: 'block',
+            comment: legacy('no-console'),
+            file: 'multi.ts',
+            startLine: 10,
+            endLine: 14,
+          })
+        );
+      });
+
+      it('appends the error after any pre-existing errors', () => {
+        const validationErrors: ValidationError[] = [
+          { message: 'pre-existing', location: { file: 'a.ts', line: 1 } },
+        ];
+        parseDisableComment({
+          comment: makeComment({
+            type: 'same-line',
+            comment: legacy('no-console'),
+            file: 'b.ts',
+            startLine: 2,
+            endLine: 2,
+          }),
+          pragma,
+          validationErrors,
+        });
+        expect(validationErrors).toEqual([
+          { message: 'pre-existing', location: { file: 'a.ts', line: 1 } },
+          {
+            message: NEXT_LINE_MESSAGE,
+            location: { file: 'b.ts', line: 2 },
+          },
+        ]);
       });
     });
 

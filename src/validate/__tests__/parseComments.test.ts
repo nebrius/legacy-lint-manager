@@ -204,6 +204,51 @@ describe('parseComments', () => {
     });
   });
 
+  describe('legacy pragmas on non-next-line directives', () => {
+    // The pragma is only valid on `*-disable-next-line` directives; carrying
+    // it on a block or same-line disable would let a user widen a legacied
+    // disable to cover new violations. Naming a rule keeps these disables from
+    // tripping the disable-all guard, so they exercise the directive-type
+    // check in parseDisableComment through the real comment parser.
+    const NEXT_LINE_MESSAGE = 'Legacy comment must use *-disable-next-line';
+
+    it('rejects a legacy pragma on a block disable', () => {
+      const { legacyComments, nonLegacyComments, validationErrors } = callParse(
+        {
+          sources: {
+            'a.ts': `// eslint-disable no-console -- ${DEFAULT_PRAGMA} (no-console) a1b2c3d4\nconsole.log('hi');\n`,
+          },
+        }
+      );
+      expect(validationErrors).toEqual([
+        {
+          message: NEXT_LINE_MESSAGE,
+          location: { file: 'a.ts', line: 0 },
+        },
+      ]);
+      expect(legacyComments).toEqual([]);
+      expect(nonLegacyComments).toEqual([]);
+    });
+
+    it('rejects a legacy pragma on a same-line disable', () => {
+      const { legacyComments, nonLegacyComments, validationErrors } = callParse(
+        {
+          sources: {
+            'a.ts': `const x = 1;\nconsole.log(x); // eslint-disable-line no-console -- ${DEFAULT_PRAGMA} (no-console) a1b2c3d4\n`,
+          },
+        }
+      );
+      expect(validationErrors).toEqual([
+        {
+          message: NEXT_LINE_MESSAGE,
+          location: { file: 'a.ts', line: 1 },
+        },
+      ]);
+      expect(legacyComments).toEqual([]);
+      expect(nonLegacyComments).toEqual([]);
+    });
+  });
+
   describe('across multiple files', () => {
     it('keeps collecting other files after one file trips the disable-all guard', () => {
       const { legacyComments, nonLegacyComments, validationErrors } = callParse(

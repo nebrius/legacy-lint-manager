@@ -26,6 +26,20 @@ export function parseDisableComment({
     };
   }
 
+  // Make sure this comment uses `*-disable-next-line`, otherwise it's a gap that
+  // allows users to bypass the legacy linting system by converting a valid
+  // legacy comment into a block `*-disable` comment to include new errors
+  if (comment.type !== 'next-line') {
+    validationErrors.push({
+      message: `Legacy comment must use *-disable-next-line`,
+      location: {
+        file: comment.file,
+        line: comment.startLine,
+      },
+    });
+    return undefined;
+  }
+
   // Since legacy comments are generated, we can be strict about whitespace
   const parts = new RegExp(`^${pragma} \\((.*)\\) ([a-zA-Z0-9_-]{8})$`);
   const match = comment.comment.match(parts);
