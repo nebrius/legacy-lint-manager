@@ -1,6 +1,6 @@
 import { parseSync } from 'oxc-parser';
 
-import type { Comment } from './types.js';
+import type { Comment, ValidationError } from './types.js';
 
 // Note: these entries MUST be specified from longest to shortest
 // to ensure proper prefix matching. If not, we might only strip out
@@ -17,17 +17,41 @@ const DISABLE_PREFIXES: [string, Comment['type']][] = [
 export function getFileComments({
   filePath,
   fileContents,
+  validationErrors,
 }: {
   filePath: string;
   fileContents: string;
+  validationErrors: ValidationError[];
 }) {
-  const { comments, program } = parseSync(filePath, fileContents);
+  const { comments, program, errors } = parseSync(filePath, fileContents);
 
   // Compute a mapping of line number (0-indexed) to file offsets
   const lineStartMapping = [0]; // line 0 always maps to position 0
   for (let i = 0; i < fileContents.length; i++) {
     if (fileContents[i] === '\n') {
       lineStartMapping.push(i + 1);
+    }
+  }
+
+  // If there were any errors, report them here. Note: we have to wait until
+  // after we've computed line start mappings so that we can convert
+  // error positions to line numbers.
+  if (errors.length > 0) {
+    for (const error of errors) {
+      const errorStart = error.labels.at(0)?.start;
+      validationErrors.push({
+        message: `Errors parsing file: ${error.message}`,
+        location:
+          errorStart !== undefined
+            ? {
+                file: filePath,
+                line: getLineFromIndex({
+                  index: errorStart,
+                  lineStartMapping,
+                }),
+              }
+            : undefined,
+      });
     }
   }
 

@@ -25,6 +25,7 @@ export function parseComments({
     const comments = getFileComments({
       filePath: file,
       fileContents: readFileSync(file, 'utf-8'),
+      validationErrors,
     });
     for (const comment of comments.comments) {
       if (comment.disabledAll && nonDisableableRules.length > 0) {

@@ -249,6 +249,25 @@ describe('parseComments', () => {
     });
   });
 
+  describe('file parse errors', () => {
+    it('surfaces an oxc parse error as a validation error anchored to its line', () => {
+      // The broken file fails to parse, so getFileComments records the parser
+      // error against the shared validationErrors array parseComments threads
+      // through. This is the propagation that makes a syntactically broken file
+      // fail validation, and the error is anchored to the offending line.
+      const { legacyComments, nonLegacyComments, validationErrors } = callParse(
+        {
+          sources: { 'a.ts': 'const a = 1;\nconst x = ;\n' },
+        }
+      );
+      expect(validationErrors).toHaveLength(1);
+      expect(validationErrors[0].message).toMatch(/^Errors parsing file:/);
+      expect(validationErrors[0].location).toEqual({ file: 'a.ts', line: 1 });
+      expect(legacyComments).toEqual([]);
+      expect(nonLegacyComments).toEqual([]);
+    });
+  });
+
   describe('across multiple files', () => {
     it('keeps collecting other files after one file trips the disable-all guard', () => {
       const { legacyComments, nonLegacyComments, validationErrors } = callParse(

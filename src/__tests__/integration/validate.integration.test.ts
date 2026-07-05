@@ -388,6 +388,64 @@ describe('validate (integration)', () => {
     });
   });
 
+  // A file that fails to parse must fail validation outright: otherwise a user
+  // could hide a disable of a non-disableable rule inside a file oxc can't even
+  // read. getFileComments records the parser error and validate exits before any
+  // id checks run. The project is built in a temp dir so the broken source never
+  // touches the shared fixture.
+  describe('with a syntax error', () => {
+    const SYNTAX_PROJECT = join(tmpdir(), 'lint-legacies-syntax-project');
+    const SYNTAX_SRC = join(SYNTAX_PROJECT, 'src');
+    const SYNTAX_FILE = join(SYNTAX_SRC, 'broken.ts');
+    const SYNTAX_CONFIG = join(SYNTAX_PROJECT, 'legacy-lint.config.jsonc');
+    const SYNTAX_DATA = join(SYNTAX_PROJECT, 'legacy-lint.data.json');
+
+    afterEach(() => {
+      rmSync(SYNTAX_PROJECT, { recursive: true, force: true });
+    });
+
+    it('exits 1 and reports the parse error', () => {
+      mkdirSync(SYNTAX_SRC, { recursive: true });
+      writeFileSync(SYNTAX_DATA, JSON.stringify([]));
+      writeFileSync(
+        SYNTAX_CONFIG,
+        JSON.stringify({
+          ignoreWarnings: false,
+          pragma: DEFAULT_PRAGMA,
+          databaseFile: SYNTAX_DATA,
+          nonDisableableRules: [],
+          compareBranch: 'main',
+          linterType: 'eslint',
+        })
+      );
+      // The bad `;` (no initializer expression) sits on the second line, so oxc
+      // cannot parse it and reports the error against that line.
+      writeFileSync(SYNTAX_FILE, 'export const x = 1;\nconst y = ;\n');
+
+      const exitSpy = mockExit();
+      const errorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      expect(() => {
+        validate({
+          config: SYNTAX_CONFIG,
+          verbose: false,
+          update: false,
+          compare: false,
+        });
+      }).toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      // The error is grouped under the file header (relative to rootDir) and
+      // listed with its 0-indexed line, proving the parser offset was resolved
+      // to a location rather than falling back to the "Global" bucket.
+      expect(errorSpy).toHaveBeenCalledWith(`${join('src', 'broken.ts')}:`);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('1: Errors parsing file:')
+      );
+    });
+  });
+
   // --compare reads the config and database from another branch via `git show`,
   // so unlike the other cases this project must be a real git repo. It commits a
   // baseline on `main`, then adds a new legacy id on `feature` that does not

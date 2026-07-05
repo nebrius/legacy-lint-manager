@@ -25,6 +25,7 @@ export function addLegacyStatements({
   rootDir: string;
 }) {
   const fileContentsByLine = fileContents.split('\n');
+  const validationErrors: ValidationError[] = [];
   const {
     comments: fileComments,
     program,
@@ -32,7 +33,15 @@ export function addLegacyStatements({
   } = getFileComments({
     filePath,
     fileContents,
+    validationErrors,
   });
+
+  if (validationErrors.length > 0) {
+    printValidationErrors({ validationErrors, rootDir });
+    error('Errors in this file will not be legacied');
+    return undefined;
+  }
+
   const lineContexts = getFileContexts(program, lineStartMapping);
   const fileErrors = lintErrors.errors.get(filePath);
 

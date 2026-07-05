@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
 import { getFileComments } from '../../util/comments.js';
+import type { ValidationError } from '../../util/types.js';
 
 function parse(fileContents: string, filePath = 'test.ts') {
-  return getFileComments({ filePath, fileContents }).comments;
+  return getFileComments({ filePath, fileContents, validationErrors: [] })
+    .comments;
+}
+
+// Returns the validation errors getFileComments accumulates for a source, so
+// tests can assert on the parse-error path without inspecting the comments.
+function parseErrors(fileContents: string, filePath = 'test.ts') {
+  const validationErrors: ValidationError[] = [];
+  getFileComments({ filePath, fileContents, validationErrors });
+  return validationErrors;
 }
 
 describe('Comment parsing', () => {
@@ -301,6 +311,43 @@ describe('Comment parsing', () => {
 
     it('returns an empty array for whitespace-only input', () => {
       expect(parse('\n\n   \n')).toEqual([]);
+    });
+  });
+
+  describe('syntax errors', () => {
+    it('records a validation error, anchored to its line, for a file that fails to parse', () => {
+      // The bad `;` (nothing where the initializer expression should be) sits on
+      // the second line, so the recorded location resolves the parser's byte
+      // offset back to a 0-indexed line number.
+      const errors = parseErrors('const a = 1;\nconst x = ;');
+      expect(errors).toHaveLength(1);
+      expect(errors[0].message).toMatch(/^Errors parsing file:/);
+      expect(errors[0].location).toEqual({ file: 'test.ts', line: 1 });
+    });
+
+    it('anchors an error whose span starts at offset 0 to line 0', () => {
+      // A lone `}` is unexpected at the very start of the file, so the parser's
+      // label starts at offset 0. Line 0 must still be recorded as a location:
+      // the offset is a real position, not a "no span" sentinel.
+      const errors = parseErrors('}');
+      expect(errors).toHaveLength(1);
+      expect(errors[0].location).toEqual({ file: 'test.ts', line: 0 });
+    });
+
+    it('records the error without a location when the parser reports no span', () => {
+      // Some diagnostics carry no label (here oxc decides the source "appears to
+      // be binary"), so there is no offset to resolve; the error is still
+      // recorded, just unanchored.
+      const errors = parseErrors('\uD800');
+      expect(errors).toHaveLength(1);
+      expect(errors[0].message).toMatch(/^Errors parsing file:/);
+      expect(errors[0].location).toBeUndefined();
+    });
+
+    it('leaves the validation errors untouched for a file that parses cleanly', () => {
+      expect(parseErrors('// eslint-disable-next-line no-console\nx;')).toEqual(
+        []
+      );
     });
   });
 });

@@ -375,6 +375,7 @@ describe('addLegacyStatements', () => {
       const { comments } = getFileComments({
         filePath: FILE,
         fileContents: line,
+        validationErrors: [],
       });
       return parseDisableComment({
         comment: comments[0],
@@ -521,6 +522,52 @@ describe('addLegacyStatements', () => {
       expect(result).toContain(MALFORMED);
       // ...and the line-3 error is legacied as a net-new comment.
       expect(result).toContain(`new-rule -- ${DEFAULT_PRAGMA} (new-rule)`);
+    });
+  });
+
+  describe('file with syntax errors', () => {
+    // The bad `;` (no initializer expression) on the second line makes oxc
+    // report a parse error. getFileComments records it, and addLegacyStatements
+    // bails before rewriting anything rather than legacying a file it cannot
+    // trust.
+    const UNPARSEABLE = 'const a = 1;\nconst x = ;';
+
+    function captureErrors() {
+      const messages: string[] = [];
+      vi.spyOn(console, 'error').mockImplementation((msg: string) => {
+        messages.push(msg);
+      });
+      return messages;
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('returns undefined and consumes no id when the file fails to parse', () => {
+      captureErrors();
+      const result = runRaw({
+        fileContents: UNPARSEABLE,
+        entries: [[0, ['new-rule']]],
+      });
+      // The file is skipped before any rewriting, so no id is ever generated.
+      expect(result).toBeUndefined();
+      expect(nanoidMock).not.toHaveBeenCalled();
+    });
+
+    it('reports the parse error under its file header and a skip notice', () => {
+      const messages = captureErrors();
+      runRaw({
+        fileContents: UNPARSEABLE,
+        entries: [[0, ['new-rule']]],
+      });
+      // The recorded location groups the error under the file header, so the
+      // parse error is anchored rather than dumped into the "Global" bucket.
+      expect(messages).toContain(`${FILE}:`);
+      expect(messages.some((m) => m.includes('Errors parsing file:'))).toBe(
+        true
+      );
+      expect(messages).toContain('Errors in this file will not be legacied');
     });
   });
 });

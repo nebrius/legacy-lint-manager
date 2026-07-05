@@ -7,6 +7,7 @@ function contexts(fileContents: string) {
   const { program, lineStartMapping } = getFileComments({
     filePath: 'test.tsx',
     fileContents,
+    validationErrors: [],
   });
   return getFileContexts(program, lineStartMapping);
 }
