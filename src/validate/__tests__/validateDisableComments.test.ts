@@ -6,7 +6,6 @@ import type {
   NonLegacyComment,
   ValidationError,
 } from '../../util/types.js';
-import type { CompareInfo } from '../getCompareInfo.js';
 import { validateDisableComments } from '../validateDisableComments.js';
 
 function makeLegacy(overrides: Partial<LegacyComment> = {}): LegacyComment {
@@ -35,18 +34,6 @@ function makeNonLegacy(
   };
 }
 
-// A compare branch is represented by its own database. Build it the same way as
-// the working database so the compare-branch lookups exercise the real Database.
-function makeCompareData(contents: [string, string[]][]): CompareInfo {
-  return {
-    compareDatabase: createDatabase({
-      filePath: undefined,
-      databaseContents: contents,
-    }),
-    compareBranchName: 'main',
-  };
-}
-
 // Most tests only care about a few inputs; this wrapper fills the rest with inert
 // defaults so each call can focus on the inputs it actually exercises.
 function callValidate(
@@ -58,7 +45,6 @@ function callValidate(
     validationErrors: [],
     legacyComments: [],
     nonLegacyComments: [],
-    compareData: undefined,
     ...overrides,
   });
 }
@@ -302,183 +288,6 @@ describe('validateDisableComments', () => {
         ],
       });
       expect(validationErrors).toEqual([]);
-    });
-  });
-
-  describe('comparing against a branch', () => {
-    it('records a global error when a database id is absent from the compare branch', () => {
-      const validationErrors: ValidationError[] = [];
-      const result = callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [['new', ['no-console']]],
-        }),
-        validationErrors,
-        legacyComments: [
-          makeLegacy({ id: 'new', file: 'src/a.ts', startLine: 7, endLine: 7 }),
-        ],
-        compareData: makeCompareData([]),
-      });
-      // The compare check walks the database, not the comments, so the error is
-      // global (no file:line location).
-      expect(validationErrors).toEqual([
-        {
-          message:
-            'Legacy ID "new" does not exist in the database on main. New legacy entries cannot be added.',
-        },
-      ]);
-      // The id was still found in code, so it is kept.
-      expect(result).toEqual({
-        ids: new Map([['new', ['no-console']]]),
-        wereErrorsFixed: false,
-      });
-    });
-
-    it('keeps ids that exist on both the database and the compare branch', () => {
-      const validationErrors: ValidationError[] = [];
-      const result = callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [['known', ['no-console']]],
-        }),
-        validationErrors,
-        legacyComments: [makeLegacy({ id: 'known' })],
-        compareData: makeCompareData([['known', ['no-console']]]),
-      });
-      expect(validationErrors).toEqual([]);
-      expect(result).toEqual({
-        ids: new Map([['known', ['no-console']]]),
-        wereErrorsFixed: false,
-      });
-    });
-
-    it('flags only the ids missing from the compare branch', () => {
-      const validationErrors: ValidationError[] = [];
-      callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [
-            ['old', ['no-console']],
-            ['new', ['no-console']],
-          ],
-        }),
-        validationErrors,
-        legacyComments: [
-          makeLegacy({ id: 'old', file: 'a.ts', startLine: 1, endLine: 1 }),
-          makeLegacy({ id: 'new', file: 'b.ts', startLine: 2, endLine: 2 }),
-        ],
-        compareData: makeCompareData([['old', ['no-console']]]),
-      });
-      expect(validationErrors).toEqual([
-        {
-          message:
-            'Legacy ID "new" does not exist in the database on main. New legacy entries cannot be added.',
-        },
-      ]);
-    });
-
-    describe('rule subset check against the compare branch', () => {
-      it('passes when the database’s rules are a subset of the compare branch’s rules', () => {
-        // Removing a rule from an existing legacy id is allowed, so the current
-        // rules only need to be a subset of the compare branch's.
-        const validationErrors: ValidationError[] = [];
-        const result = callValidate({
-          database: createDatabase({
-            filePath: undefined,
-            databaseContents: [['id1', ['no-console']]],
-          }),
-          validationErrors,
-          legacyComments: [makeLegacy({ id: 'id1' })],
-          compareData: makeCompareData([
-            ['id1', ['no-console', 'no-debugger']],
-          ]),
-        });
-        expect(validationErrors).toEqual([]);
-        expect(result).toEqual({
-          ids: new Map([['id1', ['no-console']]]),
-          wereErrorsFixed: false,
-        });
-      });
-
-      it('records a global error when the database gained a rule not on the compare branch', () => {
-        // Adding a new rule to an existing legacy id would sneak a new violation
-        // past the "only legacied errors" guarantee, so it is rejected.
-        const validationErrors: ValidationError[] = [];
-        callValidate({
-          database: createDatabase({
-            filePath: undefined,
-            databaseContents: [['id1', ['no-console', 'no-debugger']]],
-          }),
-          validationErrors,
-          legacyComments: [
-            makeLegacy({
-              id: 'id1',
-              legaciedRules: ['no-console', 'no-debugger'],
-            }),
-          ],
-          compareData: makeCompareData([['id1', ['no-console']]]),
-        });
-        expect(validationErrors).toEqual([
-          {
-            message:
-              'Rule "no-debugger" for legacy ID "id1" is not defined in the database on main. New rules cannot be added to existing legacy entries.',
-          },
-        ]);
-      });
-
-      it('records one global error per rule that is new relative to the compare branch', () => {
-        const validationErrors: ValidationError[] = [];
-        callValidate({
-          database: createDatabase({
-            filePath: undefined,
-            databaseContents: [
-              ['id1', ['no-console', 'no-debugger', 'no-var']],
-            ],
-          }),
-          validationErrors,
-          legacyComments: [
-            makeLegacy({
-              id: 'id1',
-              legaciedRules: ['no-console', 'no-debugger', 'no-var'],
-            }),
-          ],
-          compareData: makeCompareData([['id1', ['no-console']]]),
-        });
-        expect(validationErrors).toEqual([
-          {
-            message:
-              'Rule "no-debugger" for legacy ID "id1" is not defined in the database on main. New rules cannot be added to existing legacy entries.',
-          },
-          {
-            message:
-              'Rule "no-var" for legacy ID "id1" is not defined in the database on main. New rules cannot be added to existing legacy entries.',
-          },
-        ]);
-      });
-
-      it('does not run the compare check when there is no compare branch', () => {
-        // Without compareData the database rules are carried through untouched,
-        // so extra rules relative to any baseline are not flagged.
-        const validationErrors: ValidationError[] = [];
-        const result = callValidate({
-          database: createDatabase({
-            filePath: undefined,
-            databaseContents: [['id1', ['no-console', 'no-debugger']]],
-          }),
-          validationErrors,
-          legacyComments: [
-            makeLegacy({
-              id: 'id1',
-              legaciedRules: ['no-console', 'no-debugger'],
-            }),
-          ],
-        });
-        expect(validationErrors).toEqual([]);
-        expect(result).toEqual({
-          ids: new Map([['id1', ['no-console', 'no-debugger']]]),
-          wereErrorsFixed: false,
-        });
-      });
     });
   });
 

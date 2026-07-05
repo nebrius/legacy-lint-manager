@@ -11,3 +11,5 @@ A tool for enabling ESLint/Oxlint rules on codebases with legacy errors
 - Changes to the eslint config file itself to ignore a file that disables a non-disableable rule won't be detected
 - Inline rule configs are not support. I strongly recommend you enable `noInlineConfig: true` in your eslint config.
 - If a user completely fixes all lint violations on line with a legacy comment, and then copies that legacy comment to a new location and introduces new violations, those new violations would be considered a move of the existing legacy comment, not a new violation
+- Non JS/JSX/TS/TSX files are not analyzed (e.g. Vue, Svelte, etc. files)
+- Legacy comments (and eslint-disable comments generally) are not vetted against current failures. I strongly recommend you use the `--report-unused-disable-directives` CLI flag to fail in order to keep legacy comments up to date.

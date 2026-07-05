@@ -22,11 +22,6 @@ export default defineConfig([
     'oxlint.config.ts',
   ]),
   {
-    linterOptions: {
-      noInlineConfig: true,
-    },
-  },
-  {
     files: ['**/*.{js,mjs,jsx,ts,tsx,mts}'],
     languageOptions: {
       globals: globals.node,

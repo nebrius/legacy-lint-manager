@@ -38,7 +38,10 @@ export function readConfig(configFilePath: string) {
     process.exit(1);
   }
   const configFileContents = readFileSync(configFilePath, 'utf-8');
+  return parseConfig(configFileContents);
+}
 
+export function parseConfig(configFileContents: string): Config {
   // Parse the config file contents from JSON-C. jsonc-parser's parse() does not
   // throw on malformed input — it returns a best-effort partial result and
   // reports issues via the errors out-parameter, so we surface those manually.

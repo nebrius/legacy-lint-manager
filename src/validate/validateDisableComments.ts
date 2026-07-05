@@ -4,7 +4,6 @@ import type {
   NonLegacyComment,
   ValidationError,
 } from '../util/types.js';
-import type { CompareInfo } from './getCompareInfo.js';
 
 export function validateDisableComments({
   database,
@@ -12,14 +11,12 @@ export function validateDisableComments({
   validationErrors,
   legacyComments,
   nonLegacyComments,
-  compareData,
 }: {
   database: Database;
   nonDisableableRules: string[];
   validationErrors: ValidationError[];
   legacyComments: LegacyComment[];
   nonLegacyComments: NonLegacyComment[];
-  compareData: CompareInfo | undefined;
 }) {
   // Create the map form of the database that maps from id in the database to
   // whether or not it was found in the code.
@@ -96,33 +93,6 @@ export function validateDisableComments({
             line: comment.startLine,
           },
         });
-      }
-    }
-  }
-
-  // Comapare the database to the compare database
-  if (compareData) {
-    for (const [id, rules] of database.getIds()) {
-      const compareRules = compareData.compareDatabase.getIds().get(id);
-      if (!compareRules) {
-        validationErrors.push({
-          message: `Legacy ID "${id}" does not exist in the database on ${compareData.compareBranchName}. New legacy entries cannot be added.`,
-        });
-        continue;
-      }
-
-      // Confirm that no new rules were added to the database for an existing
-      // legacy. We only do a 1-way check to validate that rules in the
-      // current codebase are included in the compare database, but not the
-      // other way around (aka that the current codebase is a subset of the
-      // compare database). This is because the user might have fixed a lint
-      // error that was previously legacied, which is allowed.
-      for (const rule of rules) {
-        if (!compareRules.includes(rule)) {
-          validationErrors.push({
-            message: `Rule "${rule}" for legacy ID "${id}" is not defined in the database on ${compareData.compareBranchName}. New rules cannot be added to existing legacy entries.`,
-          });
-        }
       }
     }
   }

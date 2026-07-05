@@ -6,14 +6,13 @@ import { getFileList } from '../util/files.js';
 import { error, info, setVerbose, time } from '../util/logging.js';
 import { printValidationErrors } from '../util/printValidationErrors.js';
 import type { CommonOptions, ValidationError } from '../util/types.js';
-import type { CompareInfo } from './getCompareInfo.js';
-import { getCompareInfo } from './getCompareInfo.js';
+import { compareWithBranch } from './compareWithBranch.js';
 import { parseComments } from './parseComments.js';
 import { validateDisableComments } from './validateDisableComments.js';
 
 export function validate({
   verbose,
-  config,
+  config: configFilePath,
   update,
   compare,
 }: CommonOptions & {
@@ -22,9 +21,9 @@ export function validate({
 }) {
   setVerbose(verbose);
 
-  const { pragma, databaseFile, compareBranch, nonDisableableRules } =
-    readConfig(config);
-  const rootDir = dirname(config);
+  const config = readConfig(configFilePath);
+  const { pragma, databaseFile, nonDisableableRules } = config;
+  const rootDir = dirname(configFilePath);
   const database = readDatabase(databaseFile);
   const files = time('getting file list', () => getFileList(rootDir));
 
@@ -40,22 +39,16 @@ export function validate({
       })
   );
 
-  // Get the list of expected IDs, if comparing against a branch is enabled
-  let compareData: CompareInfo | undefined;
-  // Note: since compare reads a file from another branch, it can't be easily
-  // tested in unit tests. There is an integration test at
-  // src/__tests__/integration/getCompareInfo.integration.test.ts that exercises
-  // this code path, but code coverage doesn't work on integration tests
-  /* v8 ignore start */
   if (compare) {
-    time('Getting list of expected IDs from compare branch', () => {
-      compareData = getCompareInfo({
-        compareBranch,
-        databaseFile,
+    time(`Comparing with the compare branch`, () => {
+      compareWithBranch({
+        currentDatabase: database,
+        currentConfig: config,
+        configFilePath,
+        validationErrors,
       });
     });
   }
-  /* v8 ignore end */
 
   const results = time('validating IDs', () =>
     validateDisableComments({
@@ -64,7 +57,6 @@ export function validate({
       validationErrors,
       legacyComments,
       nonLegacyComments,
-      compareData,
     })
   );
 

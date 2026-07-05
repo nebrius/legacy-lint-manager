@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import {
   cpSync,
   mkdirSync,
@@ -383,6 +384,105 @@ describe('validate (integration)', () => {
       expect(exitSpy).toHaveBeenCalledWith(1);
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Disabling all rules is not allowed')
+      );
+    });
+  });
+
+  // --compare reads the config and database from another branch via `git show`,
+  // so unlike the other cases this project must be a real git repo. It commits a
+  // baseline on `main`, then adds a new legacy id on `feature` that does not
+  // exist on `main` -- exactly the drift --compare is meant to reject. This
+  // drives the `if (compare)` branch of validate() end-to-end. Paths are
+  // repo-relative and validate runs with the repo as cwd because `git show`
+  // only accepts repo-relative paths.
+  describe('with --compare', () => {
+    const COMPARE_PROJECT = join(tmpdir(), 'lint-legacies-compare-project');
+    const COMPARE_SRC = join(COMPARE_PROJECT, 'src');
+    const COMPARE_FILE = join(COMPARE_SRC, 'uses.ts');
+    const CONFIG_REL = 'legacy-lint.config.jsonc';
+    const DATA_REL = 'legacy-lint.data.json';
+
+    const COMPARE_CONFIG = {
+      ignoreWarnings: false,
+      pragma: DEFAULT_PRAGMA,
+      databaseFile: DATA_REL,
+      nonDisableableRules: [],
+      compareBranch: 'main',
+      linterType: 'eslint',
+    };
+
+    function git(args: string[]) {
+      execFileSync('git', args, { cwd: COMPARE_PROJECT, stdio: 'pipe' });
+    }
+
+    function setup() {
+      mkdirSync(COMPARE_SRC, { recursive: true });
+      git(['init', '-b', 'main']);
+      git(['config', 'user.email', 'test@example.com']);
+      git(['config', 'user.name', 'Test']);
+      writeFileSync(
+        join(COMPARE_PROJECT, CONFIG_REL),
+        JSON.stringify(COMPARE_CONFIG)
+      );
+      writeFileSync(join(COMPARE_PROJECT, DATA_REL), JSON.stringify([]));
+      writeFileSync(COMPARE_FILE, 'export const noop = true;\n');
+      git(['add', '-A']);
+      git(['commit', '-m', 'baseline']);
+      git(['checkout', '-b', 'feature']);
+
+      // On feature, register a new legacy id (absent from main's database) plus a
+      // matching source comment so it is found in code -- leaving the compare
+      // check as the only error rather than an unregistered/unused-id error.
+      writeFileSync(
+        join(COMPARE_PROJECT, DATA_REL),
+        JSON.stringify([['newid001', ['no-console']]])
+      );
+      writeFileSync(
+        COMPARE_FILE,
+        [
+          'export function logSomething(): void {',
+          `  // eslint-disable-next-line no-console -- ${DEFAULT_PRAGMA} (no-console) newid001`,
+          "  console.log('x');",
+          '}',
+          '',
+        ].join('\n')
+      );
+    }
+
+    // validate resolves the repo-relative config path against cwd, so run it with
+    // the repo as cwd. Restore in finally so a throw doesn't strand the suite.
+    function runCompareValidate() {
+      const originalCwd = process.cwd();
+      process.chdir(COMPARE_PROJECT);
+      try {
+        validate({
+          config: CONFIG_REL,
+          verbose: false,
+          update: false,
+          compare: true,
+        });
+      } finally {
+        process.chdir(originalCwd);
+      }
+    }
+
+    afterEach(() => {
+      rmSync(COMPARE_PROJECT, { recursive: true, force: true });
+    });
+
+    it('exits 1 and reports a new legacy id that is absent from the compare branch', () => {
+      setup();
+      const exitSpy = mockExit();
+      const errorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      expect(() => {
+        runCompareValidate();
+      }).toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('does not exist in the database on main')
       );
     });
   });
