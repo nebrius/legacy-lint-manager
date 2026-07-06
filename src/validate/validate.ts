@@ -57,6 +57,7 @@ export function validate({
       validationErrors,
       legacyComments,
       nonLegacyComments,
+      linterType: config.linterType,
     })
   );
 

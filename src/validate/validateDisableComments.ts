@@ -1,3 +1,4 @@
+import type { Config } from '../util/config.js';
 import type { Database } from '../util/db.js';
 import type {
   LegacyComment,
@@ -11,12 +12,14 @@ export function validateDisableComments({
   validationErrors,
   legacyComments,
   nonLegacyComments,
+  linterType,
 }: {
   database: Database;
   nonDisableableRules: string[];
   validationErrors: ValidationError[];
   legacyComments: LegacyComment[];
   nonLegacyComments: NonLegacyComment[];
+  linterType: Config['linterType'];
 }) {
   // Create the map form of the database that maps from id in the database to
   // whether or not it was found in the code.
@@ -70,7 +73,7 @@ export function validateDisableComments({
   // Validate non-disableable rules are not used in non-legacied rules in legacy comments
   for (const comment of legacyComments) {
     for (const rule of comment.nonLegaciedRules) {
-      if (nonDisableableRules.includes(rule)) {
+      if (isRuleNonDisableable({ rule, nonDisableableRules, linterType })) {
         validationErrors.push({
           message: `Rule "${rule}" cannot be disabled.`,
           location: {
@@ -85,7 +88,7 @@ export function validateDisableComments({
   // Validate non-disableable rules are not used in non-legacy comments
   for (const comment of nonLegacyComments) {
     for (const rule of comment.rules) {
-      if (nonDisableableRules.includes(rule)) {
+      if (isRuleNonDisableable({ rule, nonDisableableRules, linterType })) {
         validationErrors.push({
           message: `Rule "${rule}" cannot be disabled.`,
           location: {
@@ -110,4 +113,33 @@ export function validateDisableComments({
       .entries()
       .some(([, { foundInCode }]) => !foundInCode),
   };
+}
+
+function isRuleNonDisableable({
+  rule,
+  nonDisableableRules,
+  linterType,
+}: {
+  rule: string;
+  nonDisableableRules: string[];
+  linterType: Config['linterType'];
+}) {
+  // ESLint uses a simple mechanism for comparing disable comment rules to
+  // canonical rule names (it's just 1:1 matching)
+  if (linterType === 'eslint') {
+    return nonDisableableRules.includes(rule);
+  }
+
+  // Oxlint does this weird thing where they strip the namespace from rules and
+  // compare the base rule-name. This means that `// oxlint-disable foo` matches
+  // `package_one/foo` and `package_two/foo`. Apparently this is by design:
+  // https://github.com/oxc-project/oxc/blob/777f02ae10c38d481c6c16563e55272c350def2c/crates/oxc_linter/src/disable_directives.rs#L317-L338
+  const baseRule = rule.split('/').pop();
+  for (const nonDisableableRule of nonDisableableRules) {
+    const nonDisableableBaseRule = nonDisableableRule.split('/').pop();
+    if (nonDisableableBaseRule === baseRule) {
+      return true;
+    }
+  }
+  return false;
 }

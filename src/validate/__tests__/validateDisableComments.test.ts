@@ -45,6 +45,7 @@ function callValidate(
     validationErrors: [],
     legacyComments: [],
     nonLegacyComments: [],
+    linterType: 'eslint',
     ...overrides,
   });
 }
@@ -474,6 +475,200 @@ describe('validateDisableComments', () => {
           location: { file: 'y.ts', line: 10 },
         },
       ]);
+    });
+  });
+
+  describe('non-disableable rule matching is linter-aware', () => {
+    // ESLint requires the exact, fully-qualified rule ID in a disable directive:
+    // there is no aliasing, so `no-explicit-any` and `@typescript-eslint/no-explicit-any`
+    // are distinct. Matching stays exact for ESLint.
+    describe('ESLint (exact match, no prefix stripping)', () => {
+      it('does not match a bare comment against a prefixed non-disableable rule', () => {
+        const validationErrors: ValidationError[] = [];
+        callValidate({
+          linterType: 'eslint',
+          nonDisableableRules: ['@typescript-eslint/no-explicit-any'],
+          validationErrors,
+          nonLegacyComments: [makeNonLegacy({ rules: ['no-explicit-any'] })],
+        });
+        expect(validationErrors).toEqual([]);
+      });
+
+      it('matches when the comment uses the exact fully-qualified rule ID', () => {
+        const validationErrors: ValidationError[] = [];
+        callValidate({
+          linterType: 'eslint',
+          nonDisableableRules: ['@typescript-eslint/no-explicit-any'],
+          validationErrors,
+          nonLegacyComments: [
+            makeNonLegacy({
+              rules: ['@typescript-eslint/no-explicit-any'],
+              file: 'a.ts',
+              startLine: 2,
+              endLine: 2,
+            }),
+          ],
+        });
+        expect(validationErrors).toEqual([
+          {
+            message:
+              'Rule "@typescript-eslint/no-explicit-any" cannot be disabled.',
+            location: { file: 'a.ts', line: 2 },
+          },
+        ]);
+      });
+    });
+
+    // Oxlint strips the plugin prefix from both the directive and the rule name
+    // and compares the bare rule name, so the prefix is decorative. We mirror that
+    // when checking whether a rule is non-disableable.
+    // See https://github.com/oxc-project/oxc/blob/main/crates/oxc_linter/src/disable_directives.rs
+    describe('Oxlint (prefix-insensitive base-name match)', () => {
+      it('flags a bare comment against a prefixed non-disableable rule (the closed bypass)', () => {
+        const validationErrors: ValidationError[] = [];
+        callValidate({
+          linterType: 'oxlint',
+          nonDisableableRules: ['eslint/no-console'],
+          validationErrors,
+          nonLegacyComments: [
+            makeNonLegacy({
+              rules: ['no-console'],
+              file: 'a.ts',
+              startLine: 3,
+              endLine: 3,
+            }),
+          ],
+        });
+        expect(validationErrors).toEqual([
+          {
+            message: 'Rule "no-console" cannot be disabled.',
+            location: { file: 'a.ts', line: 3 },
+          },
+        ]);
+      });
+
+      it('flags a prefixed comment against the same prefixed non-disableable rule', () => {
+        const validationErrors: ValidationError[] = [];
+        callValidate({
+          linterType: 'oxlint',
+          nonDisableableRules: ['eslint/no-console'],
+          validationErrors,
+          nonLegacyComments: [
+            makeNonLegacy({
+              rules: ['eslint/no-console'],
+              file: 'a.ts',
+              startLine: 4,
+              endLine: 4,
+            }),
+          ],
+        });
+        expect(validationErrors).toEqual([
+          {
+            message: 'Rule "eslint/no-console" cannot be disabled.',
+            location: { file: 'a.ts', line: 4 },
+          },
+        ]);
+      });
+
+      it('ignores the plugin prefix, so a different plugin sharing the rule name still matches', () => {
+        const validationErrors: ValidationError[] = [];
+        callValidate({
+          linterType: 'oxlint',
+          nonDisableableRules: ['jest/no-focused-tests'],
+          validationErrors,
+          nonLegacyComments: [
+            makeNonLegacy({
+              rules: ['vitest/no-focused-tests'],
+              file: 'a.ts',
+              startLine: 5,
+              endLine: 5,
+            }),
+          ],
+        });
+        expect(validationErrors).toEqual([
+          {
+            message: 'Rule "vitest/no-focused-tests" cannot be disabled.',
+            location: { file: 'a.ts', line: 5 },
+          },
+        ]);
+      });
+
+      it('matches a prefixed comment against a bare non-disableable rule', () => {
+        const validationErrors: ValidationError[] = [];
+        callValidate({
+          linterType: 'oxlint',
+          nonDisableableRules: ['no-console'],
+          validationErrors,
+          nonLegacyComments: [
+            makeNonLegacy({
+              rules: ['eslint/no-console'],
+              file: 'a.ts',
+              startLine: 6,
+              endLine: 6,
+            }),
+          ],
+        });
+        expect(validationErrors).toEqual([
+          {
+            message: 'Rule "eslint/no-console" cannot be disabled.',
+            location: { file: 'a.ts', line: 6 },
+          },
+        ]);
+      });
+
+      it('compares the base name exactly, not as a substring', () => {
+        // `no-re-export` ends with `export` but is a different rule, so it must
+        // not match the non-disableable `export` rule.
+        const validationErrors: ValidationError[] = [];
+        callValidate({
+          linterType: 'oxlint',
+          nonDisableableRules: ['import/export'],
+          validationErrors,
+          nonLegacyComments: [
+            makeNonLegacy({ rules: ['canonical/no-re-export'] }),
+          ],
+        });
+        expect(validationErrors).toEqual([]);
+      });
+
+      it('does not match a rule with a different base name', () => {
+        const validationErrors: ValidationError[] = [];
+        callValidate({
+          linterType: 'oxlint',
+          nonDisableableRules: ['eslint/no-console'],
+          validationErrors,
+          nonLegacyComments: [makeNonLegacy({ rules: ['no-debugger'] })],
+        });
+        expect(validationErrors).toEqual([]);
+      });
+
+      it('applies the same base-name matching to a legacy comment’s non-legacied rules', () => {
+        const validationErrors: ValidationError[] = [];
+        callValidate({
+          linterType: 'oxlint',
+          database: createDatabase({
+            filePath: undefined,
+            databaseContents: [['a1b2c3d4', ['no-console']]],
+          }),
+          nonDisableableRules: ['typescript/no-explicit-any'],
+          validationErrors,
+          legacyComments: [
+            makeLegacy({
+              legaciedRules: ['no-console'],
+              nonLegaciedRules: ['no-explicit-any'],
+              file: 'src/a.ts',
+              startLine: 8,
+              endLine: 8,
+            }),
+          ],
+        });
+        expect(validationErrors).toEqual([
+          {
+            message: 'Rule "no-explicit-any" cannot be disabled.',
+            location: { file: 'src/a.ts', line: 8 },
+          },
+        ]);
+      });
     });
   });
 

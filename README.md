@@ -4,6 +4,11 @@
 
 A tool for enabling ESLint/Oxlint rules on codebases with legacy errors
 
+## Stuff to mention
+
+To legacy new rules (say cause you added new lint rules to the config): Disable
+the CI check in the PR that re-legacies, then disable in follow up PR
+
 ## Known limitations
 
 - If the built-in set of file ignores causes a file that you don't ignore to be ignored by this tool, then a user could add new lint violations that are supposed to be non-disableable
@@ -14,3 +19,7 @@ A tool for enabling ESLint/Oxlint rules on codebases with legacy errors
 - Non JS/JSX/TS/TSX files are not analyzed (e.g. Vue, Svelte, etc. files)
 - Legacy comments (and eslint-disable comments generally) are not vetted against current failures. I strongly recommend you use the `--report-unused-disable-directives` CLI flag to fail in order to keep legacy comments up to date.
 - In-file ESLint configurations (e.g. `/* eslint "example/rule1": "error" */`) are not supported and will cause an error. If you use this pattern, you will need to remove the comments and move them to the ESLint config file instead.
+
+## Weird notes
+
+- Rule name normalization is different between ESLint and Oxlint. We apply how each linter works for accuracy
