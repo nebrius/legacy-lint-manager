@@ -14,10 +14,8 @@ export function validate({
   verbose,
   config: configFilePath,
   update,
-  compare,
 }: CommonOptions & {
   update: boolean;
-  compare: boolean;
 }) {
   setVerbose(verbose);
 
@@ -39,16 +37,14 @@ export function validate({
       })
   );
 
-  if (compare) {
-    time(`Comparing with the compare branch`, () => {
-      compareWithBranch({
-        currentDatabase: database,
-        currentConfig: config,
-        configFilePath,
-        validationErrors,
-      });
+  time(`Comparing with the compare branch`, () => {
+    compareWithBranch({
+      currentDatabase: database,
+      currentConfig: config,
+      configFilePath,
+      validationErrors,
     });
-  }
+  });
 
   const results = time('validating IDs', () =>
     validateDisableComments({

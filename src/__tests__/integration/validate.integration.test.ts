@@ -15,51 +15,103 @@ import { DEFAULT_PRAGMA } from '../../util/constants.js';
 import { validate } from '../../validate/validate.js';
 
 const INTEGRATION_DIR = import.meta.dirname;
-const PROJECT_DIR = join(INTEGRATION_DIR, 'fixtures', 'project');
+// The real fixture sources carry legacy comments for c0nsole1 / debugg02.
+const FIXTURE_SRC = join(INTEGRATION_DIR, 'fixtures', 'project', 'src');
 const DATABASES_DIR = join(INTEGRATION_DIR, 'fixtures', 'databases');
 
-// The config and data files live at the root of the sample project (mirroring
-// how they sit relative to the code in real usage) and are gitignored, so
-// mutating them during the --update test never dirties the repo.
-const CONFIG_FILE = join(PROJECT_DIR, 'legacy-lint.config.jsonc');
-const WORKING_DATA = join(PROJECT_DIR, 'legacy-lint.data.json');
+// validate always compares the working database against the compare branch via
+// `git show main:<config/db>`, so every case runs against a throwaway git repo in
+// a temp dir: it commits a baseline on `main`, then validates on `feature`.
+// Committing a `main` baseline that matches the working state keeps
+// compareWithBranch silent, leaving whatever the test targets as the only error;
+// the compare-drift case is the one exception and diverges from main on purpose.
+// The pid keeps parallel vitest workers from colliding on the same temp dir.
+const REPO_DIR = join(
+  tmpdir(),
+  `lint-legacies-validate-${process.pid.toString()}`
+);
+// git show interpolates these paths directly so they must be repo-relative, and
+// validate runs with the repo as cwd so it resolves them the same way.
+const CONFIG_REL = 'legacy-lint.config.jsonc';
+const DATA_REL = 'legacy-lint.data.json';
+const WORKING_DATA = join(REPO_DIR, DATA_REL);
 
-// Write a config file in the project dir. validate derives rootDir from
-// dirname(config), so the config must sit alongside the source it validates.
-// databaseFile is absolute so readDatabase resolves it regardless of cwd.
-function writeConfig(databaseFile = WORKING_DATA) {
-  writeFileSync(
-    CONFIG_FILE,
-    JSON.stringify({
-      ignoreWarnings: false,
-      pragma: DEFAULT_PRAGMA,
-      databaseFile,
-      nonDisableableRules: [],
-      compareBranch: 'main',
-      linterType: 'eslint',
-    })
-  );
+type DatabaseContents = [string, string[]][];
+
+function makeConfig(nonDisableableRules: string[] = []) {
+  return {
+    ignoreWarnings: false,
+    pragma: DEFAULT_PRAGMA,
+    databaseFile: DATA_REL,
+    nonDisableableRules,
+    compareBranch: 'main',
+    linterType: 'eslint',
+  };
 }
 
-function useDatabase(scenario: string) {
-  cpSync(join(DATABASES_DIR, scenario), WORKING_DATA);
+function git(args: string[]) {
+  execFileSync('git', args, { cwd: REPO_DIR, stdio: 'pipe' });
 }
 
-// The data file is now an array of [id, rules] tuples.
-function readData(): [string, string[]][] {
-  return JSON.parse(readFileSync(WORKING_DATA, 'utf-8')) as [
-    string,
-    string[],
-  ][];
+// Build a git repo whose `main` commit holds the given config, database, and
+// source tree, then switch to `feature` (the branch validate runs against).
+// `seed` writes the source files into the repo before the baseline commit.
+function initRepo({
+  db,
+  config = makeConfig(),
+  seed,
+}: {
+  db: DatabaseContents;
+  config?: ReturnType<typeof makeConfig>;
+  seed: () => void;
+}) {
+  rmSync(REPO_DIR, { recursive: true, force: true });
+  mkdirSync(REPO_DIR, { recursive: true });
+  git(['init', '-b', 'main']);
+  git(['config', 'user.email', 'test@example.com']);
+  git(['config', 'user.name', 'Test']);
+  writeFileSync(join(REPO_DIR, CONFIG_REL), JSON.stringify(config));
+  writeFileSync(WORKING_DATA, JSON.stringify(db));
+  seed();
+  git(['add', '-A']);
+  git(['commit', '-m', 'baseline']);
+  git(['checkout', '-b', 'feature']);
 }
 
-function runValidate(update: boolean) {
-  validate({
-    config: CONFIG_FILE,
-    verbose: false,
-    update,
-    compare: false,
-  });
+// Copy the checked-in fixture sources (real legacy comments for c0nsole1 /
+// debugg02) into the repo's src dir.
+function seedFixtureSources() {
+  cpSync(FIXTURE_SRC, join(REPO_DIR, 'src'), { recursive: true });
+}
+
+// Write a single throwaway source file at src/<name> in the repo.
+function seedSource(name: string, lines: string[]) {
+  const srcDir = join(REPO_DIR, 'src');
+  mkdirSync(srcDir, { recursive: true });
+  writeFileSync(join(srcDir, name), lines.join('\n'));
+}
+
+function loadDbFixture(scenario: string): DatabaseContents {
+  return JSON.parse(
+    readFileSync(join(DATABASES_DIR, scenario), 'utf-8')
+  ) as DatabaseContents;
+}
+
+// The data file is an array of [id, rules] tuples.
+function readData(): DatabaseContents {
+  return JSON.parse(readFileSync(WORKING_DATA, 'utf-8')) as DatabaseContents;
+}
+
+// validate resolves the repo-relative config against cwd, so run it with the repo
+// as cwd. Restore in finally so a throw doesn't strand the suite.
+function runValidate(update = false) {
+  const originalCwd = process.cwd();
+  process.chdir(REPO_DIR);
+  try {
+    validate({ config: CONFIG_REL, verbose: false, update });
+  } finally {
+    process.chdir(originalCwd);
+  }
 }
 
 function mockExit() {
@@ -71,12 +123,13 @@ function mockExit() {
 describe('validate (integration)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    rmSync(WORKING_DATA, { force: true });
-    rmSync(CONFIG_FILE, { force: true });
+    rmSync(REPO_DIR, { recursive: true, force: true });
   });
 
   it('exits with an error when the data file does not exist', () => {
-    writeConfig();
+    initRepo({ db: loadDbFixture('all-used.json'), seed: seedFixtureSources });
+    // readDatabase runs before the compare step, so deleting the working data
+    // file trips the missing-file guard first.
     rmSync(WORKING_DATA, { force: true });
     const exitSpy = mockExit();
     const errorSpy = vi
@@ -84,7 +137,7 @@ describe('validate (integration)', () => {
       .mockImplementation(() => undefined);
 
     expect(() => {
-      runValidate(false);
+      runValidate();
     }).toThrow('process.exit called');
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(errorSpy).toHaveBeenCalledWith(
@@ -93,10 +146,9 @@ describe('validate (integration)', () => {
   });
 
   it('passes cleanly when every database id is found in code', () => {
-    writeConfig();
-    useDatabase('all-used.json');
+    initRepo({ db: loadDbFixture('all-used.json'), seed: seedFixtureSources });
     expect(() => {
-      runValidate(false);
+      runValidate();
     }).not.toThrow();
     // The database is left untouched on a clean run.
     expect(readData()).toEqual([
@@ -107,8 +159,10 @@ describe('validate (integration)', () => {
 
   describe('when a legacied error was fixed (an unused id remains)', () => {
     it('rewrites the database with only the used ids when --update is set', () => {
-      writeConfig();
-      useDatabase('has-unused.json');
+      initRepo({
+        db: loadDbFixture('has-unused.json'),
+        seed: seedFixtureSources,
+      });
       vi.spyOn(console, 'info').mockImplementation(() => undefined);
       runValidate(true);
       // unused01 is dropped; the surviving ids keep their recorded rules.
@@ -119,15 +173,17 @@ describe('validate (integration)', () => {
     });
 
     it('exits with an error and leaves the database untouched without --update', () => {
-      writeConfig();
-      useDatabase('has-unused.json');
+      initRepo({
+        db: loadDbFixture('has-unused.json'),
+        seed: seedFixtureSources,
+      });
       const exitSpy = mockExit();
       const errorSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => undefined);
 
       expect(() => {
-        runValidate(false);
+        runValidate();
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
       expect(errorSpy).toHaveBeenCalled();
@@ -140,15 +196,17 @@ describe('validate (integration)', () => {
   });
 
   it('exits with an error when code references an unregistered id', () => {
-    writeConfig();
-    useDatabase('unregistered.json');
+    initRepo({
+      db: loadDbFixture('unregistered.json'),
+      seed: seedFixtureSources,
+    });
     const exitSpy = mockExit();
     const errorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
 
     expect(() => {
-      runValidate(false);
+      runValidate();
     }).toThrow('process.exit called');
     expect(exitSpy).toHaveBeenCalledWith(1);
     // debugg02 is not registered in the database, so its comment is reported.
@@ -159,48 +217,22 @@ describe('validate (integration)', () => {
 
   // A malformed legacy comment takes a different validate branch than an
   // unregistered id: parseDisableComment records the error before validateIds
-  // ever runs. This drives that path end-to-end through validate(). The project
-  // is built in a temp dir so the malformed source never lives in the shared
-  // fixture (which other tests and the smoke test expect to stay clean).
+  // ever runs. This drives that path end-to-end through validate().
   describe('with a malformed legacy comment', () => {
-    const MALFORMED_PROJECT = join(tmpdir(), 'lint-legacies-malformed-project');
-    const MALFORMED_SRC = join(MALFORMED_PROJECT, 'src');
-    const MALFORMED_FILE = join(MALFORMED_SRC, 'bad.ts');
-    const MALFORMED_CONFIG = join(
-      MALFORMED_PROJECT,
-      'legacy-lint.config.jsonc'
-    );
-    const MALFORMED_DATA = join(MALFORMED_PROJECT, 'legacy-lint.data.json');
-
-    afterEach(() => {
-      rmSync(MALFORMED_PROJECT, { recursive: true, force: true });
-    });
-
     it('exits 1 and reports the malformed comment with its file and line', () => {
-      mkdirSync(MALFORMED_SRC, { recursive: true });
-      writeFileSync(MALFORMED_DATA, JSON.stringify([]));
-      writeFileSync(
-        MALFORMED_CONFIG,
-        JSON.stringify({
-          ignoreWarnings: false,
-          pragma: DEFAULT_PRAGMA,
-          databaseFile: MALFORMED_DATA,
-          nonDisableableRules: [],
-          compareBranch: 'main',
-          linterType: 'eslint',
-        })
-      );
-      // A 7-char id; the parser requires exactly 8, so this is malformed.
-      writeFileSync(
-        MALFORMED_FILE,
-        [
-          'export function logSomething(): void {',
-          `  // eslint-disable-next-line no-console -- ${DEFAULT_PRAGMA} (no-console) tooshrt`,
-          "  console.log('x');",
-          '}',
-          '',
-        ].join('\n')
-      );
+      initRepo({
+        db: [],
+        // A 7-char id; the parser requires exactly 8, so this is malformed.
+        seed: () => {
+          seedSource('bad.ts', [
+            'export function logSomething(): void {',
+            `  // eslint-disable-next-line no-console -- ${DEFAULT_PRAGMA} (no-console) tooshrt`,
+            "  console.log('x');",
+            '}',
+            '',
+          ]);
+        },
+      });
 
       const exitSpy = mockExit();
       const errorSpy = vi
@@ -208,12 +240,7 @@ describe('validate (integration)', () => {
         .mockImplementation(() => undefined);
 
       expect(() => {
-        validate({
-          config: MALFORMED_CONFIG,
-          verbose: false,
-          update: false,
-          compare: false,
-        });
+        runValidate();
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
       // Errors are grouped under a per-file header (relative to the config's
@@ -230,62 +257,29 @@ describe('validate (integration)', () => {
 
   // A plain (non-legacy) disable comment takes the else branch of validate's
   // comment-collection loop: it is gathered into nonLegacyComments and only
-  // reported when it disables a non-disableable rule. The project is built in a
-  // temp dir so these throwaway sources never touch the shared fixture.
+  // reported when it disables a non-disableable rule.
   describe('with a non-legacy disable comment', () => {
-    const NONLEGACY_PROJECT = join(tmpdir(), 'lint-legacies-nonlegacy-project');
-    const NONLEGACY_SRC = join(NONLEGACY_PROJECT, 'src');
-    const NONLEGACY_FILE = join(NONLEGACY_SRC, 'plain.ts');
-    const NONLEGACY_CONFIG = join(
-      NONLEGACY_PROJECT,
-      'legacy-lint.config.jsonc'
-    );
-    const NONLEGACY_DATA = join(NONLEGACY_PROJECT, 'legacy-lint.data.json');
-
     function setup(nonDisableableRules: string[]) {
-      mkdirSync(NONLEGACY_SRC, { recursive: true });
-      writeFileSync(NONLEGACY_DATA, JSON.stringify([]));
-      writeFileSync(
-        NONLEGACY_CONFIG,
-        JSON.stringify({
-          ignoreWarnings: false,
-          pragma: DEFAULT_PRAGMA,
-          databaseFile: NONLEGACY_DATA,
-          nonDisableableRules,
-          compareBranch: 'main',
-          linterType: 'eslint',
-        })
-      );
-      // A regular disable comment with no legacy pragma.
-      writeFileSync(
-        NONLEGACY_FILE,
-        [
-          'export function logSomething(): void {',
-          '  // eslint-disable-next-line no-console',
-          "  console.log('x');",
-          '}',
-          '',
-        ].join('\n')
-      );
-    }
-
-    function runNonLegacyValidate() {
-      validate({
-        config: NONLEGACY_CONFIG,
-        verbose: false,
-        update: false,
-        compare: false,
+      initRepo({
+        db: [],
+        config: makeConfig(nonDisableableRules),
+        // A regular disable comment with no legacy pragma.
+        seed: () => {
+          seedSource('plain.ts', [
+            'export function logSomething(): void {',
+            '  // eslint-disable-next-line no-console',
+            "  console.log('x');",
+            '}',
+            '',
+          ]);
+        },
       });
     }
-
-    afterEach(() => {
-      rmSync(NONLEGACY_PROJECT, { recursive: true, force: true });
-    });
 
     it('passes cleanly when the disabled rule is not non-disableable', () => {
       setup([]);
       expect(() => {
-        runNonLegacyValidate();
+        runValidate();
       }).not.toThrow();
     });
 
@@ -297,7 +291,7 @@ describe('validate (integration)', () => {
         .mockImplementation(() => undefined);
 
       expect(() => {
-        runNonLegacyValidate();
+        runValidate();
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
       expect(errorSpy).toHaveBeenCalledWith(
@@ -308,66 +302,29 @@ describe('validate (integration)', () => {
 
   // A blanket disable (no rule list) is caught in parseComments, before any id
   // validation runs: it is rejected outright whenever any rule is
-  // non-disableable, since it would silently turn those rules off. The project
-  // is built in a temp dir so these throwaway sources never touch the shared
-  // fixture.
+  // non-disableable, since it would silently turn those rules off.
   describe('with a disable-all comment', () => {
-    const DISABLE_ALL_PROJECT = join(
-      tmpdir(),
-      'lint-legacies-disable-all-project'
-    );
-    const DISABLE_ALL_SRC = join(DISABLE_ALL_PROJECT, 'src');
-    const DISABLE_ALL_FILE = join(DISABLE_ALL_SRC, 'blanket.ts');
-    const DISABLE_ALL_CONFIG = join(
-      DISABLE_ALL_PROJECT,
-      'legacy-lint.config.jsonc'
-    );
-    const DISABLE_ALL_DATA = join(DISABLE_ALL_PROJECT, 'legacy-lint.data.json');
-
     function setup(nonDisableableRules: string[]) {
-      mkdirSync(DISABLE_ALL_SRC, { recursive: true });
-      writeFileSync(DISABLE_ALL_DATA, JSON.stringify([]));
-      writeFileSync(
-        DISABLE_ALL_CONFIG,
-        JSON.stringify({
-          ignoreWarnings: false,
-          pragma: DEFAULT_PRAGMA,
-          databaseFile: DISABLE_ALL_DATA,
-          nonDisableableRules,
-          compareBranch: 'main',
-          linterType: 'eslint',
-        })
-      );
-      // A blanket disable with no rule list.
-      writeFileSync(
-        DISABLE_ALL_FILE,
-        [
-          '/* eslint-disable */',
-          'export function logSomething(): void {',
-          "  console.log('x');",
-          '}',
-          '',
-        ].join('\n')
-      );
-    }
-
-    function runDisableAllValidate() {
-      validate({
-        config: DISABLE_ALL_CONFIG,
-        verbose: false,
-        update: false,
-        compare: false,
+      initRepo({
+        db: [],
+        config: makeConfig(nonDisableableRules),
+        // A blanket disable with no rule list.
+        seed: () => {
+          seedSource('blanket.ts', [
+            '/* eslint-disable */',
+            'export function logSomething(): void {',
+            "  console.log('x');",
+            '}',
+            '',
+          ]);
+        },
       });
     }
-
-    afterEach(() => {
-      rmSync(DISABLE_ALL_PROJECT, { recursive: true, force: true });
-    });
 
     it('passes cleanly when no rules are non-disableable', () => {
       setup([]);
       expect(() => {
-        runDisableAllValidate();
+        runValidate();
       }).not.toThrow();
     });
 
@@ -379,7 +336,7 @@ describe('validate (integration)', () => {
         .mockImplementation(() => undefined);
 
       expect(() => {
-        runDisableAllValidate();
+        runValidate();
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
       expect(errorSpy).toHaveBeenCalledWith(
@@ -391,36 +348,17 @@ describe('validate (integration)', () => {
   // A file that fails to parse must fail validation outright: otherwise a user
   // could hide a disable of a non-disableable rule inside a file oxc can't even
   // read. getFileComments records the parser error and validate exits before any
-  // id checks run. The project is built in a temp dir so the broken source never
-  // touches the shared fixture.
+  // id checks run.
   describe('with a syntax error', () => {
-    const SYNTAX_PROJECT = join(tmpdir(), 'lint-legacies-syntax-project');
-    const SYNTAX_SRC = join(SYNTAX_PROJECT, 'src');
-    const SYNTAX_FILE = join(SYNTAX_SRC, 'broken.ts');
-    const SYNTAX_CONFIG = join(SYNTAX_PROJECT, 'legacy-lint.config.jsonc');
-    const SYNTAX_DATA = join(SYNTAX_PROJECT, 'legacy-lint.data.json');
-
-    afterEach(() => {
-      rmSync(SYNTAX_PROJECT, { recursive: true, force: true });
-    });
-
     it('exits 1 and reports the parse error', () => {
-      mkdirSync(SYNTAX_SRC, { recursive: true });
-      writeFileSync(SYNTAX_DATA, JSON.stringify([]));
-      writeFileSync(
-        SYNTAX_CONFIG,
-        JSON.stringify({
-          ignoreWarnings: false,
-          pragma: DEFAULT_PRAGMA,
-          databaseFile: SYNTAX_DATA,
-          nonDisableableRules: [],
-          compareBranch: 'main',
-          linterType: 'eslint',
-        })
-      );
-      // The bad `;` (no initializer expression) sits on the second line, so oxc
-      // cannot parse it and reports the error against that line.
-      writeFileSync(SYNTAX_FILE, 'export const x = 1;\nconst y = ;\n');
+      initRepo({
+        db: [],
+        // The bad `;` (no initializer expression) sits on the second line, so oxc
+        // cannot parse it and reports the error against that line.
+        seed: () => {
+          seedSource('broken.ts', ['export const x = 1;', 'const y = ;', '']);
+        },
+      });
 
       const exitSpy = mockExit();
       const errorSpy = vi
@@ -428,12 +366,7 @@ describe('validate (integration)', () => {
         .mockImplementation(() => undefined);
 
       expect(() => {
-        validate({
-          config: SYNTAX_CONFIG,
-          verbose: false,
-          update: false,
-          compare: false,
-        });
+        runValidate();
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
       // The error is grouped under the file header (relative to rootDir) and
@@ -446,97 +379,38 @@ describe('validate (integration)', () => {
     });
   });
 
-  // --compare reads the config and database from another branch via `git show`,
-  // so unlike the other cases this project must be a real git repo. It commits a
-  // baseline on `main`, then adds a new legacy id on `feature` that does not
-  // exist on `main` -- exactly the drift --compare is meant to reject. This
-  // drives the `if (compare)` branch of validate() end-to-end. Paths are
-  // repo-relative and validate runs with the repo as cwd because `git show`
-  // only accepts repo-relative paths.
-  describe('with --compare', () => {
-    const COMPARE_PROJECT = join(tmpdir(), 'lint-legacies-compare-project');
-    const COMPARE_SRC = join(COMPARE_PROJECT, 'src');
-    const COMPARE_FILE = join(COMPARE_SRC, 'uses.ts');
-    const CONFIG_REL = 'legacy-lint.config.jsonc';
-    const DATA_REL = 'legacy-lint.data.json';
-
-    const COMPARE_CONFIG = {
-      ignoreWarnings: false,
-      pragma: DEFAULT_PRAGMA,
-      databaseFile: DATA_REL,
-      nonDisableableRules: [],
-      compareBranch: 'main',
-      linterType: 'eslint',
-    };
-
-    function git(args: string[]) {
-      execFileSync('git', args, { cwd: COMPARE_PROJECT, stdio: 'pipe' });
-    }
-
-    function setup() {
-      mkdirSync(COMPARE_SRC, { recursive: true });
-      git(['init', '-b', 'main']);
-      git(['config', 'user.email', 'test@example.com']);
-      git(['config', 'user.name', 'Test']);
+  // validate always compares the current database against the compare branch, so
+  // a database that has drifted from main -- here a legacy id absent from main --
+  // must be rejected. The baseline is committed on main, then feature diverges by
+  // registering the new id (plus a matching source comment so it is found in code,
+  // leaving the compare check as the only error).
+  describe('compare drift', () => {
+    it('exits 1 and reports a new legacy id that is absent from the compare branch', () => {
+      initRepo({
+        db: [],
+        seed: () => {
+          seedSource('uses.ts', ['export const noop = true;', '']);
+        },
+      });
       writeFileSync(
-        join(COMPARE_PROJECT, CONFIG_REL),
-        JSON.stringify(COMPARE_CONFIG)
-      );
-      writeFileSync(join(COMPARE_PROJECT, DATA_REL), JSON.stringify([]));
-      writeFileSync(COMPARE_FILE, 'export const noop = true;\n');
-      git(['add', '-A']);
-      git(['commit', '-m', 'baseline']);
-      git(['checkout', '-b', 'feature']);
-
-      // On feature, register a new legacy id (absent from main's database) plus a
-      // matching source comment so it is found in code -- leaving the compare
-      // check as the only error rather than an unregistered/unused-id error.
-      writeFileSync(
-        join(COMPARE_PROJECT, DATA_REL),
+        WORKING_DATA,
         JSON.stringify([['newid001', ['no-console']]])
       );
-      writeFileSync(
-        COMPARE_FILE,
-        [
-          'export function logSomething(): void {',
-          `  // eslint-disable-next-line no-console -- ${DEFAULT_PRAGMA} (no-console) newid001`,
-          "  console.log('x');",
-          '}',
-          '',
-        ].join('\n')
-      );
-    }
+      seedSource('uses.ts', [
+        'export function logSomething(): void {',
+        `  // eslint-disable-next-line no-console -- ${DEFAULT_PRAGMA} (no-console) newid001`,
+        "  console.log('x');",
+        '}',
+        '',
+      ]);
 
-    // validate resolves the repo-relative config path against cwd, so run it with
-    // the repo as cwd. Restore in finally so a throw doesn't strand the suite.
-    function runCompareValidate() {
-      const originalCwd = process.cwd();
-      process.chdir(COMPARE_PROJECT);
-      try {
-        validate({
-          config: CONFIG_REL,
-          verbose: false,
-          update: false,
-          compare: true,
-        });
-      } finally {
-        process.chdir(originalCwd);
-      }
-    }
-
-    afterEach(() => {
-      rmSync(COMPARE_PROJECT, { recursive: true, force: true });
-    });
-
-    it('exits 1 and reports a new legacy id that is absent from the compare branch', () => {
-      setup();
       const exitSpy = mockExit();
       const errorSpy = vi
         .spyOn(console, 'error')
         .mockImplementation(() => undefined);
 
       expect(() => {
-        runCompareValidate();
+        runValidate();
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
       expect(errorSpy).toHaveBeenCalledWith(

@@ -28,10 +28,6 @@ const program = new Command()
 addCommonOptions(program.command('validate'))
   .description('Validate that legacied lint errors are still accurate')
   .option('--update', 'update the database', false)
-  .option(
-    '--no-compare',
-    "Disable comparing the current database with the compare branch's database"
-  )
   .action((options) => {
     validate(options);
   });
