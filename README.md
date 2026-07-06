@@ -7,7 +7,7 @@ A tool for enabling ESLint/Oxlint rules on codebases with legacy errors
 ## Stuff to mention
 
 To legacy new rules (say cause you added new lint rules to the config): Disable
-the CI check in the PR that re-legacies, then disable in follow up PR
+the CI check in the PR that re-legacies, then re-enable in follow up PR
 
 ## Known limitations
 
