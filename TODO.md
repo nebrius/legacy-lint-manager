@@ -1,4 +1,3 @@
-- ESLint suppots another version of inline config that looks like `/* eslint "example/rule1": "error" */`, and you need to support. Oxlint has no equivalent
 - Now that rules are tracked in the database, we need to have validate --update prune rules from legacy statements that still contain other valid rules
 - Bug report:
 

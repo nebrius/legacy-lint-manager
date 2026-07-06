@@ -13,3 +13,4 @@ A tool for enabling ESLint/Oxlint rules on codebases with legacy errors
 - If a user completely fixes all lint violations on line with a legacy comment, and then copies that legacy comment to a new location and introduces new violations, those new violations would be considered a move of the existing legacy comment, not a new violation
 - Non JS/JSX/TS/TSX files are not analyzed (e.g. Vue, Svelte, etc. files)
 - Legacy comments (and eslint-disable comments generally) are not vetted against current failures. I strongly recommend you use the `--report-unused-disable-directives` CLI flag to fail in order to keep legacy comments up to date.
+- In-file ESLint configurations (e.g. `/* eslint "example/rule1": "error" */`) are not supported and will cause an error. If you use this pattern, you will need to remove the comments and move them to the ESLint config file instead.

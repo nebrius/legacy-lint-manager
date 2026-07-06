@@ -342,7 +342,7 @@ describe('validate (integration)', () => {
       writeFileSync(
         DISABLE_ALL_FILE,
         [
-          '// eslint-disable',
+          '/* eslint-disable */',
           'export function logSomething(): void {',
           "  console.log('x');",
           '}',

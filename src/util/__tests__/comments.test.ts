@@ -16,6 +16,19 @@ function parseErrors(fileContents: string, filePath = 'test.ts') {
   return validationErrors;
 }
 
+// Returns both the parsed comments and the accumulated validation errors from a
+// single parse, so the config-rejection path can assert that a comment was
+// dropped and an error recorded together.
+function parseBoth(fileContents: string, filePath = 'test.ts') {
+  const validationErrors: ValidationError[] = [];
+  const { comments } = getFileComments({
+    filePath,
+    fileContents,
+    validationErrors,
+  });
+  return { comments, validationErrors };
+}
+
 describe('Comment parsing', () => {
   describe('line comments', () => {
     it('parses a single-rule eslint-disable-line comment', () => {
@@ -76,18 +89,17 @@ describe('Comment parsing', () => {
       ]);
     });
 
-    it('represents a bare disable directive with no specific rules', () => {
-      expect(parse('// eslint-disable')).toEqual([
-        {
-          rules: [],
-          disabledAll: true,
-          comment: undefined,
-          file: 'test.ts',
-          startLine: 0,
-          endLine: 0,
-          type: 'block',
-        },
-      ]);
+    it('ignores line-form eslint-disable (block-only directive, per ESLint)', () => {
+      // ESLint honors plain eslint-disable only as a block comment; as a line
+      // comment it is not a directive at all — no disable, and no error.
+      expect(parseBoth('// eslint-disable')).toEqual({
+        comments: [],
+        validationErrors: [],
+      });
+      expect(parseBoth('// eslint-disable no-console')).toEqual({
+        comments: [],
+        validationErrors: [],
+      });
     });
 
     it('matches the longest prefix first (eslint-disable-next-line)', () => {
@@ -301,6 +313,154 @@ describe('Comment parsing', () => {
       expect(comment.startLine).toBe(0);
       expect(comment.endLine).toBe(1);
       expect(comment.type).toBe('block');
+    });
+
+    it('represents a bare disable-all directive with no specific rules', () => {
+      expect(parse('/* eslint-disable */')).toEqual([
+        {
+          rules: [],
+          disabledAll: true,
+          comment: undefined,
+          file: 'test.ts',
+          startLine: 0,
+          endLine: 0,
+          type: 'block',
+        },
+      ]);
+    });
+
+    it('honors a block-form eslint-disable-next-line', () => {
+      // ESLint accepts -line / -next-line directives as either line or block
+      // comments; only plain eslint-disable is block-only.
+      expect(parse('/* eslint-disable-next-line no-console */')).toEqual([
+        {
+          rules: ['no-console'],
+          disabledAll: false,
+          comment: undefined,
+          file: 'test.ts',
+          startLine: 0,
+          endLine: 0,
+          type: 'next-line',
+        },
+      ]);
+    });
+
+    it('honors a block-form eslint-disable-line', () => {
+      expect(parse('/* eslint-disable-line no-console */')).toEqual([
+        {
+          rules: ['no-console'],
+          disabledAll: false,
+          comment: undefined,
+          file: 'test.ts',
+          startLine: 0,
+          endLine: 0,
+          type: 'same-line',
+        },
+      ]);
+    });
+
+    it('honors a block-form oxlint-disable-next-line (Oxlint has no comment-form restriction)', () => {
+      expect(parse('/* oxlint-disable-next-line no-console */')).toEqual([
+        {
+          rules: ['no-console'],
+          disabledAll: false,
+          comment: undefined,
+          file: 'test.ts',
+          startLine: 0,
+          endLine: 0,
+          type: 'next-line',
+        },
+      ]);
+    });
+  });
+
+  describe('eslint configuration comments', () => {
+    // `/* eslint rule: severity */` comments configure rules inline. They are
+    // rare, legacy, and ESLint's own parser is partially broken, so we reject
+    // them outright and force the author to remove them.
+    const REJECT_MESSAGE = 'ESLint configuration comments are not supported';
+
+    it('rejects a single-rule config comment and records its location', () => {
+      expect(parseBoth('/* eslint no-console: 0 */')).toEqual({
+        comments: [],
+        validationErrors: [
+          {
+            message: REJECT_MESSAGE,
+            location: { file: 'test.ts', line: 0 },
+          },
+        ],
+      });
+    });
+
+    it('rejects the quoted, plugin-scoped form from the ESLint docs', () => {
+      const { comments, validationErrors } = parseBoth(
+        '/* eslint "example/rule1": "error" */'
+      );
+      expect(comments).toEqual([]);
+      expect(validationErrors).toHaveLength(1);
+      expect(validationErrors[0].message).toBe(REJECT_MESSAGE);
+    });
+
+    it('rejects a multi-rule config comment', () => {
+      const { comments, validationErrors } = parseBoth(
+        '/* eslint no-console: 0, no-debugger: 0 */'
+      );
+      expect(comments).toEqual([]);
+      expect(validationErrors).toHaveLength(1);
+      expect(validationErrors[0].message).toBe(REJECT_MESSAGE);
+    });
+
+    it('detects the directive when a tab separates it from the config', () => {
+      // Detection matches `eslint\s`, not a literal space, so a tab-separated
+      // config comment is still caught (ESLint treats it as a directive too).
+      const { comments, validationErrors } = parseBoth(
+        '/* eslint\tno-console: 0 */'
+      );
+      expect(comments).toEqual([]);
+      expect(validationErrors).toHaveLength(1);
+      expect(validationErrors[0].message).toBe(REJECT_MESSAGE);
+    });
+
+    it('ignores a line-form eslint config comment (block-only, per ESLint)', () => {
+      // ESLint only treats `/* eslint ... */` block comments as config
+      // directives; a `// eslint ...` line comment is an ordinary comment, so
+      // it is neither parsed nor rejected.
+      expect(parseBoth('// eslint no-console: 0')).toEqual({
+        comments: [],
+        validationErrors: [],
+      });
+    });
+
+    it('anchors the rejection error to the config comment line', () => {
+      const contents = ['const x = 1;', '/* eslint no-console: 0 */'].join(
+        '\n'
+      );
+      const { validationErrors } = parseBoth(contents);
+      expect(validationErrors).toHaveLength(1);
+      expect(validationErrors[0].location).toEqual({
+        file: 'test.ts',
+        line: 1,
+      });
+    });
+
+    it('does not flag a disable directive as a config comment', () => {
+      // `/* eslint-disable ... */` starts with "eslint-", not "eslint ", so it
+      // must parse as a disable and never be rejected as a config comment.
+      const { comments, validationErrors } = parseBoth(
+        '/* eslint-disable no-console */'
+      );
+      expect(validationErrors).toEqual([]);
+      expect(comments).toEqual([
+        {
+          rules: ['no-console'],
+          disabledAll: false,
+          comment: undefined,
+          file: 'test.ts',
+          startLine: 0,
+          endLine: 0,
+          type: 'block',
+        },
+      ]);
     });
   });
 

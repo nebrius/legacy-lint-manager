@@ -1,3 +1,4 @@
+import type { Comment as OxcComment } from 'oxc-parser';
 import { parseSync } from 'oxc-parser';
 
 import type { Comment, ValidationError } from './types.js';
@@ -56,35 +57,66 @@ export function getFileComments({
   }
 
   const commentsList: Comment[] = [];
-  for (const comment of comments) {
-    const parsedComment = parseCommentText(
-      comment.value.trim().replaceAll('\n', ' ')
-    );
+  for (const rawComment of comments) {
+    const parsedComment = parseCommentText({
+      filePath,
+      rawComment,
+      validationErrors,
+      lineStartMapping,
+    });
     if (parsedComment) {
-      commentsList.push({
-        ...parsedComment,
-        file: filePath,
-        startLine: getLineFromIndex({
-          index: comment.start,
-          lineStartMapping,
-        }),
-        endLine: getLineFromIndex({
-          index: comment.end,
-          lineStartMapping,
-        }),
-      });
+      commentsList.push(parsedComment);
     }
   }
   return { comments: commentsList, program, lineStartMapping };
 }
 
-function parseCommentText(
-  text: string
-): Omit<Comment, 'file' | 'startLine' | 'endLine'> | undefined {
+function parseCommentText({
+  filePath,
+  rawComment,
+  validationErrors,
+  lineStartMapping,
+}: {
+  filePath: string;
+  lineStartMapping: number[];
+  rawComment: OxcComment;
+  validationErrors: ValidationError[];
+}): Comment | undefined {
+  let text: string = rawComment.value.trim().replaceAll('\n', ' ');
+
+  // Check if this is an ESLint configuration line that has the shape:
+  // `/* eslint "example/rule1": "error" */`
+  //
+  // These are very rarely used, and almost entirely in very old code dating to
+  // the early days of ESLint. So instead of trying to parse them (which is very
+  // complicated, and ESLint's own implementation is partially broken), we just
+  // report them as an outright error and force the user to remove it.
+  if (text.match(/^eslint\s/) && rawComment.type === 'Block') {
+    validationErrors.push({
+      message: 'ESLint configuration comments are not supported',
+      location: {
+        file: filePath,
+        line: getLineFromIndex({
+          index: rawComment.start,
+          lineStartMapping,
+        }),
+      },
+    });
+    return undefined;
+  }
+
   // Strip out the disable prefix, if this comment is indeed a disable comment
   let prefixType: Comment['type'] | undefined;
   for (const [prefix, type] of DISABLE_PREFIXES) {
     if (text.startsWith(prefix)) {
+      // First check if this is an ESLint comment, which restricts which types
+      // of prefixes are valid in certain comment types, and otherwise ignores
+      // them, so we duplicate that logic here
+      if (prefix.startsWith('eslint')) {
+        if (type === 'block' && rawComment.type !== 'Block') {
+          continue;
+        }
+      }
       const strippedText = text.substring(prefix.length);
 
       // We have to make sure that the first character in the remaining text is
@@ -120,7 +152,21 @@ function parseCommentText(
     .filter((rule) => rule.length > 0);
   const comment = commentParts[1]?.trim();
 
-  return { type: prefixType, rules, disabledAll: rules.length === 0, comment };
+  return {
+    type: prefixType,
+    rules,
+    disabledAll: rules.length === 0,
+    comment,
+    file: filePath,
+    startLine: getLineFromIndex({
+      index: rawComment.start,
+      lineStartMapping,
+    }),
+    endLine: getLineFromIndex({
+      index: rawComment.end,
+      lineStartMapping,
+    }),
+  };
 }
 
 export function getLineFromIndex({

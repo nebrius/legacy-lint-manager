@@ -63,7 +63,7 @@ describe('parseComments', () => {
     it('records an error and skips a blanket disable when rules are non-disableable', () => {
       const { legacyComments, nonLegacyComments, validationErrors } = callParse(
         {
-          sources: { 'a.ts': '// eslint-disable\n' },
+          sources: { 'a.ts': '/* eslint-disable */\n' },
           nonDisableableRules: ['no-console'],
         }
       );
@@ -81,7 +81,9 @@ describe('parseComments', () => {
 
     it('reports the guard error on the line the blanket disable sits on', () => {
       const { validationErrors } = callParse({
-        sources: { 'a.ts': 'const x = 1;\nconst y = 2;\n// eslint-disable\n' },
+        sources: {
+          'a.ts': 'const x = 1;\nconst y = 2;\n/* eslint-disable */\n',
+        },
         nonDisableableRules: ['no-console'],
       });
       expect(validationErrors).toEqual([
@@ -94,7 +96,7 @@ describe('parseComments', () => {
 
     it('allows a blanket disable when no rules are non-disableable', () => {
       const { nonLegacyComments, validationErrors } = callParse({
-        sources: { 'a.ts': '// eslint-disable\n' },
+        sources: { 'a.ts': '/* eslint-disable */\n' },
         nonDisableableRules: [],
       });
       // With nothing marked non-disableable the blanket disable is a normal
@@ -135,7 +137,7 @@ describe('parseComments', () => {
       const { legacyComments, nonLegacyComments, validationErrors } = callParse(
         {
           sources: {
-            'a.ts': `// eslint-disable -- ${DEFAULT_PRAGMA} (no-console) a1b2c3d4\n`,
+            'a.ts': `/* eslint-disable -- ${DEFAULT_PRAGMA} (no-console) a1b2c3d4 */\n`,
           },
           nonDisableableRules: ['no-console'],
         }
@@ -157,7 +159,7 @@ describe('parseComments', () => {
         { message: 'pre-existing', location: { file: 'x.ts', line: 9 } },
       ];
       callParse({
-        sources: { 'a.ts': '// eslint-disable\n' },
+        sources: { 'a.ts': '/* eslint-disable */\n' },
         nonDisableableRules: ['no-console'],
         validationErrors,
       });
@@ -216,7 +218,7 @@ describe('parseComments', () => {
       const { legacyComments, nonLegacyComments, validationErrors } = callParse(
         {
           sources: {
-            'a.ts': `// eslint-disable no-console -- ${DEFAULT_PRAGMA} (no-console) a1b2c3d4\nconsole.log('hi');\n`,
+            'a.ts': `/* eslint-disable no-console -- ${DEFAULT_PRAGMA} (no-console) a1b2c3d4 */\nconsole.log('hi');\n`,
           },
         }
       );
@@ -273,7 +275,7 @@ describe('parseComments', () => {
       const { legacyComments, nonLegacyComments, validationErrors } = callParse(
         {
           sources: {
-            'a.ts': '// eslint-disable\n',
+            'a.ts': '/* eslint-disable */\n',
             'b.ts': `${legacyDirective('no-console', 'a1b2c3d4')}\n`,
           },
           nonDisableableRules: ['no-console'],
