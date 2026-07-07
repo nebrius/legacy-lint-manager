@@ -158,7 +158,10 @@ describe('parseDisableComment', () => {
       it('parses a single-rule legacy comment', () => {
         const validationErrors: ValidationError[] = [];
         const result = parseDisableComment({
-          comment: makeComment({ comment: legacy('no-console') }),
+          comment: makeComment({
+            rules: ['no-console'],
+            comment: legacy('no-console'),
+          }),
           pragma,
           validationErrors,
         });
@@ -177,7 +180,10 @@ describe('parseDisableComment', () => {
       it('parses multiple comma-separated rules', () => {
         const validationErrors: ValidationError[] = [];
         const result = parseDisableComment({
-          comment: makeComment({ comment: legacy('no-console,no-debugger') }),
+          comment: makeComment({
+            rules: ['no-console', 'no-debugger'],
+            comment: legacy('no-console,no-debugger'),
+          }),
           pragma,
           validationErrors,
         });
@@ -192,6 +198,7 @@ describe('parseDisableComment', () => {
         const validationErrors: ValidationError[] = [];
         const result = parseDisableComment({
           comment: makeComment({
+            rules: ['no-console', 'no-debugger'],
             comment: legacy(' no-console ,  no-debugger '),
           }),
           pragma,
@@ -207,7 +214,10 @@ describe('parseDisableComment', () => {
       it('accepts an id containing mixed-case letters, digits, and underscores/dashes', () => {
         const validationErrors: ValidationError[] = [];
         const result = parseDisableComment({
-          comment: makeComment({ comment: legacy('no-console', 'Ab2_Cd-4') }),
+          comment: makeComment({
+            rules: ['no-console'],
+            comment: legacy('no-console', 'Ab2_Cd-4'),
+          }),
           pragma,
           validationErrors,
         });
@@ -219,6 +229,7 @@ describe('parseDisableComment', () => {
         const validationErrors: ValidationError[] = [];
         const result = parseDisableComment({
           comment: makeComment({
+            rules: ['no-console'],
             comment: legacy('no-console'),
             file: 'src/foo/bar.ts',
             startLine: 42,
@@ -420,6 +431,180 @@ describe('parseDisableComment', () => {
         ]);
       });
     });
+
+    describe('rules named in the comment but absent from the directive', () => {
+      // The pragma may only legacy rules the directive actually disables. A rule
+      // named in the pragma but missing from the directive's disable list is
+      // stripped from legaciedRules and reported. Empty entries (from `()`, a
+      // trailing/double comma, or whitespace) are dropped silently instead. If
+      // nothing survives, the whole comment is rejected.
+      const NOT_IN_LIST = (rule: string) =>
+        `Rule ${rule} in legacy comment is not in the actual lint disable list and should be removed.`;
+      const NO_VALID_RULES =
+        'Legacy comment has no valid rules and should be removed';
+
+      describe('partial drop (some rules survive)', () => {
+        it('strips a foreign rule and reports it while keeping the valid rule legacied', () => {
+          const validationErrors: ValidationError[] = [];
+          const result = parseDisableComment({
+            comment: makeComment({
+              rules: ['foo'],
+              comment: legacy('foo, bar'),
+              file: 'src/app.ts',
+              startLine: 12,
+              endLine: 12,
+            }),
+            pragma,
+            validationErrors,
+          });
+          expect(result).toEqual({
+            type: 'legacy',
+            file: 'src/app.ts',
+            startLine: 12,
+            endLine: 12,
+            legaciedRules: ['foo'],
+            nonLegaciedRules: [],
+            id: ID,
+          });
+          expect(validationErrors).toEqual([
+            {
+              message: NOT_IN_LIST('bar'),
+              location: { file: 'src/app.ts', line: 12 },
+            },
+          ]);
+        });
+
+        it('reports one error per foreign rule, in the order they are listed', () => {
+          const validationErrors: ValidationError[] = [];
+          const result = parseDisableComment({
+            comment: makeComment({
+              rules: ['keep'],
+              comment: legacy('keep, extra-one, extra-two'),
+            }),
+            pragma,
+            validationErrors,
+          });
+          expect(result?.type === 'legacy' && result.legaciedRules).toEqual([
+            'keep',
+          ]);
+          expect(validationErrors).toEqual([
+            {
+              message: NOT_IN_LIST('extra-one'),
+              location: { file: 'test.ts', line: 1 },
+            },
+            {
+              message: NOT_IN_LIST('extra-two'),
+              location: { file: 'test.ts', line: 1 },
+            },
+          ]);
+        });
+
+        it('appends the foreign-rule error after any pre-existing errors', () => {
+          const validationErrors: ValidationError[] = [
+            { message: 'pre-existing', location: { file: 'a.ts', line: 1 } },
+          ];
+          parseDisableComment({
+            comment: makeComment({
+              rules: ['keep'],
+              comment: legacy('keep, bogus'),
+              file: 'b.ts',
+              startLine: 2,
+              endLine: 2,
+            }),
+            pragma,
+            validationErrors,
+          });
+          expect(validationErrors).toEqual([
+            { message: 'pre-existing', location: { file: 'a.ts', line: 1 } },
+            {
+              message: NOT_IN_LIST('bogus'),
+              location: { file: 'b.ts', line: 2 },
+            },
+          ]);
+        });
+      });
+
+      describe('empty entries are skipped silently', () => {
+        it('ignores a trailing comma without recording an error', () => {
+          const validationErrors: ValidationError[] = [];
+          const result = parseDisableComment({
+            comment: makeComment({
+              rules: ['no-console'],
+              comment: legacy('no-console,'),
+            }),
+            pragma,
+            validationErrors,
+          });
+          expect(result?.type === 'legacy' && result.legaciedRules).toEqual([
+            'no-console',
+          ]);
+          expect(validationErrors).toEqual([]);
+        });
+
+        it('ignores an empty entry between two valid rules', () => {
+          const validationErrors: ValidationError[] = [];
+          const result = parseDisableComment({
+            comment: makeComment({
+              rules: ['no-console', 'no-debugger'],
+              comment: legacy('no-console, , no-debugger'),
+            }),
+            pragma,
+            validationErrors,
+          });
+          expect(result?.type === 'legacy' && result.legaciedRules).toEqual([
+            'no-console',
+            'no-debugger',
+          ]);
+          expect(validationErrors).toEqual([]);
+        });
+      });
+
+      describe('no valid rules (comment rejected)', () => {
+        it('rejects the comment when every listed rule is foreign, reporting each rule then the summary', () => {
+          const validationErrors: ValidationError[] = [];
+          const result = parseDisableComment({
+            comment: makeComment({
+              rules: [],
+              comment: legacy('bar, baz'),
+              file: 'x.ts',
+              startLine: 7,
+              endLine: 7,
+            }),
+            pragma,
+            validationErrors,
+          });
+          expect(result).toBeUndefined();
+          expect(validationErrors).toEqual([
+            {
+              message: NOT_IN_LIST('bar'),
+              location: { file: 'x.ts', line: 7 },
+            },
+            {
+              message: NOT_IN_LIST('baz'),
+              location: { file: 'x.ts', line: 7 },
+            },
+            { message: NO_VALID_RULES, location: { file: 'x.ts', line: 7 } },
+          ]);
+        });
+
+        it('rejects a single foreign rule with a per-rule error followed by the summary error', () => {
+          const validationErrors: ValidationError[] = [];
+          const result = parseDisableComment({
+            comment: makeComment({ rules: [], comment: legacy('bar') }),
+            pragma,
+            validationErrors,
+          });
+          expect(result).toBeUndefined();
+          expect(validationErrors).toEqual([
+            {
+              message: NOT_IN_LIST('bar'),
+              location: { file: 'test.ts', line: 1 },
+            },
+            { message: NO_VALID_RULES, location: { file: 'test.ts', line: 1 } },
+          ]);
+        });
+      });
+    });
   });
 
   describe('splitting legacied from non-legacied rules', () => {
@@ -462,10 +647,11 @@ describe('parseDisableComment', () => {
       expect(validationErrors).toEqual([]);
     });
 
-    it('only filters the directive rules, so a pragma rule absent from the directive is still legacied', () => {
-      // nonLegaciedRules is derived from the directive's rules, not the pragma's,
-      // so a rule named in the pragma but not disabled by the directive simply
-      // appears in legaciedRules and never in nonLegaciedRules.
+    it('drops a pragma rule absent from the directive and reports it, keeping the surviving rule legacied', () => {
+      // A rule named in the pragma but not disabled by the directive is bogus:
+      // it is stripped from legaciedRules and flagged. The remaining rule that
+      // the directive does disable is still legacied, and because every directive
+      // rule is named in the pragma, nonLegaciedRules stays empty.
       const validationErrors: ValidationError[] = [];
       const result = parseDisableComment({
         comment: makeComment({
@@ -480,24 +666,38 @@ describe('parseDisableComment', () => {
         file: 'test.ts',
         startLine: 1,
         endLine: 1,
-        legaciedRules: ['no-console', 'no-debugger'],
+        legaciedRules: ['no-console'],
         nonLegaciedRules: [],
         id: ID,
       });
-      expect(validationErrors).toEqual([]);
+      expect(validationErrors).toEqual([
+        {
+          message:
+            'Rule no-debugger in legacy comment is not in the actual lint disable list and should be removed.',
+          location: { file: 'test.ts', line: 1 },
+        },
+      ]);
     });
   });
 
   describe('documented edge-case behavior', () => {
-    it('produces a single empty-string rule for an empty rule list', () => {
+    it('rejects an empty rule list, skipping the empty entry silently before failing on no valid rules', () => {
+      // `()` yields a single empty-string entry after splitting. The empty-entry
+      // guard drops it without a per-rule error, leaving nothing legacied, so the
+      // comment is rejected with only the "no valid rules" error.
       const validationErrors: ValidationError[] = [];
       const result = parseDisableComment({
         comment: makeComment({ comment: legacyText('') }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
       });
-      expect(result?.type === 'legacy' && result.legaciedRules).toEqual(['']);
-      expect(validationErrors).toEqual([]);
+      expect(result).toBeUndefined();
+      expect(validationErrors).toEqual([
+        {
+          message: 'Legacy comment has no valid rules and should be removed',
+          location: { file: 'test.ts', line: 1 },
+        },
+      ]);
     });
   });
 });

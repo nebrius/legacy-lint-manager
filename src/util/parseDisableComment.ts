@@ -54,16 +54,51 @@ export function parseDisableComment({
     return undefined;
   }
 
-  const rules = match[1].split(',').map((rule) => rule.trim());
+  const rulesInComment = match[1]
+    .split(',')
+    .map((rule) => rule.trim())
+    .filter((rule) => {
+      // Handle the case where there are no rules in the legacy comment
+      if (!rule) {
+        return false;
+      }
+      // Ensure that the rule in the comment also appears in the actual lint
+      // disable, e.g. that rules on the RHS are also in the LHS
+      if (!comment.rules.includes(rule)) {
+        validationErrors.push({
+          message: `Rule ${rule} in legacy comment is not in the actual lint disable list and should be removed.`,
+          location: {
+            file: comment.file,
+            line: comment.startLine,
+          },
+        });
+        return false;
+      }
+      return true;
+    });
   const id = match[2];
+
+  // Make sure there is at least one valid rule in the legacy comment
+  if (!rulesInComment.length) {
+    validationErrors.push({
+      message: 'Legacy comment has no valid rules and should be removed',
+      location: {
+        file: comment.file,
+        line: comment.startLine,
+      },
+    });
+    return undefined;
+  }
 
   return {
     type: 'legacy',
     file: comment.file,
     startLine: comment.startLine,
     endLine: comment.endLine,
-    legaciedRules: rules,
-    nonLegaciedRules: comment.rules.filter((rule) => !rules.includes(rule)),
+    legaciedRules: rulesInComment,
+    nonLegaciedRules: comment.rules.filter(
+      (rule) => !rulesInComment.includes(rule)
+    ),
     id,
   };
 }

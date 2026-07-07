@@ -1,2 +1,1 @@
-- Now that rules are tracked in the database, we need to have validate --update prune rules from legacy statements that still contain other valid rules
-- Support monorepos with nested config files but single database (perhaps keying by package name with list of enabled rules per-package)
+- Create docs
