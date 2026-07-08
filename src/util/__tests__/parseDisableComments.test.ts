@@ -149,6 +149,12 @@ describe('parseDisableComment', () => {
   describe.each([
     { label: 'the default pragma', pragma: DEFAULT_PRAGMA },
     { label: 'a non-default pragma', pragma: 'CUSTOM LEGACY PRAGMA' },
+    // The pragma is interpolated into a RegExp, so every one of these
+    // metacharacters must be escaped for the whole suite to keep passing.
+    {
+      label: 'a pragma with regex special characters',
+      pragma: 'LEGACY.v1 (do-not-copy)* [KEEP]?',
+    },
   ])('with $label', ({ pragma }) => {
     function legacy(rules: string, id = ID) {
       return legacyText(rules, id, pragma);
@@ -604,6 +610,56 @@ describe('parseDisableComment', () => {
           ]);
         });
       });
+    });
+  });
+
+  describe('regex-special characters in the pragma are escaped', () => {
+    // The pragma is matched via a RegExp, so these guard that the pragma is
+    // treated as literal text rather than a pattern.
+    it('matches a metacharacter in the pragma literally, not as a wildcard', () => {
+      const pragma = 'a.b';
+      const validationErrors: ValidationError[] = [];
+
+      // The '.' must match a literal dot: a comment starting with 'axb' is not
+      // this pragma and is treated as a regular, non-legacy comment.
+      const nonLegacy = parseDisableComment({
+        comment: makeComment({
+          rules: ['no-console'],
+          comment: `axb (no-console) ${ID}`,
+        }),
+        pragma,
+        validationErrors,
+      });
+      expect(nonLegacy?.type).toBe('nonlegacy');
+
+      // The literal pragma still parses as a legacy comment.
+      const legacy = parseDisableComment({
+        comment: makeComment({
+          rules: ['no-console'],
+          comment: `a.b (no-console) ${ID}`,
+        }),
+        pragma,
+        validationErrors,
+      });
+      expect(legacy?.type).toBe('legacy');
+      expect(validationErrors).toEqual([]);
+    });
+
+    it('does not throw when the pragma is not a valid regex on its own', () => {
+      // An unbalanced '[' would make the interpolated RegExp throw if the pragma
+      // were not escaped first.
+      const pragma = 'legacy[pragma';
+      const validationErrors: ValidationError[] = [];
+      const result = parseDisableComment({
+        comment: makeComment({
+          rules: ['no-console'],
+          comment: `${pragma} (no-console) ${ID}`,
+        }),
+        pragma,
+        validationErrors,
+      });
+      expect(result?.type).toBe('legacy');
+      expect(validationErrors).toEqual([]);
     });
   });
 

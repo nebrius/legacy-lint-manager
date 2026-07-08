@@ -8,3 +8,8 @@ export function commaSeparatedStringToArray(str: string): string[] {
       .filter((entry) => entry.length > 0)
   );
 }
+
+// TODO: replace with native RegExp.escape when Node 24 is the minimum
+export function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('-', '\\x2d');
+}

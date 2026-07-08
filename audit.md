@@ -39,12 +39,6 @@ semantics are never observable in the suite.
   with `vi.resetModules()` — its comment even names the hazard ("so the two runs don't
   bleed ids into each other's database") — rather than surfacing it. Matters because
   [src/api.ts](src/api.ts) exports the function publicly.
-- **Pragma is interpolated unescaped into a regex** —
-  [src/util/parseDisableComment.ts:44](src/util/parseDisableComment.ts#L44). A custom
-  pragma containing regex metacharacters (`(`, `*`, `+`, …) would corrupt or break
-  legacy-comment parsing. The tests' custom pragma (`'CUSTOM LEGACY PRAGMA'`) happens to be
-  regex-safe, so the gap is invisible. (The default pragma's `.` merely matches any
-  character — benign.)
 
 ## Uncertain — needs a maintainer's call
 
