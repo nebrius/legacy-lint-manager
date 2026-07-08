@@ -62,9 +62,11 @@ function initRepo({
   git(['checkout', '-b', 'feature']);
 }
 
-// compareWithBranch runs git in process.cwd() and resolves the config/database
-// paths relative to it, so the call must happen with the temp repo as cwd.
-// Restore in finally so a throw doesn't leave the suite pointed at the temp dir.
+// compareWithBranch takes an absolute configFilePath plus the repo rootDir, and
+// shells out to git with rootDir as the cwd, so it no longer depends on
+// process.cwd(). The relative CONFIG_FILE/DB_FILE constants describe the on-disk
+// repo layout; only the value handed to compareWithBranch is made absolute,
+// mirroring how validate.ts resolves and passes them in production.
 function runCompare({
   currentConfig,
   currentDatabase,
@@ -73,18 +75,13 @@ function runCompare({
   currentDatabase: Database;
 }): ValidationError[] {
   const validationErrors: ValidationError[] = [];
-  const originalCwd = process.cwd();
-  process.chdir(REPO_DIR);
-  try {
-    compareWithBranch({
-      currentDatabase,
-      currentConfig,
-      configFilePath: CONFIG_FILE,
-      validationErrors,
-    });
-  } finally {
-    process.chdir(originalCwd);
-  }
+  compareWithBranch({
+    currentDatabase,
+    currentConfig,
+    configFilePath: join(REPO_DIR, CONFIG_FILE),
+    validationErrors,
+    rootDir: REPO_DIR,
+  });
   return validationErrors;
 }
 

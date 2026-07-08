@@ -26,7 +26,7 @@ export function time<T>(label: string, cb: () => T): T {
     void result.then(() => {
       const end = performance.now();
       const roundedDuration = Math.round((end - start) * 10) / 10;
-      debug(`${label}: ${roundedDuration.toLocaleString()}ms`);
+      debug(`Finished ${label}: ${roundedDuration.toLocaleString()}ms`);
     });
   } else {
     const end = performance.now();

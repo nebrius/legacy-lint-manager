@@ -29,41 +29,8 @@ hit this on the first re-run. The
 always seed an **empty** database and run the command exactly once, so the replacement
 semantics are never observable in the suite.
 
-### 2. `validate` cannot work with the CLI's default `--config` path
-
-[src/cli.ts:17](src/cli.ts#L17) defaults `--config` to an **absolute** path
-(`join(process.cwd(), ...)`).
-[src/validate/compareWithBranch.ts:110](src/validate/compareWithBranch.ts#L110)
-interpolates that path into `git show <branch>:<path>`, which only accepts repo-relative
-(or `./`-relative) paths. Verified in this repo: `git show main:/abs/path/README.md` →
-`fatal: path '...' exists on disk, but not in 'main'`. So a bare `legacy-lint-manager
-validate` at the repo root crashes in the compare step with an unhandled `execSync` error.
-
-Both integration tests pass repo-relative config paths with the repo as cwd, and their
-comments show the constraint was known: "git show interpolates these paths directly so they
-must be repo-relative"
-([validate.integration.test.ts:34](src/__tests__/integration/validate.integration.test.ts#L34),
-[compareWithBranch.integration.test.ts:25](src/__tests__/integration/compareWithBranch.integration.test.ts#L25)).
-The tests encode the workaround; the default-flag path is untested.
-
-Related path inconsistency the tests also dodge: `init` writes the database **relative to
-the config file** ([src/init/init.ts:59](src/init/init.ts#L59)), but `validate` and
-`legacy-errors` pass `databaseFile` straight to `readDatabase`
-([src/validate/validate.ts:25](src/validate/validate.ts#L25)), resolving it against the
-process **cwd**. The validate integration test makes cwd equal the config dir so the two
-coincide; the legacyExistingErrors test sidesteps with an absolute `databaseFile` (its
-comment says why: "so readDatabase resolves it regardless of the process cwd").
-
 ## Smaller findings
 
-- **`InternalError` for malformed piped Oxlint results** —
-  [src/legacy/parseResults.ts:97](src/legacy/parseResults.ts#L97). Piping wrong input is a
-  *user* error, but the message says "This is a bug, please report… to the maintainer." The
-  equivalent ESLint branch ([src/legacy/parseResults.ts:58](src/legacy/parseResults.ts#L58))
-  throws a plain `Error`. The
-  [unrecognized-input tests](src/legacy/__tests__/parseResults.test.ts#L506) trigger it
-  with ordinary user mistakes (`null`, strings, numbers), which suggests the branch
-  shouldn't be classified as internal.
 - **Module-level ID state makes the exported API single-shot** —
   [src/legacy/generateIds.ts:3](src/legacy/generateIds.ts#L3). Two programmatic
   `legacyExistingErrors` calls in one process bleed IDs into each other's saved database
@@ -78,11 +45,6 @@ comment says why: "so readDatabase resolves it regardless of the process cwd").
   legacy-comment parsing. The tests' custom pragma (`'CUSTOM LEGACY PRAGMA'`) happens to be
   regex-safe, so the gap is invisible. (The default pragma's `.` merely matches any
   character — benign.)
-- **Async `time()` log inconsistency** —
-  [src/util/logging.ts:29](src/util/logging.ts#L29): the promise branch omits the
-  `Finished` prefix that the sync branch has. The
-  [logging test](src/util/__tests__/logging.test.ts#L28) only pins the sync branch.
-  Cosmetic.
 
 ## Uncertain — needs a maintainer's call
 

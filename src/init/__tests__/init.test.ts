@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -105,6 +106,12 @@ beforeEach(() => {
   output = new MockWritable();
   originalCwd = process.cwd();
   workDir = mkdtempSync(join(tmpdir(), 'legacy-lint-init-'));
+  // init derives its rootDir via getRepoRoot(process.cwd()), which walks up to
+  // the nearest .git directory, so the work dir must look like a repo root.
+  // node:child_process is mocked in this file, so a real `git init` isn't
+  // available — but getRepoRoot only checks for a `.git` entry on disk, so an
+  // empty .git directory is enough to anchor rootDir at workDir.
+  mkdirSync(join(workDir, '.git'));
   process.chdir(workDir);
 });
 
@@ -148,7 +155,9 @@ describe('init (interactive)', () => {
       linterType: 'eslint',
       ignoreWarnings: false,
       pragma: DEFAULT_PRAGMA,
-      databaseFile: DEFAULT_DATABASE_FILE_NAME,
+      // init stores databaseFile relative, but readConfig resolves it to an
+      // absolute path against the config's directory (the work dir).
+      databaseFile: join(workDir, DEFAULT_DATABASE_FILE_NAME),
       compareBranch: 'main',
       nonDisableableRules: ['no-console', 'no-debugger'],
     });

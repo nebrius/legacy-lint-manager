@@ -1,7 +1,8 @@
-import { sep } from 'node:path';
-
+import { getUnprefixedRelativeDir } from './files.js';
 import { error } from './logging.js';
 import type { ValidationError } from './types.js';
+
+const GLOBAL_ERROR_PREFIX = 'Global';
 
 export function printValidationErrors({
   validationErrors,
@@ -18,14 +19,18 @@ export function printValidationErrors({
       }
       groupedErrors.get(validationError.location.file)?.push(validationError);
     } else {
-      if (!groupedErrors.has('Global')) {
-        groupedErrors.set('Global', []);
+      if (!groupedErrors.has(GLOBAL_ERROR_PREFIX)) {
+        groupedErrors.set(GLOBAL_ERROR_PREFIX, []);
       }
-      groupedErrors.get('Global')?.push(validationError);
+      groupedErrors.get(GLOBAL_ERROR_PREFIX)?.push(validationError);
     }
   }
   for (const [file, errors] of groupedErrors) {
-    error(`${file.replace(rootDir + sep, '')}:`);
+    error(
+      file === GLOBAL_ERROR_PREFIX
+        ? `${GLOBAL_ERROR_PREFIX}:`
+        : getUnprefixedRelativeDir({ path: file, rootDir }) + `:`
+    );
     for (const err of errors) {
       const line =
         typeof err.location?.line === 'number'

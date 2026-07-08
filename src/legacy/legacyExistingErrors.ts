@@ -1,9 +1,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import type { Readable } from 'node:stream';
 
 import { readConfig } from '../util/config.js';
 import { readDatabase } from '../util/db.js';
+import { getRepoRoot } from '../util/files.js';
 import { setVerbose, time } from '../util/logging.js';
 import type { CommonOptions } from '../util/types.js';
 import { addLegacyStatements } from './addLegacyStatements.js';
@@ -16,6 +17,9 @@ export async function legacyExistingErrors(
   inputStream: Readable
 ) {
   setVerbose(options.verbose);
+  if (!isAbsolute(options.config)) {
+    options.config = resolve(process.cwd(), options.config);
+  }
   const { ignoreWarnings, databaseFile, pragma, linterType } = readConfig(
     options.config
   );
@@ -25,6 +29,7 @@ export async function legacyExistingErrors(
     parseResults({ results, ignoreWarnings, linterType })
   );
   time('adding legacy statements', () => {
+    const rootDir = getRepoRoot(options.config);
     for (const filePath of lintErrors.errors.keys()) {
       // Get comments so we can check if we need to add to an existing disable
       const fileContents = readFileSync(filePath, 'utf-8');
@@ -33,7 +38,7 @@ export async function legacyExistingErrors(
         lintErrors,
         fileContents,
         filePath,
-        rootDir: dirname(options.config),
+        rootDir,
       });
       // Save the file if we have results to save. If we don't, that means there
       // was a malformed legacy comment and we should skip this file.

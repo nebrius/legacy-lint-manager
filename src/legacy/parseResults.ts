@@ -1,3 +1,5 @@
+import { isAbsolute, resolve } from 'node:path';
+
 import TypeBox from 'typebox';
 import Value from 'typebox/value';
 
@@ -62,7 +64,9 @@ export function parseResults({
     }
     const lintErrors: LintErrors = { type: 'eslint', errors: new Map() };
     for (const file of results) {
-      const { filePath } = file;
+      const filePath = isAbsolute(file.filePath)
+        ? file.filePath
+        : resolve(process.cwd(), file.filePath);
       for (const message of file.messages) {
         // A missing ruleId or line indicates the file couldn't be parsed, which
         // means there's nothing for us to legacy
@@ -94,7 +98,7 @@ export function parseResults({
   } else {
     if (!Value.Check(OxlintSchema, results)) {
       const errors = Value.Errors(OxlintSchema, results);
-      throw new InternalError(
+      throw new Error(
         'Could not parse piped Oxlint results: ' +
           JSON.stringify(Array.from(errors), null, 2)
       );
@@ -133,12 +137,15 @@ export function parseResults({
       /* v8 ignore stop */
 
       // Save the lint error
-      if (!lintErrors.errors.has(diagnostic.filename)) {
-        lintErrors.errors.set(diagnostic.filename, new Map());
+      const filename = isAbsolute(diagnostic.filename)
+        ? diagnostic.filename
+        : resolve(process.cwd(), diagnostic.filename);
+      if (!lintErrors.errors.has(filename)) {
+        lintErrors.errors.set(filename, new Map());
       }
       // Guaranteed to exist due to the has check above
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      const fileEntry = lintErrors.errors.get(diagnostic.filename)!;
+      const fileEntry = lintErrors.errors.get(filename)!;
       if (!fileEntry.has(lineNumber)) {
         fileEntry.set(lineNumber, []);
       }

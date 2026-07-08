@@ -1,8 +1,10 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { dirname, extname, join, relative } from 'node:path';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, extname, isAbsolute, join, relative, sep } from 'node:path';
 
 import type { Ignore } from 'ignore';
 import ignore from 'ignore';
+
+import { InternalError } from './error.js';
 
 const DEFAULT_IGNORE_DIRECTORIES = ['node_modules'];
 const CODE_EXTENSIONS = [
@@ -15,6 +17,43 @@ const CODE_EXTENSIONS = [
   '.cjs',
   '.mjs',
 ];
+
+// Get the root of the git repository that contains the given file or directory,
+// which is typically either process.cwd() or a config file path
+export function getRepoRoot(fileOrDirectory: string) {
+  let currentDir = statSync(fileOrDirectory).isDirectory()
+    ? fileOrDirectory
+    : dirname(fileOrDirectory);
+  while (currentDir !== '/') {
+    const contents = readdirSync(currentDir);
+    if (contents.includes('.git')) {
+      return currentDir;
+    }
+    currentDir = dirname(currentDir);
+  }
+  throw new Error(
+    `Could not determine repo root from file or directory ${fileOrDirectory}. This command must be run from inside a git repository.`
+  );
+}
+
+// This computes a relative path from the root directory
+export function getUnprefixedRelativeDir({
+  path,
+  rootDir,
+}: {
+  path: string;
+  rootDir: string;
+}) {
+  if (!isAbsolute(path)) {
+    throw new InternalError(
+      `Expected ${path} to be an absolute path but it was not`
+    );
+  }
+  if (!path.startsWith(rootDir + sep)) {
+    throw new InternalError(`Expected ${path} to start with ${rootDir + sep}`);
+  }
+  return path.slice(rootDir.length + 1);
+}
 
 export function getFileList(rootDir: string) {
   // Collect gitignore files that apply to this root dir

@@ -4,6 +4,7 @@ import type { Config } from '../util/config.js';
 import { parseConfig } from '../util/config.js';
 import type { Database } from '../util/db.js';
 import { createDatabase } from '../util/db.js';
+import { getUnprefixedRelativeDir } from '../util/files.js';
 import type { ValidationError } from '../util/types.js';
 
 type CompareInfo = {
@@ -17,15 +18,18 @@ export function compareWithBranch({
   currentConfig,
   configFilePath,
   validationErrors,
+  rootDir,
 }: {
   currentDatabase: Database;
   currentConfig: Config;
   configFilePath: string;
   validationErrors: ValidationError[];
+  rootDir: string;
 }) {
   const { compareBranchName, compareDatabase, compareConfig } = getCompareInfo({
     compareBranch: currentConfig.compareBranch,
     configFilePath,
+    rootDir,
   });
 
   // Ensure all IDs in the current database exist in the compare database
@@ -101,25 +105,32 @@ export function compareWithBranch({
 function getCompareInfo({
   compareBranch,
   configFilePath,
+  rootDir,
 }: {
   compareBranch: string;
   configFilePath: string;
+  rootDir: string;
 }): CompareInfo {
   // Read in the config from the compare branch
   const compareConfigContent = execSync(
-    `git show ${compareBranch}:${configFilePath}`,
+    `git show ${compareBranch}:${getUnprefixedRelativeDir({ path: configFilePath, rootDir })}`,
     {
       encoding: 'utf-8',
+      cwd: rootDir,
     }
   );
-  const compareConfig = parseConfig(compareConfigContent);
+  const compareConfig = parseConfig({
+    configFilePath,
+    configFileContents: compareConfigContent,
+  });
 
   // Read in the database from the compare branch, using the compare config
   // to track potential renames of the database file
   const compareDatabaseContent = execSync(
-    `git show ${compareBranch}:${compareConfig.databaseFile}`,
+    `git show ${compareBranch}:${getUnprefixedRelativeDir({ path: compareConfig.databaseFile, rootDir })}`,
     {
       encoding: 'utf-8',
+      cwd: rootDir,
     }
   );
   const compareDatabase = createDatabase({

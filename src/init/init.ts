@@ -20,6 +20,7 @@ import {
   DEFAULT_PRAGMA,
 } from '../util/constants.js';
 import { createDatabase } from '../util/db.js';
+import { getRepoRoot } from '../util/files.js';
 import { commaSeparatedStringToArray } from '../util/string.js';
 import { getEslintRules } from './getEslintRules.js';
 import { getLintConfigFiles } from './getLintConfigFiles.js';
@@ -32,7 +33,7 @@ type IO = {
 // init takes in IO so that we can override it in tests
 export async function init(io: IO) {
   intro(`legacy-lint-manager`);
-  const rootDir = process.cwd();
+  const rootDir = getRepoRoot(process.cwd());
 
   const linterType = await getLinterType(rootDir, io);
   const ignoreWarnings = await getIgnoreWarnings(io);

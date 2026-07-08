@@ -1,8 +1,8 @@
-import { dirname } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 
 import { readConfig } from '../util/config.js';
 import { readDatabase } from '../util/db.js';
-import { getFileList } from '../util/files.js';
+import { getFileList, getRepoRoot } from '../util/files.js';
 import { error, info, setVerbose, time } from '../util/logging.js';
 import { printValidationErrors } from '../util/printValidationErrors.js';
 import type { CommonOptions, ValidationError } from '../util/types.js';
@@ -18,10 +18,13 @@ export function validate({
   update: boolean;
 }) {
   setVerbose(verbose);
+  if (!isAbsolute(configFilePath)) {
+    configFilePath = resolve(process.cwd(), configFilePath);
+  }
 
   const config = readConfig(configFilePath);
   const { pragma, databaseFile, nonDisableableRules } = config;
-  const rootDir = dirname(configFilePath);
+  const rootDir = getRepoRoot(configFilePath);
   const database = readDatabase(databaseFile);
   const files = time('getting file list', () => getFileList(rootDir));
 
@@ -43,6 +46,7 @@ export function validate({
       currentConfig: config,
       configFilePath,
       validationErrors,
+      rootDir,
     });
   });
 

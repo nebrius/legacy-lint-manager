@@ -1,6 +1,15 @@
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { parseResults } from '../parseResults.js';
+
+// parseResults normalizes every linter-reported filename to an absolute path,
+// resolving a relative name against process.cwd(). The fixtures below feed
+// relative names (as Oxlint really emits), so the expected map keys are the
+// cwd-resolved absolute paths. An already-absolute input is passed through
+// unchanged (see the '/abs/path/file.js' and absolute-Oxlint cases).
+const abs = (name: string) => resolve(process.cwd(), name);
 
 // --- ESLint input builders ------------------------------------------------
 
@@ -60,7 +69,7 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
       ).toEqual({
         type: 'eslint',
-        errors: new Map([['src/a.ts', new Map([[0, ['no-console']]])]]),
+        errors: new Map([[abs('src/a.ts'), new Map([[0, ['no-console']]])]]),
       });
     });
 
@@ -76,7 +85,7 @@ describe('parseResults', () => {
       ).toEqual({
         type: 'eslint',
         errors: new Map([
-          ['src/a.ts', new Map([[2, ['no-console', 'no-debugger']]])],
+          [abs('src/a.ts'), new Map([[2, ['no-console', 'no-debugger']]])],
         ]),
       });
     });
@@ -94,7 +103,7 @@ describe('parseResults', () => {
         type: 'eslint',
         errors: new Map([
           [
-            'src/a.ts',
+            abs('src/a.ts'),
             new Map([
               [1, ['no-console']],
               [4, ['no-debugger']],
@@ -116,7 +125,7 @@ describe('parseResults', () => {
       ).toEqual({
         type: 'eslint',
         errors: new Map([
-          ['src/a.ts', new Map([[1, ['no-console', 'no-console']]])],
+          [abs('src/a.ts'), new Map([[1, ['no-console', 'no-console']]])],
         ]),
       });
     });
@@ -131,8 +140,8 @@ describe('parseResults', () => {
       ).toEqual({
         type: 'eslint',
         errors: new Map([
-          ['src/a.ts', new Map([[1, ['no-console']]])],
-          ['src/b.ts', new Map([[3, ['no-debugger']]])],
+          [abs('src/a.ts'), new Map([[1, ['no-console']]])],
+          [abs('src/b.ts'), new Map([[3, ['no-debugger']]])],
         ]),
       });
     });
@@ -146,7 +155,9 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
       ).toEqual({
         type: 'eslint',
-        errors: new Map([['src/dirty.ts', new Map([[1, ['no-console']]])]]),
+        errors: new Map([
+          [abs('src/dirty.ts'), new Map([[1, ['no-console']]])],
+        ]),
       });
     });
 
@@ -202,7 +213,7 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
       ).toEqual({
         type: 'eslint',
-        errors: new Map([['w.ts', new Map([[1, ['no-console']]])]]),
+        errors: new Map([[abs('w.ts'), new Map([[1, ['no-console']]])]]),
       });
     });
 
@@ -217,7 +228,7 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: true, linterType: 'eslint' })
       ).toEqual({
         type: 'eslint',
-        errors: new Map([['mixed.ts', new Map([[4, ['no-debugger']]])]]),
+        errors: new Map([[abs('mixed.ts'), new Map([[4, ['no-debugger']]])]]),
       });
     });
 
@@ -269,7 +280,7 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
       ).toEqual({
         type: 'eslint',
-        errors: new Map([['mixed.ts', new Map([[1, ['no-console']]])]]),
+        errors: new Map([[abs('mixed.ts'), new Map([[1, ['no-console']]])]]),
       });
     });
 
@@ -284,7 +295,7 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
       ).toEqual({
         type: 'eslint',
-        errors: new Map([['good.ts', new Map([[1, ['no-console']]])]]),
+        errors: new Map([[abs('good.ts'), new Map([[1, ['no-console']]])]]),
       });
     });
   });
@@ -298,7 +309,28 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
       ).toEqual({
         type: 'oxlint',
-        errors: new Map([['test.js', new Map([[4, ['eslint/no-debugger']]])]]),
+        errors: new Map([
+          [abs('test.js'), new Map([[4, ['eslint/no-debugger']]])],
+        ]),
+      });
+    });
+
+    // Oxlint normally emits cwd-relative filenames, but an already-absolute
+    // filename must be used as the map key verbatim (isAbsolute short-circuits
+    // the resolve), so a second cwd resolution can never mangle it.
+    it('uses an already-absolute filename as the key unchanged', () => {
+      const results = oxlintResults([
+        oxlintDiagnostic('eslint(no-debugger)', '/abs/path/test.js', [
+          spanLabel(5),
+        ]),
+      ]);
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
+        type: 'oxlint',
+        errors: new Map([
+          ['/abs/path/test.js', new Map([[4, ['eslint/no-debugger']]])],
+        ]),
       });
     });
 
@@ -313,7 +345,7 @@ describe('parseResults', () => {
       ).toEqual({
         type: 'oxlint',
         errors: new Map([
-          ['test.ts', new Map([[9, ['typescript/no-explicit-any']]])],
+          [abs('test.ts'), new Map([[9, ['typescript/no-explicit-any']]])],
         ]),
       });
     });
@@ -327,7 +359,9 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
       ).toEqual({
         type: 'oxlint',
-        errors: new Map([['broken.ts', new Map([[4, ['eslint/no-console']]])]]),
+        errors: new Map([
+          [abs('broken.ts'), new Map([[4, ['eslint/no-console']]])],
+        ]),
       });
     });
 
@@ -354,7 +388,7 @@ describe('parseResults', () => {
         type: 'oxlint',
         errors: new Map([
           [
-            'test.js',
+            abs('test.js'),
             new Map([[6, ['eslint/no-console', 'eslint/no-debugger']]]),
           ],
         ]),
@@ -371,8 +405,8 @@ describe('parseResults', () => {
       ).toEqual({
         type: 'oxlint',
         errors: new Map([
-          ['a.ts', new Map([[2, ['eslint/no-console']]])],
-          ['b.ts', new Map([[8, ['eslint/no-debugger']]])],
+          [abs('a.ts'), new Map([[2, ['eslint/no-console']]])],
+          [abs('b.ts'), new Map([[8, ['eslint/no-debugger']]])],
         ]),
       });
     });
@@ -389,7 +423,9 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
       ).toEqual({
         type: 'oxlint',
-        errors: new Map([['test.js', new Map([[4, ['eslint/no-console']]])]]),
+        errors: new Map([
+          [abs('test.js'), new Map([[4, ['eslint/no-console']]])],
+        ]),
       });
     });
 
@@ -404,7 +440,9 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
       ).toEqual({
         type: 'oxlint',
-        errors: new Map([['test.js', new Map([[7, ['eslint/no-console']]])]]),
+        errors: new Map([
+          [abs('test.js'), new Map([[7, ['eslint/no-console']]])],
+        ]),
       });
     });
 
@@ -445,7 +483,9 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
       ).toEqual({
         type: 'oxlint',
-        errors: new Map([['test.js', new Map([[4, ['eslint/no-debugger']]])]]),
+        errors: new Map([
+          [abs('test.js'), new Map([[4, ['eslint/no-debugger']]])],
+        ]),
       });
     });
 
@@ -458,7 +498,9 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
       ).toEqual({
         type: 'oxlint',
-        errors: new Map([['test.js', new Map([[0, ['eslint/no-debugger']]])]]),
+        errors: new Map([
+          [abs('test.js'), new Map([[0, ['eslint/no-debugger']]])],
+        ]),
       });
     });
 
@@ -475,7 +517,7 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
       ).toEqual({
         type: 'oxlint',
-        errors: new Map([['w.ts', new Map([[1, ['eslint/no-console']]])]]),
+        errors: new Map([[abs('w.ts'), new Map([[1, ['eslint/no-console']]])]]),
       });
     });
 
@@ -498,7 +540,9 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: true, linterType: 'oxlint' })
       ).toEqual({
         type: 'oxlint',
-        errors: new Map([['mixed.ts', new Map([[4, ['eslint/no-debugger']]])]]),
+        errors: new Map([
+          [abs('mixed.ts'), new Map([[4, ['eslint/no-debugger']]])],
+        ]),
       });
     });
   });

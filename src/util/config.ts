@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, resolve } from 'node:path';
 
 import { parse, printParseErrorCode } from 'jsonc-parser';
 import TypeBox from 'typebox';
@@ -38,10 +39,16 @@ export function readConfig(configFilePath: string) {
     process.exit(1);
   }
   const configFileContents = readFileSync(configFilePath, 'utf-8');
-  return parseConfig(configFileContents);
+  return parseConfig({ configFilePath, configFileContents });
 }
 
-export function parseConfig(configFileContents: string): Config {
+export function parseConfig({
+  configFilePath,
+  configFileContents,
+}: {
+  configFilePath: string;
+  configFileContents: string;
+}): Config {
   // Parse the config file contents from JSON-C. jsonc-parser's parse() does not
   // throw on malformed input — it returns a best-effort partial result and
   // reports issues via the errors out-parameter, so we surface those manually.
@@ -64,5 +71,10 @@ export function parseConfig(configFileContents: string): Config {
     data: config,
     errorPrefix: 'Invalid config file:',
   });
+
+  if (!isAbsolute(data.databaseFile)) {
+    data.databaseFile = resolve(dirname(configFilePath), data.databaseFile);
+  }
+
   return data;
 }

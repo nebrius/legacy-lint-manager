@@ -1,9 +1,14 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { getFileList } from '../files.js';
+import {
+  getFileList,
+  getRepoRoot,
+  getUnprefixedRelativeDir,
+} from '../files.js';
 
 const PROJECT_ROOT = join(import.meta.dirname, 'project');
 
@@ -119,5 +124,85 @@ describe('getFileList', () => {
         join(NESTED_ROOT, 'keep-root.ts')
       );
     });
+  });
+});
+
+describe('getRepoRoot', () => {
+  // Each case builds a throwaway tree under the system temp dir (which is not a
+  // git repo), seeding an empty .git directory to mark the repo root. getRepoRoot
+  // only checks for a `.git` entry on disk, so it doesn't need a real git repo.
+  let repoDir: string;
+
+  beforeEach(() => {
+    repoDir = mkdtempSync(join(tmpdir(), 'legacy-lint-reporoot-'));
+    mkdirSync(join(repoDir, '.git'));
+  });
+
+  afterEach(() => {
+    rmSync(repoDir, { recursive: true, force: true });
+  });
+
+  it('returns the directory itself when it contains a .git directory', () => {
+    expect(getRepoRoot(repoDir)).toBe(repoDir);
+  });
+
+  it('walks up from a nested subdirectory to the repo root', () => {
+    const nested = join(repoDir, 'src', 'deep');
+    mkdirSync(nested, { recursive: true });
+    expect(getRepoRoot(nested)).toBe(repoDir);
+  });
+
+  it('resolves from the containing directory when given a file path', () => {
+    const file = join(repoDir, 'src', 'index.ts');
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, '');
+    expect(getRepoRoot(file)).toBe(repoDir);
+  });
+
+  it('throws when no .git exists up to the filesystem root', () => {
+    // A temp dir with no seeded .git, and no .git anywhere up to `/`.
+    const noRepo = mkdtempSync(join(tmpdir(), 'legacy-lint-norepo-'));
+    try {
+      expect(() => getRepoRoot(noRepo)).toThrow(
+        'Could not determine repo root'
+      );
+    } finally {
+      rmSync(noRepo, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('getUnprefixedRelativeDir', () => {
+  it('returns the repo-relative path (no leading ./) for an absolute path under rootDir', () => {
+    expect(
+      getUnprefixedRelativeDir({ path: '/repo/src/foo.ts', rootDir: '/repo' })
+    ).toBe('src/foo.ts');
+  });
+
+  it('returns a bare filename for a file directly inside rootDir', () => {
+    expect(
+      getUnprefixedRelativeDir({ path: '/repo/foo.ts', rootDir: '/repo' })
+    ).toBe('foo.ts');
+  });
+
+  it('throws when the path is not absolute', () => {
+    expect(() =>
+      getUnprefixedRelativeDir({ path: 'src/foo.ts', rootDir: '/repo' })
+    ).toThrow('to be an absolute path');
+  });
+
+  it('throws when the path is absolute but not under rootDir', () => {
+    expect(() =>
+      getUnprefixedRelativeDir({ path: '/other/foo.ts', rootDir: '/repo' })
+    ).toThrow('to start with');
+  });
+
+  it('throws when rootDir is a string prefix but not a path-boundary ancestor', () => {
+    // '/repo-other' starts with the string '/repo' but is not under it as a path
+    // segment; the `rootDir + sep` guard must reject it rather than slice into
+    // the middle of a directory name.
+    expect(() =>
+      getUnprefixedRelativeDir({ path: '/repo-other/foo.ts', rootDir: '/repo' })
+    ).toThrow('to start with');
   });
 });

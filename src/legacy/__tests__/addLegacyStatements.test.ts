@@ -14,9 +14,14 @@ import { getIds } from '../generateIds.js';
 const nanoidMock = vi.fn<typeof nanoid>();
 vi.mock('nanoid', () => ({ nanoid: () => nanoidMock() }));
 
-const FILE = 'test.ts';
-const JSX_FILE = 'test.tsx';
 const ROOT = '/repo';
+// filePath is always absolute by the time it reaches addLegacyStatements:
+// parseResults normalizes the linter's output paths to absolute before they
+// become lintErrors keys, and those keys are what legacyExistingErrors passes
+// in. The fixtures use absolute paths under ROOT to honor that invariant (the
+// display-time header is then computed relative to rootDir).
+const FILE = `${ROOT}/test.ts`;
+const JSX_FILE = `${ROOT}/test.tsx`;
 
 // The function under test keeps a module-level idSet to dedupe generated ids
 // across calls; it persists for the whole test run. To keep that from coupling
@@ -561,9 +566,10 @@ describe('addLegacyStatements', () => {
         fileContents: UNPARSEABLE,
         entries: [[0, ['new-rule']]],
       });
-      // The recorded location groups the error under the file header, so the
-      // parse error is anchored rather than dumped into the "Global" bucket.
-      expect(messages).toContain(`${FILE}:`);
+      // The recorded location groups the error under the file header (rendered
+      // repo-relative to rootDir), so the parse error is anchored rather than
+      // dumped into the "Global" bucket.
+      expect(messages).toContain('test.ts:');
       expect(messages.some((m) => m.includes('Errors parsing file:'))).toBe(
         true
       );
