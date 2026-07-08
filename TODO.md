@@ -1,1 +1,2 @@
+- Add basic monorepo support, which doesn't allow per-package config
 - Create docs

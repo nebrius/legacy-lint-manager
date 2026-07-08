@@ -36,8 +36,23 @@ describe('printValidationErrors', () => {
     ];
     printValidationErrors({ validationErrors: errors, rootDir: ROOT });
     // rootDir is stripped from the header; the detail is indented and prefixed
-    // with the line number.
-    expect(messages).toEqual(['src/foo.ts:', '  12: bad thing']);
+    // with the line number. Stored lines are 0-indexed and displayed 1-indexed,
+    // so line 12 prints as "13:".
+    expect(messages).toEqual(['src/foo.ts:', '  13: bad thing']);
+  });
+
+  it('prints the first line (0) with a "1:" prefix rather than dropping the line number', () => {
+    const messages = captureErrors();
+    const errors: ValidationError[] = [
+      {
+        message: 'top of file',
+        location: { file: `${ROOT}/src/foo.ts`, line: 0 },
+      },
+    ];
+    printValidationErrors({ validationErrors: errors, rootDir: ROOT });
+    // line 0 is the first line; a truthiness check would drop the prefix, so the
+    // number is rendered via an explicit typeof check and displayed as "1:".
+    expect(messages).toEqual(['src/foo.ts:', '  1: top of file']);
   });
 
   it('groups multiple errors for the same file under a single header', () => {
@@ -48,7 +63,8 @@ describe('printValidationErrors', () => {
       { message: 'second', location: { file, line: 4 } },
     ];
     printValidationErrors({ validationErrors: errors, rootDir: ROOT });
-    expect(messages).toEqual(['src/foo.ts:', '  1: first', '  4: second']);
+    // Lines are displayed 1-indexed, so 0-indexed 1 and 4 print as "2:"/"5:".
+    expect(messages).toEqual(['src/foo.ts:', '  2: first', '  5: second']);
   });
 
   it('prints location-less errors under a Global header with no line prefix', () => {
@@ -79,7 +95,7 @@ describe('printValidationErrors', () => {
     printValidationErrors({ validationErrors: errors, rootDir: ROOT });
     expect(messages).toEqual([
       'a.ts:',
-      '  2: located',
+      '  3: located',
       'Global:',
       '  floating',
     ]);

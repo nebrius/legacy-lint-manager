@@ -1,6 +1,7 @@
 import type { Comment as OxcComment } from 'oxc-parser';
 import { parseSync } from 'oxc-parser';
 
+import { commaSeparatedStringToArray } from './string.js';
 import type { Comment, ValidationError } from './types.js';
 
 // Note: these entries MUST be specified from longest to shortest
@@ -143,13 +144,7 @@ function parseCommentText({
     commentIndex !== -1
       ? [text.slice(0, commentIndex), text.slice(commentIndex + 2)]
       : [text];
-  const rules = commentParts[0]
-    .split(',')
-    .map((rule) => rule.trim())
-    // In the case of a disable without a specific list of rules (aka disable
-    // all), the rules array will contain a single empty string that we need to
-    // filter out here
-    .filter((rule) => rule.length > 0);
+  const rules = commaSeparatedStringToArray(commentParts[0]);
   const comment = commentParts[1]?.trim();
 
   return {

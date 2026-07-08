@@ -287,6 +287,9 @@ describe('init (interactive)', () => {
 
     const config = readConfig(join(workDir, 'legacy-lint.config.jsonc'));
     expect(config.compareBranch).toBe('feature-branch');
+    // A blank free-text rules answer must record [] (not ['']) for the
+    // non-disableable rules.
+    expect(config.nonDisableableRules).toEqual([]);
     expect(spawnSync).toHaveBeenCalledTimes(2);
   });
 

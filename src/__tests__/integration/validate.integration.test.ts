@@ -245,12 +245,11 @@ describe('validate (integration)', () => {
       expect(exitSpy).toHaveBeenCalledWith(1);
       // Errors are grouped under a per-file header (relative to the config's
       // rootDir), then listed indented and prefixed with the offending line
-      // number. The comment sits on the visually-2nd line, but validate prints
-      // the 0-indexed startLine verbatim, so the line reads `1:` (an off-by-one
-      // in the user-facing output).
+      // number. The comment sits on the second line, displayed 1-indexed as
+      // `2:`.
       expect(errorSpy).toHaveBeenCalledWith(`${join('src', 'bad.ts')}:`);
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('1: Malformed legacy comment:')
+        expect.stringContaining('2: Malformed legacy comment:')
       );
     });
   });
@@ -370,11 +369,12 @@ describe('validate (integration)', () => {
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
       // The error is grouped under the file header (relative to rootDir) and
-      // listed with its 0-indexed line, proving the parser offset was resolved
-      // to a location rather than falling back to the "Global" bucket.
+      // listed with its line displayed 1-indexed as `2:`, proving the parser
+      // offset was resolved to a location rather than falling back to the
+      // "Global" bucket.
       expect(errorSpy).toHaveBeenCalledWith(`${join('src', 'broken.ts')}:`);
       expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('1: Errors parsing file:')
+        expect.stringContaining('2: Errors parsing file:')
       );
     });
   });

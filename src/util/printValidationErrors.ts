@@ -27,9 +27,13 @@ export function printValidationErrors({
   for (const [file, errors] of groupedErrors) {
     error(`${file.replace(rootDir + sep, '')}:`);
     for (const err of errors) {
-      error(
-        `  ${err.location?.line ? `${err.location.line.toString()}: ` : ''}${err.message}`
-      );
+      const line =
+        typeof err.location?.line === 'number'
+          ? // Internally we store line numbers as 0-indexed, but we want to
+            // print them as 1-indexed
+            `${(err.location.line + 1).toString()}: `
+          : '';
+      error(`  ${line}${err.message}`);
     }
   }
 }

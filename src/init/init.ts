@@ -20,6 +20,7 @@ import {
   DEFAULT_PRAGMA,
 } from '../util/constants.js';
 import { createDatabase } from '../util/db.js';
+import { commaSeparatedStringToArray } from '../util/string.js';
 import { getEslintRules } from './getEslintRules.js';
 import { getLintConfigFiles } from './getLintConfigFiles.js';
 
@@ -215,6 +216,6 @@ async function getNonDisableableRules(
         ...io,
       })
     );
-    return rules.split(',').map((rule) => rule.trim());
+    return commaSeparatedStringToArray(rules);
   }
 }

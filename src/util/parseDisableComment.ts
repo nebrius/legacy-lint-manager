@@ -1,3 +1,4 @@
+import { commaSeparatedStringToArray } from './string.js';
 import type {
   Comment,
   LegacyComment,
@@ -54,14 +55,8 @@ export function parseDisableComment({
     return undefined;
   }
 
-  const rulesInComment = match[1]
-    .split(',')
-    .map((rule) => rule.trim())
-    .filter((rule) => {
-      // Handle the case where there are no rules in the legacy comment
-      if (!rule) {
-        return false;
-      }
+  const rulesInComment = commaSeparatedStringToArray(match[1]).filter(
+    (rule) => {
       // Ensure that the rule in the comment also appears in the actual lint
       // disable, e.g. that rules on the RHS are also in the LHS
       if (!comment.rules.includes(rule)) {
@@ -75,7 +70,8 @@ export function parseDisableComment({
         return false;
       }
       return true;
-    });
+    }
+  );
   const id = match[2];
 
   // Make sure there is at least one valid rule in the legacy comment
