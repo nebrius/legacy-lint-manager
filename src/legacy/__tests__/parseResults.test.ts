@@ -14,8 +14,8 @@ const abs = (name: string) => resolve(process.cwd(), name);
 // --- ESLint input builders ------------------------------------------------
 
 // severity follows ESLint's convention: 1 = warning, 2 = error. It defaults to
-// error so the existing tests (which all expect the message to be recorded)
-// keep passing now that parseResults skips messages without a severity.
+// error so every fixture message carries a severity, since parseResults throws
+// on a message that has a ruleId and line but no severity.
 function eslintMessage(ruleId: string | null, line?: number, severity = 2) {
   return { ruleId, line, severity };
 }
@@ -113,7 +113,9 @@ describe('parseResults', () => {
       });
     });
 
-    it('does not de-duplicate identical rules reported twice on the same line', () => {
+    // The disable comment lists each rule once, so a rule reported multiple
+    // times on the same line is recorded only once.
+    it('de-duplicates identical rules reported twice on the same line', () => {
       const results = [
         eslintFile('src/a.ts', [
           eslintMessage('no-console', 2),
@@ -124,8 +126,47 @@ describe('parseResults', () => {
         parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
       ).toEqual({
         type: 'eslint',
+        errors: new Map([[abs('src/a.ts'), new Map([[1, ['no-console']]])]]),
+      });
+    });
+
+    it('de-duplicates a rule per line, keeping it on each line it appears on', () => {
+      const results = [
+        eslintFile('src/a.ts', [
+          eslintMessage('no-console', 2),
+          eslintMessage('no-console', 5),
+        ]),
+      ];
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
+        type: 'eslint',
         errors: new Map([
-          [abs('src/a.ts'), new Map([[1, ['no-console', 'no-console']]])],
+          [
+            abs('src/a.ts'),
+            new Map([
+              [1, ['no-console']],
+              [4, ['no-console']],
+            ]),
+          ],
+        ]),
+      });
+    });
+
+    it('preserves first-seen order when de-duplicating interleaved rules on a line', () => {
+      const results = [
+        eslintFile('src/a.ts', [
+          eslintMessage('no-console', 2),
+          eslintMessage('no-debugger', 2),
+          eslintMessage('no-console', 2),
+        ]),
+      ];
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
+      ).toEqual({
+        type: 'eslint',
+        errors: new Map([
+          [abs('src/a.ts'), new Map([[1, ['no-console', 'no-debugger']]])],
         ]),
       });
     });
@@ -229,20 +270,6 @@ describe('parseResults', () => {
       ).toEqual({
         type: 'eslint',
         errors: new Map([[abs('mixed.ts'), new Map([[4, ['no-debugger']]])]]),
-      });
-    });
-
-    it('skips a message with no severity even when ignoreWarnings is false', () => {
-      // Real ESLint always emits severity; a message lacking it can't be
-      // classified as warning vs error, so it is skipped rather than recorded.
-      const results = [
-        { filePath: 'nosev.ts', messages: [{ ruleId: 'no-console', line: 2 }] },
-      ];
-      expect(
-        parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
-      ).toEqual({
-        type: 'eslint',
-        errors: new Map(),
       });
     });
 
@@ -390,6 +417,44 @@ describe('parseResults', () => {
           [
             abs('test.js'),
             new Map([[6, ['eslint/no-console', 'eslint/no-debugger']]]),
+          ],
+        ]),
+      });
+    });
+
+    // The disable comment lists each rule once, so a diagnostic code reported
+    // multiple times on the same line is recorded only once.
+    it('de-duplicates an identical code reported twice on the same line', () => {
+      const results = oxlintResults([
+        oxlintDiagnostic('eslint(no-console)', 'test.js', [spanLabel(7)]),
+        oxlintDiagnostic('eslint(no-console)', 'test.js', [spanLabel(7)]),
+      ]);
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
+        type: 'oxlint',
+        errors: new Map([
+          [abs('test.js'), new Map([[6, ['eslint/no-console']]])],
+        ]),
+      });
+    });
+
+    it('de-duplicates a code per line, keeping it on each line it appears on', () => {
+      const results = oxlintResults([
+        oxlintDiagnostic('eslint(no-console)', 'test.js', [spanLabel(3)]),
+        oxlintDiagnostic('eslint(no-console)', 'test.js', [spanLabel(9)]),
+      ]);
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
+        type: 'oxlint',
+        errors: new Map([
+          [
+            abs('test.js'),
+            new Map([
+              [2, ['eslint/no-console']],
+              [8, ['eslint/no-console']],
+            ]),
           ],
         ]),
       });

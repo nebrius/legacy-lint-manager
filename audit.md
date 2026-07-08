@@ -59,21 +59,7 @@ Each of these has a test asserting the current behavior, but the intent is ambig
    anchors the violation (e.g. `no-dupe-keys` reports two labels). If real Oxlint output
    anchors on the first label, the generated comment would sit on the wrong line and fail
    to suppress. Was last-wins chosen deliberately from real output?
-2. **Same rule twice on one line isn't deduplicated.**
-   [The test](src/legacy/__tests__/parseResults.test.ts#L107) pins that `parseResults`
-   keeps duplicates. Downstream, the net-new path in
-   [src/legacy/addLegacyStatements.ts:147](src/legacy/addLegacyStatements.ts#L147) passes
-   the raw list as `legaciedRules`, so the generated pragma reads
-   `(no-console, no-console)` and the database stores the rule twice. (The merge path
-   *does* dedupe via a `Set`; only the net-new path doesn't.) Intentional?
-3. **ESLint message with `ruleId` and `line` but no `severity` is skipped entirely.**
-   [src/legacy/parseResults.ts:69-74](src/legacy/parseResults.ts#L69-L74) bundles missing
-   severity with the parse-error skip, so a violation would silently never be legacied.
-   [The test encodes it](src/legacy/__tests__/parseResults.test.ts#L224), and the helper's
-   comment admits the suite was adapted to match the code ("…so the existing tests keep
-   passing now that parseResults skips messages without a severity"). Near-theoretical
-   since real ESLint always emits severity — but is skip the desired behavior?
-4. **Whole-database replacement (finding 1)** — flagged as a bug above, but if
+2. **Whole-database replacement (finding 1)** — flagged as a bug above, but if
    `legacy-errors` is genuinely meant as a one-shot command against a fresh database, the
    behavior is defensible and it's the README workflow that's inconsistent instead.
 

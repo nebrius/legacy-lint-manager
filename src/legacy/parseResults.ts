@@ -70,13 +70,17 @@ export function parseResults({
       for (const message of file.messages) {
         // A missing ruleId or line indicates the file couldn't be parsed, which
         // means there's nothing for us to legacy
-        if (
-          !message.ruleId ||
-          message.line === undefined ||
-          message.severity === undefined
-        ) {
+        if (!message.ruleId || message.line === undefined) {
           continue;
         }
+        /* v8 ignore start */
+        if (message.severity === undefined) {
+          throw new InternalError(
+            'ESLint message with ruleId and line but no severity found: ' +
+              JSON.stringify(message)
+          );
+        }
+        /* v8 ignore end */
         if (ignoreWarnings && message.severity === 1) {
           continue;
         }
@@ -91,7 +95,12 @@ export function parseResults({
         if (!fileEntry.has(line)) {
           fileEntry.set(line, []);
         }
-        fileEntry.get(line)?.push(message.ruleId);
+        // It's possible for there to be multiple failures for the same rule on
+        // the same line, which get reported to us multiple times. Disable lines
+        // are inherently deduped though, so we don't want to double-list rules
+        if (!fileEntry.get(line)?.includes(message.ruleId)) {
+          fileEntry.get(line)?.push(message.ruleId);
+        }
       }
     }
     return lintErrors;
@@ -158,7 +167,10 @@ export function parseResults({
         );
       }
       /* v8 ignore stop */
-      fileEntry.get(lineNumber)?.push(codeParts[1] + '/' + codeParts[2]);
+      const disableRule = codeParts[1] + '/' + codeParts[2];
+      if (!fileEntry.get(lineNumber)?.includes(disableRule)) {
+        fileEntry.get(lineNumber)?.push(disableRule);
+      }
     }
     return lintErrors;
   }
