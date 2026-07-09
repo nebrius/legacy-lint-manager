@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { DEFAULT_ID_BASE, makeId } from '../../__tests__/helpers/ids.js';
 import { createDatabase } from '../../util/db.js';
 import type {
   LegacyComment,
@@ -7,6 +8,10 @@ import type {
   ValidationError,
 } from '../../util/types.js';
 import { validateDisableComments } from '../validateDisableComments.js';
+
+// An arbitrary valid id, shared between each test's database entry and the
+// legacy comment that references it; the exact value is irrelevant.
+const ID = makeId(DEFAULT_ID_BASE);
 
 function makeLegacy(overrides: Partial<LegacyComment> = {}): LegacyComment {
   return {
@@ -16,7 +21,7 @@ function makeLegacy(overrides: Partial<LegacyComment> = {}): LegacyComment {
     endLine: 1,
     legaciedRules: ['no-console'],
     nonLegaciedRules: [],
-    id: 'a1b2c3d4',
+    id: ID,
     ...overrides,
   };
 }
@@ -392,7 +397,7 @@ describe('validateDisableComments', () => {
       callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: [['a1b2c3d4', ['no-console']]],
+          databaseContents: [[ID, ['no-console']]],
         }),
         nonDisableableRules: ['no-debugger'],
         validationErrors,
@@ -421,7 +426,7 @@ describe('validateDisableComments', () => {
       callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: [['a1b2c3d4', ['no-console']]],
+          databaseContents: [[ID, ['no-console']]],
         }),
         nonDisableableRules: ['no-debugger'],
         validationErrors,
@@ -442,7 +447,7 @@ describe('validateDisableComments', () => {
       const result = callValidate({
         database: createDatabase({
           filePath: undefined,
-          databaseContents: [['a1b2c3d4', ['no-console']]],
+          databaseContents: [[ID, ['no-console']]],
         }),
         nonDisableableRules: ['no-console'],
         validationErrors,
@@ -452,7 +457,7 @@ describe('validateDisableComments', () => {
       });
       expect(validationErrors).toEqual([]);
       expect(result).toEqual({
-        ids: new Map([['a1b2c3d4', ['no-console']]]),
+        ids: new Map([[ID, ['no-console']]]),
         wereErrorsFixed: false,
       });
     });
@@ -648,7 +653,7 @@ describe('validateDisableComments', () => {
           linterType: 'oxlint',
           database: createDatabase({
             filePath: undefined,
-            databaseContents: [['a1b2c3d4', ['no-console']]],
+            databaseContents: [[ID, ['no-console']]],
           }),
           nonDisableableRules: ['typescript/no-explicit-any'],
           validationErrors,

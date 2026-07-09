@@ -3,9 +3,14 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_ID_BASE, makeId } from '../../__tests__/helpers/ids.js';
 import { DEFAULT_PRAGMA } from '../../util/constants.js';
 import type { ValidationError } from '../../util/types.js';
 import { parseComments } from '../parseComments.js';
+
+// An arbitrary valid id; the exact value is irrelevant, it just needs to match
+// between the directive text and the parsed result.
+const ID = makeId(DEFAULT_ID_BASE);
 
 // parseComments reads each file off disk and hands the contents to the real
 // oxc-based comment parser, so we stub only readFileSync and let the genuine
@@ -137,7 +142,7 @@ describe('parseComments', () => {
       const { legacyComments, nonLegacyComments, validationErrors } = callParse(
         {
           sources: {
-            'a.ts': `/* eslint-disable -- ${DEFAULT_PRAGMA} (no-console) a1b2c3d4 */\n`,
+            'a.ts': `/* eslint-disable -- ${DEFAULT_PRAGMA} (no-console) ${ID} */\n`,
           },
           nonDisableableRules: ['no-console'],
         }
@@ -178,7 +183,7 @@ describe('parseComments', () => {
       const { legacyComments, nonLegacyComments, validationErrors } = callParse(
         {
           sources: {
-            'a.ts': `${legacyDirective('no-console', 'a1b2c3d4')}\n// eslint-disable-next-line no-debugger\n`,
+            'a.ts': `${legacyDirective('no-console', ID)}\n// eslint-disable-next-line no-debugger\n`,
           },
         }
       );
@@ -191,7 +196,7 @@ describe('parseComments', () => {
           endLine: 0,
           legaciedRules: ['no-console'],
           nonLegaciedRules: [],
-          id: 'a1b2c3d4',
+          id: ID,
         },
       ]);
       expect(nonLegacyComments).toEqual([
@@ -218,7 +223,7 @@ describe('parseComments', () => {
       const { legacyComments, nonLegacyComments, validationErrors } = callParse(
         {
           sources: {
-            'a.ts': `/* eslint-disable no-console -- ${DEFAULT_PRAGMA} (no-console) a1b2c3d4 */\nconsole.log('hi');\n`,
+            'a.ts': `/* eslint-disable no-console -- ${DEFAULT_PRAGMA} (no-console) ${ID} */\nconsole.log('hi');\n`,
           },
         }
       );
@@ -236,7 +241,7 @@ describe('parseComments', () => {
       const { legacyComments, nonLegacyComments, validationErrors } = callParse(
         {
           sources: {
-            'a.ts': `const x = 1;\nconsole.log(x); // eslint-disable-line no-console -- ${DEFAULT_PRAGMA} (no-console) a1b2c3d4\n`,
+            'a.ts': `const x = 1;\nconsole.log(x); // eslint-disable-line no-console -- ${DEFAULT_PRAGMA} (no-console) ${ID}\n`,
           },
         }
       );
@@ -276,7 +281,7 @@ describe('parseComments', () => {
         {
           sources: {
             'a.ts': '/* eslint-disable */\n',
-            'b.ts': `${legacyDirective('no-console', 'a1b2c3d4')}\n`,
+            'b.ts': `${legacyDirective('no-console', ID)}\n`,
           },
           nonDisableableRules: ['no-console'],
         }
@@ -296,7 +301,7 @@ describe('parseComments', () => {
           endLine: 0,
           legaciedRules: ['no-console'],
           nonLegaciedRules: [],
-          id: 'a1b2c3d4',
+          id: ID,
         },
       ]);
       expect(nonLegacyComments).toEqual([]);

@@ -5,7 +5,7 @@ import { Readable } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DEFAULT_PRAGMA } from '../../util/constants.js';
+import { DEFAULT_PRAGMA, ID_LENGTH } from '../../util/constants.js';
 
 const INTEGRATION_DIR = import.meta.dirname;
 const FIXTURES_DIR = join(INTEGRATION_DIR, 'fixtures');
@@ -21,6 +21,10 @@ const WORKING_DATA = join(WORK_DIR, 'legacy-lint.data.json');
 const REPO_ROOT = join(INTEGRATION_DIR, '..', '..', '..');
 const ESLINT_BIN = join(REPO_ROOT, 'node_modules', '.bin', 'eslint');
 const OXLINT_BIN = join(REPO_ROOT, 'node_modules', '.bin', 'oxlint');
+
+// Regex fragment matching an id of the configured length, shared by every
+// assertion below so they track ID_LENGTH rather than hard-coding it.
+const ID_PATTERN = `[\\w-]{${ID_LENGTH.toString()}}`;
 
 const CONSOLE_FILE = join(WORK_SRC, 'usesConsole.ts');
 const DEBUGGER_FILE = join(WORK_SRC, 'usesDebugger.ts');
@@ -92,15 +96,17 @@ function readData(): [string, string[]][] {
 function hasLegacyComment(path: string, rule: string): boolean {
   const contents = readFileSync(path, 'utf-8');
   return new RegExp(
-    `-disable-next-line ${rule} -- This lint error is legacied\\. DO NOT COPY \\(${rule}\\) [\\w-]{8}`
+    `-disable-next-line ${rule} -- This lint error is legacied\\. DO NOT COPY \\(${rule}\\) ${ID_PATTERN}`
   ).test(contents);
 }
 
-// Pull the 8-char ids out of the legacy comments the command wrote.
+// Pull the ids out of the legacy comments the command wrote.
 function idsInFile(path: string): string[] {
   const ids: string[] = [];
-  const re =
-    /\((?:no-console|no-debugger|eslint\/no-(?:console|debugger))\) ([\w-]{8})$/gm;
+  const re = new RegExp(
+    `\\((?:no-console|no-debugger|eslint/no-(?:console|debugger))\\) (${ID_PATTERN})$`,
+    'gm'
+  );
   let match: RegExpExecArray | null;
   const contents = readFileSync(path, 'utf-8');
   while ((match = re.exec(contents)) !== null) {
@@ -134,10 +140,14 @@ describe('legacy-errors (integration)', () => {
     );
 
     expect(readFileSync(CONSOLE_FILE, 'utf-8')).toMatch(
-      /\/\/ eslint-disable-next-line no-console -- This lint error is legacied\. DO NOT COPY \(no-console\) [\w-]{8}/
+      new RegExp(
+        `// eslint-disable-next-line no-console -- This lint error is legacied\\. DO NOT COPY \\(no-console\\) ${ID_PATTERN}`
+      )
     );
     expect(readFileSync(DEBUGGER_FILE, 'utf-8')).toMatch(
-      /\/\/ eslint-disable-next-line no-debugger -- This lint error is legacied\. DO NOT COPY \(no-debugger\) [\w-]{8}/
+      new RegExp(
+        `// eslint-disable-next-line no-debugger -- This lint error is legacied\\. DO NOT COPY \\(no-debugger\\) ${ID_PATTERN}`
+      )
     );
 
     const fileIds = [...idsInFile(CONSOLE_FILE), ...idsInFile(DEBUGGER_FILE)];
@@ -172,10 +182,14 @@ describe('legacy-errors (integration)', () => {
     }
 
     expect(readFileSync(CONSOLE_FILE, 'utf-8')).toMatch(
-      /\/\/ oxlint-disable-next-line eslint\/no-console -- This lint error is legacied\. DO NOT COPY \(eslint\/no-console\) [\w-]{8}/
+      new RegExp(
+        `// oxlint-disable-next-line eslint/no-console -- This lint error is legacied\\. DO NOT COPY \\(eslint/no-console\\) ${ID_PATTERN}`
+      )
     );
     expect(readFileSync(DEBUGGER_FILE, 'utf-8')).toMatch(
-      /\/\/ oxlint-disable-next-line eslint\/no-debugger -- This lint error is legacied\. DO NOT COPY \(eslint\/no-debugger\) [\w-]{8}/
+      new RegExp(
+        `// oxlint-disable-next-line eslint/no-debugger -- This lint error is legacied\\. DO NOT COPY \\(eslint/no-debugger\\) ${ID_PATTERN}`
+      )
     );
 
     const fileIds = [...idsInFile(CONSOLE_FILE), ...idsInFile(DEBUGGER_FILE)];
@@ -243,7 +257,7 @@ describe('legacy-errors (integration)', () => {
 
   it('skips a file with a malformed legacy comment, leaving it unchanged', async () => {
     // The no-debugger disable on line 2 is a legacy comment with a 5-char id
-    // (must be 8), so it is malformed. It sits immediately before the no-console
+    // (must be ID_LENGTH), so it is malformed. It sits immediately before the no-console
     // error on line 3 but disables an unrelated rule, so eslint still reports
     // the error and addLegacyStatements hits the malformed comment while merging.
     const MALFORMED_FILE = join(WORK_SRC, 'usesMalformed.ts');

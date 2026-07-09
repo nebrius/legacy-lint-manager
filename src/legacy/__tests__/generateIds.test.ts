@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { makeId } from '../../__tests__/helpers/ids.js';
+
 // generateIds.ts holds a module-level Map that persists for the lifetime of the
 // module. Each test resets the module registry and re-imports so it starts with
 // a fresh, empty map — otherwise ids would leak between cases. nanoid is
@@ -18,50 +20,50 @@ beforeEach(() => {
 
 describe('generateId', () => {
   it('returns a freshly generated id when no previous id is supplied', async () => {
-    nanoidMock.mockReturnValue('fresh001');
+    nanoidMock.mockReturnValue(makeId('fresh'));
     const { generateId } = await loadModule();
-    expect(generateId({ rules: ['no-console'] })).toBe('fresh001');
+    expect(generateId({ rules: ['no-console'] })).toBe(makeId('fresh'));
   });
 
   it('reuses a supplied previous id without consuming nanoid', async () => {
     const { generateId } = await loadModule();
-    expect(generateId({ previousId: 'reused01', rules: ['no-console'] })).toBe(
-      'reused01'
-    );
+    expect(
+      generateId({ previousId: makeId('reused'), rules: ['no-console'] })
+    ).toBe(makeId('reused'));
     expect(nanoidMock).not.toHaveBeenCalled();
   });
 
   it('regenerates when the first generated id collides with an existing one', async () => {
-    // First call takes "collide0". The second call's first nanoid result
-    // repeats it, forcing the dedupe loop to spin again and take "unique02".
+    // First call takes the "collide" id. The second call's first nanoid result
+    // repeats it, forcing the dedupe loop to spin again and take the "unique" id.
     nanoidMock
-      .mockReturnValueOnce('collide0')
-      .mockReturnValueOnce('collide0')
-      .mockReturnValueOnce('unique02');
+      .mockReturnValueOnce(makeId('collide'))
+      .mockReturnValueOnce(makeId('collide'))
+      .mockReturnValueOnce(makeId('unique'));
     const { generateId } = await loadModule();
-    expect(generateId({ rules: ['no-console'] })).toBe('collide0');
-    expect(generateId({ rules: ['no-debugger'] })).toBe('unique02');
+    expect(generateId({ rules: ['no-console'] })).toBe(makeId('collide'));
+    expect(generateId({ rules: ['no-debugger'] })).toBe(makeId('unique'));
     expect(nanoidMock).toHaveBeenCalledTimes(3);
   });
 
   it('regenerates when a supplied previous id collides with an already-used id', async () => {
-    nanoidMock.mockReturnValueOnce('regen001');
+    nanoidMock.mockReturnValueOnce(makeId('regen'));
     const { generateId } = await loadModule();
-    // "dupe0001" is claimed first as a fresh previous id.
-    expect(generateId({ previousId: 'dupe0001', rules: ['no-console'] })).toBe(
-      'dupe0001'
-    );
+    // The "dupe" id is claimed first as a fresh previous id.
+    expect(
+      generateId({ previousId: makeId('dupe'), rules: ['no-console'] })
+    ).toBe(makeId('dupe'));
     // Supplying the same previous id again collides, so it falls through to a
     // freshly generated value rather than handing back a duplicate.
-    expect(generateId({ previousId: 'dupe0001', rules: ['no-debugger'] })).toBe(
-      'regen001'
-    );
+    expect(
+      generateId({ previousId: makeId('dupe'), rules: ['no-debugger'] })
+    ).toBe(makeId('regen'));
   });
 
   it('stores the supplied rules against the generated id', async () => {
     const { generateId, getIds } = await loadModule();
     const id = generateId({
-      previousId: 'withrule',
+      previousId: makeId('withrule'),
       rules: ['no-console', 'no-debugger'],
     });
     expect(getIds().get(id)).toEqual(['no-console', 'no-debugger']);
@@ -76,14 +78,14 @@ describe('getIds', () => {
 
   it('returns every generated id mapped to its rules', async () => {
     const { generateId, getIds } = await loadModule();
-    generateId({ previousId: 'm0000000', rules: ['no-console'] });
-    generateId({ previousId: 'a0000000', rules: ['no-debugger'] });
-    generateId({ previousId: 'z0000000', rules: ['no-var'] });
+    generateId({ previousId: makeId('m'), rules: ['no-console'] });
+    generateId({ previousId: makeId('a'), rules: ['no-debugger'] });
+    generateId({ previousId: makeId('z'), rules: ['no-var'] });
     expect(getIds()).toEqual(
       new Map([
-        ['m0000000', ['no-console']],
-        ['a0000000', ['no-debugger']],
-        ['z0000000', ['no-var']],
+        [makeId('m'), ['no-console']],
+        [makeId('a'), ['no-debugger']],
+        [makeId('z'), ['no-var']],
       ])
     );
   });

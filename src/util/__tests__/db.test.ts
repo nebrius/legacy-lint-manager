@@ -25,9 +25,9 @@ describe('Database', () => {
       const database = readDatabase(databasePath('valid.json'));
       expect(database.getIds()).toEqual(
         new Map([
-          ['18gh38s6', ['no-console']],
-          ['abc12345', ['no-debugger']],
-          ['xyz98765', ['no-console']],
+          ['18gh38s60000', ['no-console']],
+          ['abc123450000', ['no-debugger']],
+          ['xyz987650000', ['no-console']],
         ])
       );
     });
@@ -40,9 +40,9 @@ describe('Database', () => {
     it('preserves the on-disk order when loading (sorting happens at save time)', () => {
       const database = readDatabase(databasePath('unsorted-ids.json'));
       expect([...database.getIds().keys()]).toEqual([
-        'm5x9q2w1',
-        'z9y8x7w6',
-        'a1b2c3d4',
+        'm5x9q2w10000',
+        'z9y8x7w60000',
+        'a1b2c3d40000',
       ]);
     });
 

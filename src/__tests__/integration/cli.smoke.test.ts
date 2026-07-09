@@ -8,7 +8,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DEFAULT_PRAGMA } from '../../util/constants.js';
 
 const INTEGRATION_DIR = import.meta.dirname;
-// The real fixture sources carry legacy comments for c0nsole1 / debugg02.
+// The real fixture sources carry legacy comments for the no-console /
+// no-debugger errors.
 const FIXTURE_SRC = join(INTEGRATION_DIR, 'fixtures', 'project', 'src');
 const DATABASES_DIR = join(INTEGRATION_DIR, 'fixtures', 'databases');
 

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_PRAGMA } from '../constants.js';
+import { DEFAULT_ID_BASE, makeId } from '../../__tests__/helpers/ids.js';
+import { DEFAULT_PRAGMA, ID_LENGTH } from '../constants.js';
 import { parseDisableComment } from '../parseDisableComment.js';
 import type { Comment, ValidationError } from '../types.js';
 
-const ID = 'a1b2c3d4';
+const ID = makeId(DEFAULT_ID_BASE);
 
 function makeComment(overrides: Partial<Comment> = {}): Comment {
   return {
@@ -222,12 +223,12 @@ describe('parseDisableComment', () => {
         const result = parseDisableComment({
           comment: makeComment({
             rules: ['no-console'],
-            comment: legacy('no-console', 'Ab2_Cd-4'),
+            comment: legacy('no-console', makeId('Ab2_Cd-4')),
           }),
           pragma,
           validationErrors,
         });
-        expect(result?.type === 'legacy' && result.id).toBe('Ab2_Cd-4');
+        expect(result?.type === 'legacy' && result.id).toBe(makeId('Ab2_Cd-4'));
         expect(validationErrors).toEqual([]);
       });
 
@@ -372,16 +373,18 @@ describe('parseDisableComment', () => {
         expectMalformed(`${pragma} (no-console)`);
       });
 
-      it('flags an id shorter than 8 characters', () => {
-        expectMalformed(legacy('no-console', 'a1b2c3d'));
+      it('flags an id shorter than the required length', () => {
+        expectMalformed(
+          legacy('no-console', makeId('a1b2c3d4').slice(0, ID_LENGTH - 1))
+        );
       });
 
-      it('flags an id longer than 8 characters', () => {
-        expectMalformed(legacy('no-console', 'a1b2c3d4e'));
+      it('flags an id longer than the required length', () => {
+        expectMalformed(legacy('no-console', `${makeId('a1b2c3d4')}x`));
       });
 
       it('flags an id containing non-alphanumeric characters', () => {
-        expectMalformed(legacy('no-console', 'a1b2%3d4'));
+        expectMalformed(legacy('no-console', makeId('a1b2%3d4')));
       });
 
       it('flags a comment missing the parentheses around the rules', () => {

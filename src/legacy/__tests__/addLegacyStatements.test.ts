@@ -1,6 +1,7 @@
 import type { nanoid } from 'nanoid';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { idSequence, makeId } from '../../__tests__/helpers/ids.js';
 import { getFileComments } from '../../util/comments.js';
 import { DEFAULT_PRAGMA } from '../../util/constants.js';
 import { parseDisableComment } from '../../util/parseDisableComment.js';
@@ -28,11 +29,9 @@ const JSX_FILE = `${ROOT}/test.tsx`;
 // tests, the default nanoid mock is a single monotonic counter that never
 // repeats a value across the run. Tests assert against the ids that were
 // actually handed out (captured below) rather than hard-coding global counts.
-let monotonic = 0;
-function nextId() {
-  monotonic++;
-  return `id${monotonic.toString().padStart(6, '0')}`;
-}
+// idSequence sizes each id to ID_LENGTH, so the mock tracks real nanoid's
+// length.
+const nextId = idSequence();
 
 // The ids produced by the default generator during a single run() call, in
 // order, so tests can assert exact output without depending on the global
@@ -206,7 +205,7 @@ describe('addLegacyStatements', () => {
       // Legacy ids must be unique per test: the function's module-level idSet
       // persists across the run and would otherwise regenerate a reused id that
       // was already issued elsewhere.
-      const existing = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) keepid01`;
+      const existing = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) ${makeId('keepid01')}`;
       const result = run({
         fileContents: `const a = 1;\n${existing}\nconst x = 2;`,
         entries: [[2, ['new-rule']]],
@@ -218,13 +217,13 @@ describe('addLegacyStatements', () => {
       // dropped from the tracked set on re-legacy.
       expect(result.split('\n')).toEqual([
         'const a = 1;',
-        `// eslint-disable-next-line new-rule, old-rule -- ${DEFAULT_PRAGMA} (new-rule, old-rule) keepid01`,
+        `// eslint-disable-next-line new-rule, old-rule -- ${DEFAULT_PRAGMA} (new-rule, old-rule) ${makeId('keepid01')}`,
         'const x = 2;',
       ]);
     });
 
     it('records the full union of legacied rules against the reused id in the ids map', () => {
-      const existing = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) keepid20`;
+      const existing = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) ${makeId('keepid20')}`;
       run({
         fileContents: `const a = 1;\n${existing}\nconst x = 2;`,
         entries: [[2, ['new-rule']]],
@@ -233,11 +232,14 @@ describe('addLegacyStatements', () => {
       // new lint error unioned with the previously-legacied rule), not just the
       // new one — otherwise re-legacying would silently drop the old rule from
       // the database.
-      expect(getIds().get('keepid20')).toEqual(['new-rule', 'old-rule']);
+      expect(getIds().get(makeId('keepid20'))).toEqual([
+        'new-rule',
+        'old-rule',
+      ]);
     });
 
     it('dedupes a rule that already exists in the legacy comment', () => {
-      const existing = `// eslint-disable-next-line shared, old-rule -- ${DEFAULT_PRAGMA} (shared, old-rule) keepid02`;
+      const existing = `// eslint-disable-next-line shared, old-rule -- ${DEFAULT_PRAGMA} (shared, old-rule) ${makeId('keepid02')}`;
       const result = run({
         fileContents: `const a = 1;\n${existing}\nconst x = 2;`,
         entries: [[2, ['shared', 'new-rule']]],
@@ -246,7 +248,7 @@ describe('addLegacyStatements', () => {
       // parenthetical stays the union of all legacied rules (shared already in
       // it, new-rule added, old-rule carried forward).
       expect(result.split('\n')[1]).toBe(
-        `// eslint-disable-next-line shared, new-rule, old-rule -- ${DEFAULT_PRAGMA} (shared, new-rule, old-rule) keepid02`
+        `// eslint-disable-next-line shared, new-rule, old-rule -- ${DEFAULT_PRAGMA} (shared, new-rule, old-rule) ${makeId('keepid02')}`
       );
     });
 
@@ -256,14 +258,14 @@ describe('addLegacyStatements', () => {
       // `a` is a human-added rule the manager does not track. Re-legacying with
       // a new error `c` must add `c` to the legacied set, keep `b` legacied, and
       // leave `a` untouched as non-legacied.
-      const existing = `// eslint-disable-next-line a, b -- ${DEFAULT_PRAGMA} (b) keepid09`;
+      const existing = `// eslint-disable-next-line a, b -- ${DEFAULT_PRAGMA} (b) ${makeId('keepid09')}`;
       const result = run({
         fileContents: `const foo = 1;\n${existing}\nconst x = 2;`,
         entries: [[2, ['c']]],
       });
       expect(nanoidMock).not.toHaveBeenCalled();
       expect(result.split('\n')[1]).toBe(
-        `// eslint-disable-next-line c, b, a -- ${DEFAULT_PRAGMA} (c, b) keepid09`
+        `// eslint-disable-next-line c, b, a -- ${DEFAULT_PRAGMA} (c, b) ${makeId('keepid09')}`
       );
     });
 
@@ -327,7 +329,7 @@ describe('addLegacyStatements', () => {
       // on an early line, plus a length-changing net-new splice on a later
       // line. Reverse iteration processes the later (net-new) line first, so
       // the merge's line indices must not have shifted underneath it.
-      const existing = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) keepid05`;
+      const existing = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) ${makeId('keepid05')}`;
       const result = run({
         fileContents: `const a = 1;\n${existing}\nconst b = 2;\nconst c = 3;`,
         entries: [
@@ -336,11 +338,11 @@ describe('addLegacyStatements', () => {
         ],
       });
       // The net-new comment is processed first and takes issuedIds[0]; the
-      // merge reuses keepid05 and never consumes nanoid.
+      // merge reuses the keepid05 id and never consumes nanoid.
       expect(nanoidMock).toHaveBeenCalledTimes(1);
       expect(result.split('\n')).toEqual([
         'const a = 1;',
-        `// eslint-disable-next-line new-rule, old-rule -- ${DEFAULT_PRAGMA} (new-rule, old-rule) keepid05`,
+        `// eslint-disable-next-line new-rule, old-rule -- ${DEFAULT_PRAGMA} (new-rule, old-rule) ${makeId('keepid05')}`,
         'const b = 2;',
         `// eslint-disable-next-line rule-c -- ${DEFAULT_PRAGMA} (rule-c) ${issuedIds[0]}`,
         'const c = 3;',
@@ -350,13 +352,13 @@ describe('addLegacyStatements', () => {
 
   describe('id collision guard', () => {
     it('regenerates the id when nanoid first returns an already-used value', () => {
-      // First insertion consumes "dupe00id". The second insertion's first
+      // First insertion consumes the "dupe" id. The second insertion's first
       // nanoid call returns that same value, forcing the while loop to spin
-      // again and take the unique "freshnew".
+      // again and take the unique "fresh" id.
       nanoidMock
-        .mockReturnValueOnce('dupe00id')
-        .mockReturnValueOnce('dupe00id')
-        .mockReturnValueOnce('freshnew');
+        .mockReturnValueOnce(makeId('dupe'))
+        .mockReturnValueOnce(makeId('dupe'))
+        .mockReturnValueOnce(makeId('fresh'));
       const result = run({
         fileContents: 'const a = 1;\nconst b = 2;\nconst c = 3;',
         entries: [
@@ -365,11 +367,11 @@ describe('addLegacyStatements', () => {
         ],
       });
       const lines = result.split('\n');
-      // Reverse iteration: the line-2 error is processed first and takes
-      // dupe00id (lines[3] after insertion); the line-0 error is processed
-      // second, collides on dupe00id, and falls through to freshnew (lines[0]).
-      expect(lines[3]).toContain('dupe00id');
-      expect(lines[0]).toContain('freshnew');
+      // Reverse iteration: the line-2 error is processed first and takes the
+      // "dupe" id (lines[3] after insertion); the line-0 error is processed
+      // second, collides on it, and falls through to the "fresh" id (lines[0]).
+      expect(lines[3]).toContain(makeId('dupe'));
+      expect(lines[0]).toContain(makeId('fresh'));
       expect(nanoidMock).toHaveBeenCalledTimes(3);
     });
   });
@@ -402,7 +404,7 @@ describe('addLegacyStatements', () => {
     });
 
     it('produces a merged comment the parser reads back with the reused id', () => {
-      const existing = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) keepid03`;
+      const existing = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) ${makeId('keepid03')}`;
       const result = run({
         fileContents: `const a = 1;\n${existing}\nconst x = 2;`,
         entries: [[2, ['new-rule']]],
@@ -417,14 +419,14 @@ describe('addLegacyStatements', () => {
         'old-rule',
       ]);
       expect(parsed?.type === 'legacy' && parsed.nonLegaciedRules).toEqual([]);
-      expect(parsed?.type === 'legacy' && parsed.id).toBe('keepid03');
+      expect(parsed?.type === 'legacy' && parsed.id).toBe(makeId('keepid03'));
     });
 
     it('round-trips a re-legacied mixed comment back into the correct legacied/non-legacied buckets', () => {
       // Existing directive `a, b` with only `b` legacied; re-legacy adds `c`.
       // The regenerated comment must parse back with `c` and `b` legacied and
       // the human's `a` still non-legacied — the property the refactor fixed.
-      const existing = `// eslint-disable-next-line a, b -- ${DEFAULT_PRAGMA} (b) keepid10`;
+      const existing = `// eslint-disable-next-line a, b -- ${DEFAULT_PRAGMA} (b) ${makeId('keepid10')}`;
       const result = run({
         fileContents: `const foo = 1;\n${existing}\nconst x = 2;`,
         entries: [[2, ['c']]],
@@ -437,13 +439,13 @@ describe('addLegacyStatements', () => {
       expect(parsed?.type === 'legacy' && parsed.nonLegaciedRules).toEqual([
         'a',
       ]);
-      expect(parsed?.type === 'legacy' && parsed.id).toBe('keepid10');
+      expect(parsed?.type === 'legacy' && parsed.id).toBe(makeId('keepid10'));
     });
   });
 
   describe('malformed legacy comment', () => {
     // A next-line legacy comment whose id is 5 chars ("short") instead of the
-    // required 8, so parseDisableComment records a validation error.
+    // required ID_LENGTH, so parseDisableComment records a validation error.
     const MALFORMED = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) short`;
 
     // Capture everything written to console.error (both printValidationErrors

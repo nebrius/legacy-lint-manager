@@ -13,11 +13,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_PRAGMA } from '../../util/constants.js';
 import { validate } from '../../validate/validate.js';
+import { makeId } from '../helpers/ids.js';
 
 const INTEGRATION_DIR = import.meta.dirname;
-// The real fixture sources carry legacy comments for c0nsole1 / debugg02.
+// The real fixture sources carry legacy comments for CONSOLE_ID / DEBUGGER_ID.
 const FIXTURE_SRC = join(INTEGRATION_DIR, 'fixtures', 'project', 'src');
 const DATABASES_DIR = join(INTEGRATION_DIR, 'fixtures', 'databases');
+
+// Ids baked into the static fixtures (fixtures/project/src/*.ts and
+// fixtures/databases/*.json). Static files can't reference ID_LENGTH, so these
+// literals must be kept in sync with those fixtures by hand.
+const CONSOLE_ID = 'c0nsole00000';
+const DEBUGGER_ID = 'debugger0000';
+const UNUSED_ID = 'unused000000';
 
 // validate always compares the working database against the compare branch via
 // `git show main:<config/db>`, so every case runs against a throwaway git repo in
@@ -78,8 +86,8 @@ function initRepo({
   git(['checkout', '-b', 'feature']);
 }
 
-// Copy the checked-in fixture sources (real legacy comments for c0nsole1 /
-// debugg02) into the repo's src dir.
+// Copy the checked-in fixture sources (real legacy comments for CONSOLE_ID /
+// DEBUGGER_ID) into the repo's src dir.
 function seedFixtureSources() {
   cpSync(FIXTURE_SRC, join(REPO_DIR, 'src'), { recursive: true });
 }
@@ -152,8 +160,8 @@ describe('validate (integration)', () => {
     }).not.toThrow();
     // The database is left untouched on a clean run.
     expect(readData()).toEqual([
-      ['c0nsole1', ['no-console']],
-      ['debugg02', ['no-debugger']],
+      [CONSOLE_ID, ['no-console']],
+      [DEBUGGER_ID, ['no-debugger']],
     ]);
   });
 
@@ -165,10 +173,10 @@ describe('validate (integration)', () => {
       });
       vi.spyOn(console, 'info').mockImplementation(() => undefined);
       runValidate(true);
-      // unused01 is dropped; the surviving ids keep their recorded rules.
+      // UNUSED_ID is dropped; the surviving ids keep their recorded rules.
       expect(readData()).toEqual([
-        ['c0nsole1', ['no-console']],
-        ['debugg02', ['no-debugger']],
+        [CONSOLE_ID, ['no-console']],
+        [DEBUGGER_ID, ['no-debugger']],
       ]);
     });
 
@@ -188,9 +196,9 @@ describe('validate (integration)', () => {
       expect(exitSpy).toHaveBeenCalledWith(1);
       expect(errorSpy).toHaveBeenCalled();
       expect(readData()).toEqual([
-        ['c0nsole1', ['no-console']],
-        ['debugg02', ['no-debugger']],
-        ['unused01', ['no-console']],
+        [CONSOLE_ID, ['no-console']],
+        [DEBUGGER_ID, ['no-debugger']],
+        [UNUSED_ID, ['no-console']],
       ]);
     });
   });
@@ -209,7 +217,7 @@ describe('validate (integration)', () => {
       runValidate();
     }).toThrow('process.exit called');
     expect(exitSpy).toHaveBeenCalledWith(1);
-    // debugg02 is not registered in the database, so its comment is reported.
+    // DEBUGGER_ID is not registered in the database, so its comment is reported.
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Unregistered legacy error.')
     );
@@ -222,7 +230,7 @@ describe('validate (integration)', () => {
     it('exits 1 and reports the malformed comment with its file and line', () => {
       initRepo({
         db: [],
-        // A 7-char id; the parser requires exactly 8, so this is malformed.
+        // A 7-char id; the parser requires exactly ID_LENGTH, so this is malformed.
         seed: () => {
           seedSource('bad.ts', [
             'export function logSomething(): void {',
@@ -392,13 +400,11 @@ describe('validate (integration)', () => {
           seedSource('uses.ts', ['export const noop = true;', '']);
         },
       });
-      writeFileSync(
-        WORKING_DATA,
-        JSON.stringify([['newid001', ['no-console']]])
-      );
+      const newId = makeId('newid');
+      writeFileSync(WORKING_DATA, JSON.stringify([[newId, ['no-console']]]));
       seedSource('uses.ts', [
         'export function logSomething(): void {',
-        `  // eslint-disable-next-line no-console -- ${DEFAULT_PRAGMA} (no-console) newid001`,
+        `  // eslint-disable-next-line no-console -- ${DEFAULT_PRAGMA} (no-console) ${newId}`,
         "  console.log('x');",
         '}',
         '',

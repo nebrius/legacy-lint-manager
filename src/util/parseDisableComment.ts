@@ -1,3 +1,4 @@
+import { ID_LENGTH } from './constants.js';
 import { commaSeparatedStringToArray, escapeRegex } from './string.js';
 import type {
   Comment,
@@ -43,7 +44,7 @@ export function parseDisableComment({
 
   // Since legacy comments are generated, we can be strict about whitespace
   const parts = new RegExp(
-    `^${escapeRegex(pragma)} \\((.*)\\) ([a-zA-Z0-9_-]{8})$`
+    `^${escapeRegex(pragma)} \\((.*)\\) ([a-zA-Z0-9_-]{${ID_LENGTH.toString()}})$`
   );
   const match = comment.comment.match(parts);
   if (!match) {

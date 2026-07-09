@@ -20,6 +20,7 @@ the CI check in the PR that re-legacies, then re-enable in follow up PR
 - API is not idempotent. The second run will produce spurious and unreliable IDs
 - There are a small number of rules in Oxlint (5 in v1.71.0) where we cannot determine where the disable comment should be placed, and will place it on the wrong line when editing. This happens in rules where diagnostics correspond to more than one statement (called a span internally), and they don't surface which span the disable comment should be placed next to, nor is there a way for us to deterministically infer it.
 
-## Weird notes
+## Random notes
 
-- Rule name normalization is different between ESLint and Oxlint. We apply how each linter works for accuracy
+- Rule name normalization is different between ESLint and Oxlint. We apply how each linter works for accuracy, but you should be aware of some peculiar design choices in Oxlint. Oxlint actually ignores namespaces in rule names, so `@typescript-eslint/no-explicit-any` and `eslint/no-explicit-any` are treated as the same rule, and `// oxlint-disable @typescript-eslint/no-explicit-any` will disable `eslint/no-explicit-any` errors in addition to the typescript ones.
+- Talk about collision odds and what happens, referencing src/util/constants.ts
