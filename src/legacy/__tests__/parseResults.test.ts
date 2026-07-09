@@ -494,7 +494,12 @@ describe('parseResults', () => {
       });
     });
 
-    it('uses the line from the last span label when several are present', () => {
+    // A diagnostic's spans list every piece of code contributing to the error,
+    // in source order. The first span is Oxlint's primary location and is where
+    // the disable comment belongs for the vast majority of rules, so we select
+    // it and ignore later spans (a later span is the correct target only for a
+    // handful of rules, a limitation noted in parseResults.ts and the README).
+    it('uses the line from the first span label when several are present', () => {
       const results = oxlintResults([
         oxlintDiagnostic('eslint(no-console)', 'test.js', [
           spanLabel(3),
@@ -506,7 +511,28 @@ describe('parseResults', () => {
       ).toEqual({
         type: 'oxlint',
         errors: new Map([
-          [abs('test.js'), new Map([[7, ['eslint/no-console']]])],
+          [abs('test.js'), new Map([[2, ['eslint/no-console']]])],
+        ]),
+      });
+    });
+
+    // Selection is strictly first-encountered, not the smallest or largest
+    // line: with spans on lines 4, 1, and 9, the line-4 span wins because it
+    // comes first, ruling out a min/max regression.
+    it('selects the first span in source order, not the lowest or highest line', () => {
+      const results = oxlintResults([
+        oxlintDiagnostic('eslint(no-console)', 'test.js', [
+          spanLabel(4),
+          spanLabel(1),
+          spanLabel(9),
+        ]),
+      ]);
+      expect(
+        parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
+      ).toEqual({
+        type: 'oxlint',
+        errors: new Map([
+          [abs('test.js'), new Map([[3, ['eslint/no-console']]])],
         ]),
       });
     });

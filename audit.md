@@ -6,9 +6,6 @@ then cross-checked each test's expectations against that model, real ESLint/Oxli
 semantics, and the workflows described in the README. One suspected bug was verified
 empirically with git.
 
-**Status (2026-07-07):** Findings 2 and 3 have since been fixed (see the status notes in
-their sections). All other findings remain open.
-
 ## High-confidence findings
 
 These are cases where the tests either pin behavior that looks wrong, or are structured so
@@ -29,33 +26,9 @@ hit this on the first re-run. The
 always seed an **empty** database and run the command exactly once, so the replacement
 semantics are never observable in the suite.
 
-## Smaller findings
-
-- **Module-level ID state makes the exported API single-shot** —
-  [src/legacy/generateIds.ts:3](src/legacy/generateIds.ts#L3). Two programmatic
-  `legacyExistingErrors` calls in one process bleed IDs into each other's saved database
-  (combining with finding 1, the second save contains the first run's IDs). The
-  [integration test explicitly works around this](src/__tests__/integration/legacyExistingErrors.integration.test.ts#L72-L76)
-  with `vi.resetModules()` — its comment even names the hazard ("so the two runs don't
-  bleed ids into each other's database") — rather than surfacing it. Matters because
-  [src/api.ts](src/api.ts) exports the function publicly.
-
 ## Uncertain — needs a maintainer's call
 
 Each of these has a test asserting the current behavior, but the intent is ambiguous:
-
-1. **Oxlint multi-label diagnostics: last span wins.**
-   [src/legacy/parseResults.ts:115-121](src/legacy/parseResults.ts#L115-L121) keeps
-   overwriting `lineNumber`, so the last span label determines where the disable comment is
-   inserted, and [the test pins it](src/legacy/__tests__/parseResults.test.ts#L396) ("uses
-   the line from the last span label"). Miette-style diagnostics conventionally put the
-   *primary* span first, and the disable comment presumably needs to land where Oxlint
-   anchors the violation (e.g. `no-dupe-keys` reports two labels). If real Oxlint output
-   anchors on the first label, the generated comment would sit on the wrong line and fail
-   to suppress. Was last-wins chosen deliberately from real output?
-2. **Whole-database replacement (finding 1)** — flagged as a bug above, but if
-   `legacy-errors` is genuinely meant as a one-shot command against a fresh database, the
-   behavior is defensible and it's the README workflow that's inconsistent instead.
 
 ## Test-hygiene notes
 

@@ -128,8 +128,24 @@ export function parseResults({
       let lineNumber: number | undefined;
       for (const label of diagnostic.labels) {
         if (Value.Check(SpanSchema, label)) {
-          // We want line numbers to be 0-indexed, not 1-indexed
+          // We want line numbers to be 0-indexed, not 1-indexed. Also, we want
+          // to pick the first span in the diagnostics, which works for most,
+          // but not all, Oxlint failures.
+          //
+          // Spans represent all pieces of code that contribute to an error. For
+          // example, no-use-before-define sets the first span to the line where
+          // the variable is used, and the second span to the line where the
+          // variable is defined.
+          //
+          // Oxlint has a concept called a "primary span" that 15 rules in 1.71.0
+          // define that indicates where the disable comment needs to be
+          // anchored. Unfortunately, 5 rules in 1.71.0 set the primary span to
+          // a label that is *not* the first label. Worse, they don't expose
+          // which span is primary in diagnostics, meaning there's no way for us
+          // to determine where the disable comment needs to go. We mention this
+          // as a limitation in the README, because that's all we can do.
           lineNumber = label.span.line - 1;
+          break;
         }
       }
 
