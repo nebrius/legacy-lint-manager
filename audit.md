@@ -26,10 +26,6 @@ hit this on the first re-run. The
 always seed an **empty** database and run the command exactly once, so the replacement
 semantics are never observable in the suite.
 
-## Uncertain — needs a maintainer's call
-
-Each of these has a test asserting the current behavior, but the intent is ambiguous:
-
 ## Test-hygiene notes
 
 - Temporal/TDD-framed comments that describe history rather than intent:
@@ -42,19 +38,3 @@ Each of these has a test asserting the current behavior, but the intent is ambig
   [addLegacyStatements.test.ts:283-286](src/legacy/__tests__/addLegacyStatements.test.ts#L283-L286)
   ("Update this test when that lands").
 - No `it.fails`/`it.skip` suppressions found anywhere — good.
-
-## Audited and found faithful
-
-Areas examined closely where the tests correctly reflect both the code and real-world
-linter semantics:
-
-- The strict legacy-pragma regex suite (including whitespace and ID-shape rejections).
-- ESLint's block-comment-only restriction for bare `eslint-disable`, and the absence of
-  that restriction for Oxlint.
-- The ESLint-config-comment rejection (`/* eslint rule: sev */`).
-- Oxlint's prefix-insensitive non-disableable matching (consistent with the linked oxc
-  source).
-- JSX vs JS context expectations in `getFileContexts` (several fixtures traced by hand —
-  the expected contexts are where an inserted comment is actually syntactically valid).
-- Merge/ID-reuse semantics in `addLegacyStatements`, including the round-trip tests.
-- The db/config/files/schema/printing utilities (aside from findings 2 and 4).

@@ -17,9 +17,14 @@ export async function legacyExistingErrors(
   inputStream: Readable
 ) {
   setVerbose(options.verbose);
+  // From what I've seen, ESLint always returns absolute values, meaning this
+  // line should never run. I'm leaving it here to be defensive though just in
+  // case my understanding/assumptions are wrong.
+  /* v8 ignore start */
   if (!isAbsolute(options.config)) {
     options.config = resolve(process.cwd(), options.config);
   }
+  /* v8 ignore stop */
   const { ignoreWarnings, databaseFile, pragma, linterType } = readConfig(
     options.config
   );
