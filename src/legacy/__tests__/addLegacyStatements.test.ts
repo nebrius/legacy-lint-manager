@@ -1,6 +1,7 @@
 import type { nanoid } from 'nanoid';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { asLegacy } from '../../__tests__/helpers/comments.js';
 import { idSequence, makeId } from '../../__tests__/helpers/ids.js';
 import { getFileComments } from '../../util/comments.js';
 import { DEFAULT_PRAGMA } from '../../util/constants.js';
@@ -86,6 +87,20 @@ function run(args: Parameters<typeof runRaw>[0]): string {
   }
   return result;
 }
+
+// Capture everything written to console.error (both printValidationErrors
+// and the skip-notice funnel through logging.error -> console.error).
+function captureErrors() {
+  const messages: string[] = [];
+  vi.spyOn(console, 'error').mockImplementation((msg: string) => {
+    messages.push(msg);
+  });
+  return messages;
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('addLegacyStatements', () => {
   describe('net-new insertion', () => {
@@ -264,9 +279,8 @@ describe('addLegacyStatements', () => {
       // once a line is legacied, the pragma comment is a machine-owned
       // generated artifact parsed by a strict, whitespace-sensitive regex
       // (see parseDisableComment.ts), so there is no slot for arbitrary prose.
-      // This drop is deliberate but temporary — TODO.md item 7 tracks lifting
-      // such comments to a separate line above the legacy disable. Update this
-      // test when that lands.
+      // TODO.md item 7 tracks lifting such comments to a separate line above
+      // the legacy disable instead of dropping them.
       expect(result.split('\n')[1]).toBe(
         `// eslint-disable-next-line new-rule, old-rule -- ${DEFAULT_PRAGMA} (new-rule) ${issuedIds[0]}`
       );
@@ -346,11 +360,9 @@ describe('addLegacyStatements', () => {
         fileContents: 'const a = 1;\nconst x = 2;',
         entries: [[1, ['no-magic-numbers']]],
       });
-      const parsed = parseGeneratedLine(result, 1);
-      expect(parsed?.type === 'legacy' && parsed.legaciedRules).toEqual([
-        'no-magic-numbers',
-      ]);
-      expect(parsed?.type === 'legacy' && parsed.id).toBe(issuedIds[0]);
+      const parsed = asLegacy(parseGeneratedLine(result, 1));
+      expect(parsed.legaciedRules).toEqual(['no-magic-numbers']);
+      expect(parsed.id).toBe(issuedIds[0]);
     });
 
     it('produces a merged comment the parser reads back with the reused id', () => {
@@ -363,33 +375,25 @@ describe('addLegacyStatements', () => {
       // with `new-rule` unions the two into the parenthetical. Both come back as
       // legaciedRules and nothing is non-legacied. The id is the reused legacy
       // id.
-      const parsed = parseGeneratedLine(result, 1);
-      expect(parsed?.type === 'legacy' && parsed.legaciedRules).toEqual([
-        'new-rule',
-        'old-rule',
-      ]);
-      expect(parsed?.type === 'legacy' && parsed.nonLegaciedRules).toEqual([]);
-      expect(parsed?.type === 'legacy' && parsed.id).toBe(makeId('keepid03'));
+      const parsed = asLegacy(parseGeneratedLine(result, 1));
+      expect(parsed.legaciedRules).toEqual(['new-rule', 'old-rule']);
+      expect(parsed.nonLegaciedRules).toEqual([]);
+      expect(parsed.id).toBe(makeId('keepid03'));
     });
 
     it('round-trips a re-legacied mixed comment back into the correct legacied/non-legacied buckets', () => {
       // Existing directive `a, b` with only `b` legacied; re-legacy adds `c`.
       // The regenerated comment must parse back with `c` and `b` legacied and
-      // the human's `a` still non-legacied — the property the refactor fixed.
+      // the human's `a` still non-legacied.
       const existing = `// eslint-disable-next-line a, b -- ${DEFAULT_PRAGMA} (b) ${makeId('keepid10')}`;
       const result = run({
         fileContents: `const foo = 1;\n${existing}\nconst x = 2;`,
         entries: [[2, ['c']]],
       });
-      const parsed = parseGeneratedLine(result, 1);
-      expect(parsed?.type === 'legacy' && parsed.legaciedRules).toEqual([
-        'c',
-        'b',
-      ]);
-      expect(parsed?.type === 'legacy' && parsed.nonLegaciedRules).toEqual([
-        'a',
-      ]);
-      expect(parsed?.type === 'legacy' && parsed.id).toBe(makeId('keepid10'));
+      const parsed = asLegacy(parseGeneratedLine(result, 1));
+      expect(parsed.legaciedRules).toEqual(['c', 'b']);
+      expect(parsed.nonLegaciedRules).toEqual(['a']);
+      expect(parsed.id).toBe(makeId('keepid10'));
     });
   });
 
@@ -397,20 +401,6 @@ describe('addLegacyStatements', () => {
     // A next-line legacy comment whose id is 5 chars ("short") instead of the
     // required ID_LENGTH, so parseDisableComment records a validation error.
     const MALFORMED = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) short`;
-
-    // Capture everything written to console.error (both printValidationErrors
-    // and the skip-notice funnel through logging.error -> console.error).
-    function captureErrors() {
-      const messages: string[] = [];
-      vi.spyOn(console, 'error').mockImplementation((msg: string) => {
-        messages.push(msg);
-      });
-      return messages;
-    }
-
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
 
     it('returns undefined and consumes no id when the legacy comment on the error line is malformed', () => {
       captureErrors();
@@ -488,18 +478,6 @@ describe('addLegacyStatements', () => {
     // bails before rewriting anything rather than legacying a file it cannot
     // trust.
     const UNPARSEABLE = 'const a = 1;\nconst x = ;';
-
-    function captureErrors() {
-      const messages: string[] = [];
-      vi.spyOn(console, 'error').mockImplementation((msg: string) => {
-        messages.push(msg);
-      });
-      return messages;
-    }
-
-    afterEach(() => {
-      vi.restoreAllMocks();
-    });
 
     it('returns undefined and consumes no id when the file fails to parse', () => {
       captureErrors();

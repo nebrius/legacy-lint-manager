@@ -63,7 +63,7 @@ function initRepo({
 }
 
 // compareWithBranch takes an absolute configFilePath plus the repo rootDir, and
-// shells out to git with rootDir as the cwd, so it no longer depends on
+// shells out to git with rootDir as the cwd, so it does not depend on
 // process.cwd(). The relative CONFIG_FILE/DB_FILE constants describe the on-disk
 // repo layout; only the value handed to compareWithBranch is made absolute,
 // mirroring how validate.ts resolves and passes them in production.

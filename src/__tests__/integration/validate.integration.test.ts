@@ -165,6 +165,21 @@ describe('validate (integration)', () => {
     ]);
   });
 
+  it('passes cleanly when given an absolute config path from an unrelated cwd', () => {
+    initRepo({ db: loadDbFixture('all-used.json'), seed: seedFixtureSources });
+    // Deliberately no chdir: the absolute --config alone must pin the repo.
+    // getRepoRoot anchors the scan at the config's repo, compareWithBranch runs
+    // git with that repo as cwd, and databaseFile resolves against the config's
+    // directory — none of it may depend on where the process was launched.
+    expect(() => {
+      validate({
+        config: join(REPO_DIR, CONFIG_REL),
+        verbose: false,
+        update: false,
+      });
+    }).not.toThrow();
+  });
+
   describe('when a legacied error was fixed (an unused id remains)', () => {
     it('rewrites the database with only the used ids when --update is set', () => {
       initRepo({

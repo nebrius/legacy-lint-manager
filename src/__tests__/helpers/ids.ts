@@ -6,12 +6,12 @@ import { ID_LENGTH } from '../../util/constants.js';
 // the default is always a conscious decision rather than an implicit fallback.
 export const DEFAULT_ID_BASE = 'abcdefghijklmnopqrstuvwxyz012345';
 
-// Slices a base down to a valid id of exactly ID_LENGTH characters. `base` is
-// required — there is no parameter default — so every call site consciously
-// picks an id (a mnemonic like 'c0nsole' when the value matters, or
-// DEFAULT_ID_BASE when it does not). padEnd is a defensive fallback that never
-// fires while base is at least ID_LENGTH chars. Tracks ID_LENGTH so ids stay
-// the right length if the constant changes.
+// Turns a base into a valid id of exactly ID_LENGTH characters: a short
+// mnemonic like 'dupe' is padded with '0', and a longer base (like
+// DEFAULT_ID_BASE) is sliced. `base` is required — there is no parameter
+// default — so every call site consciously picks an id (a mnemonic when the
+// value matters, DEFAULT_ID_BASE when it does not). Tracks ID_LENGTH so ids
+// stay the right length if the constant changes.
 export function makeId(base: string): string {
   return base.slice(0, ID_LENGTH).padEnd(ID_LENGTH, '0');
 }

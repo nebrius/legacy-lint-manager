@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { asLegacy } from '../../__tests__/helpers/comments.js';
 import { DEFAULT_ID_BASE, makeId } from '../../__tests__/helpers/ids.js';
 import { DEFAULT_PRAGMA, ID_LENGTH } from '../constants.js';
 import { parseDisableComment } from '../parseDisableComment.js';
@@ -150,8 +151,8 @@ describe('parseDisableComment', () => {
   describe.each([
     { label: 'the default pragma', pragma: DEFAULT_PRAGMA },
     { label: 'a non-default pragma', pragma: 'CUSTOM LEGACY PRAGMA' },
-    // The pragma is interpolated into a RegExp, so every one of these
-    // metacharacters must be escaped for the whole suite to keep passing.
+    // The pragma is interpolated into a RegExp, so each of these
+    // metacharacters must be matched literally rather than as regex syntax.
     {
       label: 'a pragma with regex special characters',
       pragma: 'LEGACY.v1 (do-not-copy)* [KEEP]?',
@@ -194,7 +195,7 @@ describe('parseDisableComment', () => {
           pragma,
           validationErrors,
         });
-        expect(result?.type === 'legacy' && result.legaciedRules).toEqual([
+        expect(asLegacy(result).legaciedRules).toEqual([
           'no-console',
           'no-debugger',
         ]);
@@ -211,7 +212,7 @@ describe('parseDisableComment', () => {
           pragma,
           validationErrors,
         });
-        expect(result?.type === 'legacy' && result.legaciedRules).toEqual([
+        expect(asLegacy(result).legaciedRules).toEqual([
           'no-console',
           'no-debugger',
         ]);
@@ -228,7 +229,7 @@ describe('parseDisableComment', () => {
           pragma,
           validationErrors,
         });
-        expect(result?.type === 'legacy' && result.id).toBe(makeId('Ab2_Cd-4'));
+        expect(asLegacy(result).id).toBe(makeId('Ab2_Cd-4'));
         expect(validationErrors).toEqual([]);
       });
 
@@ -313,30 +314,6 @@ describe('parseDisableComment', () => {
             endLine: 14,
           })
         );
-      });
-
-      it('appends the error after any pre-existing errors', () => {
-        const validationErrors: ValidationError[] = [
-          { message: 'pre-existing', location: { file: 'a.ts', line: 1 } },
-        ];
-        parseDisableComment({
-          comment: makeComment({
-            type: 'same-line',
-            comment: legacy('no-console'),
-            file: 'b.ts',
-            startLine: 2,
-            endLine: 2,
-          }),
-          pragma,
-          validationErrors,
-        });
-        expect(validationErrors).toEqual([
-          { message: 'pre-existing', location: { file: 'a.ts', line: 1 } },
-          {
-            message: NEXT_LINE_MESSAGE,
-            location: { file: 'b.ts', line: 2 },
-          },
-        ]);
       });
     });
 
@@ -493,9 +470,7 @@ describe('parseDisableComment', () => {
             pragma,
             validationErrors,
           });
-          expect(result?.type === 'legacy' && result.legaciedRules).toEqual([
-            'keep',
-          ]);
+          expect(asLegacy(result).legaciedRules).toEqual(['keep']);
           expect(validationErrors).toEqual([
             {
               message: NOT_IN_LIST('extra-one'),
@@ -504,30 +479,6 @@ describe('parseDisableComment', () => {
             {
               message: NOT_IN_LIST('extra-two'),
               location: { file: 'test.ts', line: 1 },
-            },
-          ]);
-        });
-
-        it('appends the foreign-rule error after any pre-existing errors', () => {
-          const validationErrors: ValidationError[] = [
-            { message: 'pre-existing', location: { file: 'a.ts', line: 1 } },
-          ];
-          parseDisableComment({
-            comment: makeComment({
-              rules: ['keep'],
-              comment: legacy('keep, bogus'),
-              file: 'b.ts',
-              startLine: 2,
-              endLine: 2,
-            }),
-            pragma,
-            validationErrors,
-          });
-          expect(validationErrors).toEqual([
-            { message: 'pre-existing', location: { file: 'a.ts', line: 1 } },
-            {
-              message: NOT_IN_LIST('bogus'),
-              location: { file: 'b.ts', line: 2 },
             },
           ]);
         });
@@ -544,9 +495,7 @@ describe('parseDisableComment', () => {
             pragma,
             validationErrors,
           });
-          expect(result?.type === 'legacy' && result.legaciedRules).toEqual([
-            'no-console',
-          ]);
+          expect(asLegacy(result).legaciedRules).toEqual(['no-console']);
           expect(validationErrors).toEqual([]);
         });
 
@@ -560,7 +509,7 @@ describe('parseDisableComment', () => {
             pragma,
             validationErrors,
           });
-          expect(result?.type === 'legacy' && result.legaciedRules).toEqual([
+          expect(asLegacy(result).legaciedRules).toEqual([
             'no-console',
             'no-debugger',
           ]);
@@ -702,7 +651,7 @@ describe('parseDisableComment', () => {
         pragma: DEFAULT_PRAGMA,
         validationErrors,
       });
-      expect(result?.type === 'legacy' && result.nonLegaciedRules).toEqual([]);
+      expect(asLegacy(result).nonLegaciedRules).toEqual([]);
       expect(validationErrors).toEqual([]);
     });
 

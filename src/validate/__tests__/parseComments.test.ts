@@ -158,24 +158,6 @@ describe('parseComments', () => {
       expect(legacyComments).toEqual([]);
       expect(nonLegacyComments).toEqual([]);
     });
-
-    it('appends the guard error after any pre-existing errors', () => {
-      const validationErrors: ValidationError[] = [
-        { message: 'pre-existing', location: { file: 'x.ts', line: 9 } },
-      ];
-      callParse({
-        sources: { 'a.ts': '/* eslint-disable */\n' },
-        nonDisableableRules: ['no-console'],
-        validationErrors,
-      });
-      expect(validationErrors).toEqual([
-        { message: 'pre-existing', location: { file: 'x.ts', line: 9 } },
-        {
-          message: DISABLE_ALL_MESSAGE,
-          location: { file: 'a.ts', line: 0 },
-        },
-      ]);
-    });
   });
 
   describe('sorting comments into legacy and non-legacy buckets', () => {

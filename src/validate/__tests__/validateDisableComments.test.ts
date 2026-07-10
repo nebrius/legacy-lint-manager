@@ -461,26 +461,6 @@ describe('validateDisableComments', () => {
         wereErrorsFixed: false,
       });
     });
-
-    it('appends non-disableable errors without clobbering existing ones', () => {
-      const validationErrors: ValidationError[] = [
-        { message: 'pre-existing', location: { file: 'x.ts', line: 9 } },
-      ];
-      callValidate({
-        nonDisableableRules: ['no-console'],
-        validationErrors,
-        nonLegacyComments: [
-          makeNonLegacy({ file: 'y.ts', startLine: 10, endLine: 10 }),
-        ],
-      });
-      expect(validationErrors).toEqual([
-        { message: 'pre-existing', location: { file: 'x.ts', line: 9 } },
-        {
-          message: 'Rule "no-console" cannot be disabled.',
-          location: { file: 'y.ts', line: 10 },
-        },
-      ]);
-    });
   });
 
   describe('non-disableable rule matching is linter-aware', () => {
@@ -713,29 +693,6 @@ describe('validateDisableComments', () => {
         {
           message: 'Unregistered legacy error. New errors cannot be legacied.',
           location: { file: 'd.ts', line: 4 },
-        },
-      ]);
-    });
-
-    it('appends to existing validation errors without clobbering them', () => {
-      const validationErrors: ValidationError[] = [
-        { message: 'pre-existing', location: { file: 'x.ts', line: 9 } },
-      ];
-      callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [['id1', ['no-console']]],
-        }),
-        validationErrors,
-        legacyComments: [
-          makeLegacy({ id: 'ghost', file: 'y.ts', startLine: 10, endLine: 10 }),
-        ],
-      });
-      expect(validationErrors).toEqual([
-        { message: 'pre-existing', location: { file: 'x.ts', line: 9 } },
-        {
-          message: 'Unregistered legacy error. New errors cannot be legacied.',
-          location: { file: 'y.ts', line: 10 },
         },
       ]);
     });

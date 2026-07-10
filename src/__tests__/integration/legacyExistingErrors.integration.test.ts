@@ -5,6 +5,7 @@ import { Readable } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { legacyExistingErrors } from '../../legacy/legacyExistingErrors.js';
 import { DEFAULT_PRAGMA, ID_LENGTH } from '../../util/constants.js';
 import { makeId } from '../helpers/ids.js';
 
@@ -82,16 +83,7 @@ function writeConfig(ignoreWarnings = false, linterType = 'eslint') {
   );
 }
 
-// vitest shares module instances across tests in this file. Resetting modules +
-// dynamically importing gives each test a freshly-imported command, keeping any
-// module-level state (e.g. nanoid) from bleeding between cases.
-async function loadCommand() {
-  vi.resetModules();
-  const mod = await import('../../legacy/legacyExistingErrors.js');
-  return mod.legacyExistingErrors;
-}
-
-// The data file is now an array of [id, rules] tuples.
+// The data file is an array of [id, rules] tuples.
 function readData(): [string, string[]][] {
   return JSON.parse(readFileSync(WORKING_DATA, 'utf-8')) as [
     string,
@@ -130,9 +122,6 @@ beforeEach(() => {
   // than to this tool's repo) and getFileList only scans the copied sources.
   // No commit is needed — the command only cares that a `.git` dir exists.
   git(['init']);
-  // The data file must exist with valid JSON before the command runs; the
-  // config file points at it. Tests override the config via writeConfig().
-  writeFileSync(WORKING_DATA, JSON.stringify([]));
   writeConfig();
 });
 
@@ -143,7 +132,6 @@ afterEach(() => {
 
 describe('legacy-errors (integration)', () => {
   it('legacies real ESLint errors and records their ids', async () => {
-    const legacyExistingErrors = await loadCommand();
     const json = runEslint();
 
     await legacyExistingErrors(
@@ -177,7 +165,6 @@ describe('legacy-errors (integration)', () => {
 
   it('legacies real Oxlint errors and records their ids', async () => {
     writeConfig(false, 'oxlint');
-    const legacyExistingErrors = await loadCommand();
     const json = runOxlint();
 
     // Oxlint emits filenames relative to its cwd, so the command's readFileSync
@@ -219,7 +206,6 @@ describe('legacy-errors (integration)', () => {
 
   it('legacies an ESLint warning when the config sets ignoreWarnings false', async () => {
     writeConfig(false);
-    const legacyExistingErrors = await loadCommand();
     const json = runEslint(VAR_REL_FILES);
 
     await legacyExistingErrors(
@@ -234,7 +220,6 @@ describe('legacy-errors (integration)', () => {
 
   it('does not legacy an ESLint warning when the config sets ignoreWarnings true', async () => {
     writeConfig(true);
-    const legacyExistingErrors = await loadCommand();
     const json = runEslint(VAR_REL_FILES);
 
     await legacyExistingErrors(
@@ -249,7 +234,6 @@ describe('legacy-errors (integration)', () => {
 
   it('does not legacy an Oxlint warning when the config sets ignoreWarnings true', async () => {
     writeConfig(true, 'oxlint');
-    const legacyExistingErrors = await loadCommand();
     const json = runOxlint(VAR_REL_FILES);
 
     const originalCwd = process.cwd();
@@ -288,7 +272,6 @@ describe('legacy-errors (integration)', () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('process.exit called');
     });
-    const legacyExistingErrors = await loadCommand();
     const json = runEslint(['src/usesMalformed.ts']);
 
     // addLegacyStatements skips the file, but the database-rebuild pass re-scans
@@ -320,7 +303,6 @@ describe('legacy-errors (integration)', () => {
 
   it('preserves previously-legacied statements from files without new errors on a re-run', async () => {
     // First run legacies only the console file, recording its id.
-    let legacyExistingErrors = await loadCommand();
     await legacyExistingErrors(
       { config: CONFIG_FILE, verbose: false },
       Readable.from([runEslint(['src/usesConsole.ts'])])
@@ -332,7 +314,6 @@ describe('legacy-errors (integration)', () => {
     // Second run legacies only the debugger file. usesConsole.ts has no new
     // error this time, so it is never rewritten — but its previously-legacied
     // statement must survive in the rebuilt database rather than being dropped.
-    legacyExistingErrors = await loadCommand();
     await legacyExistingErrors(
       { config: CONFIG_FILE, verbose: false },
       Readable.from([runEslint(['src/usesDebugger.ts'])])
@@ -348,7 +329,6 @@ describe('legacy-errors (integration)', () => {
   });
 
   it('is idempotent when re-run with no new errors', async () => {
-    let legacyExistingErrors = await loadCommand();
     await legacyExistingErrors(
       { config: CONFIG_FILE, verbose: false },
       Readable.from([runEslint()])
@@ -359,7 +339,6 @@ describe('legacy-errors (integration)', () => {
 
     // Re-run with empty lint output: nothing new to legacy, so no file changes,
     // and the database rebuilt from the existing comments comes back identical.
-    legacyExistingErrors = await loadCommand();
     await legacyExistingErrors(
       { config: CONFIG_FILE, verbose: false },
       Readable.from(['[]'])
@@ -371,7 +350,6 @@ describe('legacy-errors (integration)', () => {
   });
 
   it('resolves a relative config path against the current working directory', async () => {
-    const legacyExistingErrors = await loadCommand();
     const json = runEslint(['src/usesConsole.ts']);
 
     // Passing the config as a bare filename forces the relative-path branch,
@@ -413,7 +391,6 @@ describe('legacy-errors (integration)', () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('process.exit called');
     });
-    const legacyExistingErrors = await loadCommand();
 
     await expect(
       legacyExistingErrors(

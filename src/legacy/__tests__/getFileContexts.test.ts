@@ -113,10 +113,10 @@ const b = 2;`)
     });
 
     it('keeps an attribute line js when its element has children on later lines', () => {
-      // Regression: the attribute lines of a non-self-closing element used to
-      // leak jsx because the jsx context was entered at the opening tag's start
-      // rather than after its closing `>`. Each attribute line, the `>` line,
-      // and the closing-tag line must resolve correctly.
+      // The attribute lines of a non-self-closing element must stay js: the
+      // jsx context begins only after the opening tag's closing `>`, not at
+      // the tag's start. Each attribute line, the `>` line, and the
+      // closing-tag line must resolve correctly.
       const result = contexts(`const a = (
   <Button
     onClick={fn}

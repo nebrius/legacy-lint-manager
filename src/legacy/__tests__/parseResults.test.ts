@@ -43,8 +43,8 @@ function oxlintDiagnostic(
     message: 'lint violation',
     filename,
     labels,
-    // severity is required by the schema; default to error so existing tests
-    // keep recording the diagnostic.
+    // severity is required by the schema. Error is the common case; the
+    // warning-specific tests pass it explicitly.
     severity,
   };
   // A real diagnostic omits `code` entirely when the error happened before

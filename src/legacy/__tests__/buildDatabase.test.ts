@@ -106,4 +106,38 @@ describe('buildDatabase', () => {
     // second comment's rules.
     expect(databaseContents).toEqual([[makeId('dupe'), ['no-debugger']]]);
   });
+
+  it('reports one error per occurrence past the first when an id is used three times', () => {
+    const validationErrors: ValidationError[] = [];
+    buildDatabase({
+      legacyComments: [
+        legacyComment({
+          id: makeId('dupe'),
+          legaciedRules: ['no-console'],
+          file: '/repo/src/first.ts',
+          startLine: 1,
+        }),
+        legacyComment({
+          id: makeId('dupe'),
+          legaciedRules: ['no-debugger'],
+          file: '/repo/src/second.ts',
+          startLine: 2,
+        }),
+        legacyComment({
+          id: makeId('dupe'),
+          legaciedRules: ['no-var'],
+          file: '/repo/src/third.ts',
+          startLine: 3,
+        }),
+      ],
+      validationErrors,
+    });
+
+    // Every occurrence after the first collides with the map entry, so each is
+    // reported at its own location.
+    expect(validationErrors.map((e) => e.location)).toEqual([
+      { file: '/repo/src/second.ts', line: 2 },
+      { file: '/repo/src/third.ts', line: 3 },
+    ]);
+  });
 });
