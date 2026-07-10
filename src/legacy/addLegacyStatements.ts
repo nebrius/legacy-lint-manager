@@ -128,11 +128,9 @@ export function addLegacyStatements({
             line,
             lineContexts,
             indentation,
-            id: generateId({
-              previousId:
-                parsedComment.type === 'legacy' ? parsedComment.id : undefined,
-              rules: legaciedRules,
-            }),
+            id: generateId(
+              parsedComment.type === 'legacy' ? parsedComment.id : undefined
+            ),
           })
         );
         continue outer;
@@ -150,9 +148,7 @@ export function addLegacyStatements({
         line,
         lineContexts,
         indentation,
-        id: generateId({
-          rules,
-        }),
+        id: generateId(),
       })
     );
   }

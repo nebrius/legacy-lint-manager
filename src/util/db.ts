@@ -10,7 +10,7 @@ const DatabaseSchema = TypeBox.Array(
   TypeBox.Tuple([TypeBox.String(), TypeBox.Array(TypeBox.String())])
 );
 
-type DatabaseContents = TypeBox.Static<typeof DatabaseSchema>;
+export type DatabaseContents = TypeBox.Static<typeof DatabaseSchema>;
 
 export function readDatabase(databaseFile: string) {
   if (!existsSync(databaseFile)) {

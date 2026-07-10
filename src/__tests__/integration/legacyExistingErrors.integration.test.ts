@@ -6,6 +6,7 @@ import { Readable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_PRAGMA, ID_LENGTH } from '../../util/constants.js';
+import { makeId } from '../helpers/ids.js';
 
 const INTEGRATION_DIR = import.meta.dirname;
 const FIXTURES_DIR = join(INTEGRATION_DIR, 'fixtures');
@@ -34,6 +35,14 @@ const REL_FILES = ['src/usesConsole.ts', 'src/usesDebugger.ts'];
 // so it exercises the warning-vs-error split that ignoreWarnings toggles.
 const VAR_FILE = join(WORK_SRC, 'usesVar.ts');
 const VAR_REL_FILES = ['src/usesVar.ts'];
+
+// The command derives its root dir from the git repo containing the config, and
+// then scans that whole tree to rebuild the database. Making WORK_DIR its own
+// repo scopes getRepoRoot/getFileList to just the copied sources — otherwise the
+// root resolves to this tool's own repo and picks up unrelated fixtures.
+function git(args: string[]) {
+  execFileSync('git', args, { cwd: WORK_DIR, stdio: 'pipe' });
+}
 
 // eslint/oxlint exit non-zero when lint errors exist, so execFileSync throws;
 // the JSON we want is on the thrown error's stdout.
@@ -73,10 +82,9 @@ function writeConfig(ignoreWarnings = false, linterType = 'eslint') {
   );
 }
 
-// generateIds.ts holds a process-global Map that getIds() reads in full, and
-// vitest shares the module instance across tests in this file. Resetting
-// modules + dynamically importing gives each test a fresh map so the two runs
-// don't bleed ids into each other's database.
+// vitest shares module instances across tests in this file. Resetting modules +
+// dynamically importing gives each test a freshly-imported command, keeping any
+// module-level state (e.g. nanoid) from bleeding between cases.
 async function loadCommand() {
   vi.resetModules();
   const mod = await import('../../legacy/legacyExistingErrors.js');
@@ -118,6 +126,10 @@ function idsInFile(path: string): string[] {
 beforeEach(() => {
   rmSync(WORK_DIR, { recursive: true, force: true });
   cpSync(SOURCES_DIR, WORK_DIR, { recursive: true });
+  // Initialize a git repo in the work dir so getRepoRoot resolves here (rather
+  // than to this tool's repo) and getFileList only scans the copied sources.
+  // No commit is needed — the command only cares that a `.git` dir exists.
+  git(['init']);
   // The data file must exist with valid JSON before the command runs; the
   // config file points at it. Tests override the config via writeConfig().
   writeFileSync(WORKING_DATA, JSON.stringify([]));
@@ -255,7 +267,7 @@ describe('legacy-errors (integration)', () => {
     expect(hasLegacyComment(VAR_FILE, 'eslint/no-var')).toBe(false);
   });
 
-  it('skips a file with a malformed legacy comment, leaving it unchanged', async () => {
+  it('skips a file with a malformed legacy comment and aborts before writing the database', async () => {
     // The no-debugger disable on line 2 is a legacy comment with a 5-char id
     // (must be ID_LENGTH), so it is malformed. It sits immediately before the no-console
     // error on line 3 but disables an unrelated rule, so eslint still reports
@@ -273,20 +285,123 @@ describe('legacy-errors (integration)', () => {
     const errorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called');
+    });
     const legacyExistingErrors = await loadCommand();
     const json = runEslint(['src/usesMalformed.ts']);
 
-    await legacyExistingErrors(
-      { config: CONFIG_FILE, verbose: false },
-      Readable.from([json])
-    );
+    // addLegacyStatements skips the file, but the database-rebuild pass re-scans
+    // the tree, re-encounters the malformed comment, and aborts the whole run so
+    // a partial/incorrect database is never written.
+    await expect(
+      legacyExistingErrors(
+        { config: CONFIG_FILE, verbose: false },
+        Readable.from([json])
+      )
+    ).rejects.toThrow('process.exit called');
+    expect(exitSpy).toHaveBeenCalledWith(1);
 
     // The file is skipped, so it is left byte-for-byte unchanged on disk...
     expect(readFileSync(MALFORMED_FILE, 'utf-8')).toBe(source);
-    // ...and the malformed comment is reported.
+    // ...the malformed comment is reported...
     expect(
       errorSpy.mock.calls.some(([msg]) =>
         String(msg).includes('Malformed legacy comment:')
+      )
+    ).toBe(true);
+    // ...and the rebuild pass announces why it bailed.
+    expect(
+      errorSpy.mock.calls.some(([msg]) =>
+        String(msg).includes('Parse errors found')
+      )
+    ).toBe(true);
+  });
+
+  it('preserves previously-legacied statements from files without new errors on a re-run', async () => {
+    // First run legacies only the console file, recording its id.
+    let legacyExistingErrors = await loadCommand();
+    await legacyExistingErrors(
+      { config: CONFIG_FILE, verbose: false },
+      Readable.from([runEslint(['src/usesConsole.ts'])])
+    );
+    const firstData = readData();
+    expect(firstData).toHaveLength(1);
+    const consoleId = firstData[0][0];
+
+    // Second run legacies only the debugger file. usesConsole.ts has no new
+    // error this time, so it is never rewritten — but its previously-legacied
+    // statement must survive in the rebuilt database rather than being dropped.
+    legacyExistingErrors = await loadCommand();
+    await legacyExistingErrors(
+      { config: CONFIG_FILE, verbose: false },
+      Readable.from([runEslint(['src/usesDebugger.ts'])])
+    );
+
+    const debuggerId = idsInFile(DEBUGGER_FILE)[0];
+    expect(new Map(readData())).toEqual(
+      new Map([
+        [consoleId, ['no-console']],
+        [debuggerId, ['no-debugger']],
+      ])
+    );
+  });
+
+  it('is idempotent when re-run with no new errors', async () => {
+    let legacyExistingErrors = await loadCommand();
+    await legacyExistingErrors(
+      { config: CONFIG_FILE, verbose: false },
+      Readable.from([runEslint()])
+    );
+    const dataAfterFirstRun = readData();
+    const consoleAfterFirstRun = readFileSync(CONSOLE_FILE, 'utf-8');
+    const debuggerAfterFirstRun = readFileSync(DEBUGGER_FILE, 'utf-8');
+
+    // Re-run with empty lint output: nothing new to legacy, so no file changes,
+    // and the database rebuilt from the existing comments comes back identical.
+    legacyExistingErrors = await loadCommand();
+    await legacyExistingErrors(
+      { config: CONFIG_FILE, verbose: false },
+      Readable.from(['[]'])
+    );
+
+    expect(readData()).toEqual(dataAfterFirstRun);
+    expect(readFileSync(CONSOLE_FILE, 'utf-8')).toBe(consoleAfterFirstRun);
+    expect(readFileSync(DEBUGGER_FILE, 'utf-8')).toBe(debuggerAfterFirstRun);
+  });
+
+  it('aborts when the codebase already contains a duplicate legacy id', async () => {
+    // Two well-formed legacy comments sharing one id. parseComments accepts each
+    // in isolation; the collision only surfaces when buildDatabase folds them
+    // into a single database, which must abort the run.
+    const sharedId = makeId('dupe');
+    writeFileSync(
+      join(WORK_SRC, 'dupeA.ts'),
+      `// eslint-disable-next-line no-console -- ${DEFAULT_PRAGMA} (no-console) ${sharedId}\nconsole.log('a');\n`
+    );
+    writeFileSync(
+      join(WORK_SRC, 'dupeB.ts'),
+      `// eslint-disable-next-line no-debugger -- ${DEFAULT_PRAGMA} (no-debugger) ${sharedId}\ndebugger;\n`
+    );
+
+    const errorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called');
+    });
+    const legacyExistingErrors = await loadCommand();
+
+    await expect(
+      legacyExistingErrors(
+        { config: CONFIG_FILE, verbose: false },
+        Readable.from(['[]'])
+      )
+    ).rejects.toThrow('process.exit called');
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(
+      errorSpy.mock.calls.some(([msg]) =>
+        String(msg).includes('Duplicate ID errors found')
       )
     ).toBe(true);
   });

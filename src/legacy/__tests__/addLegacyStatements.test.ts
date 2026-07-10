@@ -7,11 +7,9 @@ import { DEFAULT_PRAGMA } from '../../util/constants.js';
 import { parseDisableComment } from '../../util/parseDisableComment.js';
 import type { LintErrors } from '../../util/types.js';
 import { addLegacyStatements } from '../addLegacyStatements.js';
-import { getIds } from '../generateIds.js';
 
-// nanoid is mocked so generated ids are deterministic (enabling exact-string
-// assertions) and so we can deliberately force a collision to exercise the
-// dedupe loop in generateId.
+// nanoid is mocked so generated ids are deterministic, enabling exact-string
+// assertions on the ids that land in the generated disable comments.
 const nanoidMock = vi.fn<typeof nanoid>();
 vi.mock('nanoid', () => ({ nanoid: () => nanoidMock() }));
 
@@ -24,13 +22,10 @@ const ROOT = '/repo';
 const FILE = `${ROOT}/test.ts`;
 const JSX_FILE = `${ROOT}/test.tsx`;
 
-// The function under test keeps a module-level idSet to dedupe generated ids
-// across calls; it persists for the whole test run. To keep that from coupling
-// tests, the default nanoid mock is a single monotonic counter that never
-// repeats a value across the run. Tests assert against the ids that were
-// actually handed out (captured below) rather than hard-coding global counts.
-// idSequence sizes each id to ID_LENGTH, so the mock tracks real nanoid's
-// length.
+// The default nanoid mock is a monotonic counter so every net-new id is a
+// distinct, deterministic value. Tests assert against the ids that were actually
+// handed out (captured below) rather than hard-coding values. idSequence sizes
+// each id to ID_LENGTH, so the mock tracks real nanoid's length.
 const nextId = idSequence();
 
 // The ids produced by the default generator during a single run() call, in
@@ -202,9 +197,6 @@ describe('addLegacyStatements', () => {
 
   describe('merge into an existing next-line comment', () => {
     it('reuses the legacy id and carries the previously-legacied rule into the parenthetical', () => {
-      // Legacy ids must be unique per test: the function's module-level idSet
-      // persists across the run and would otherwise regenerate a reused id that
-      // was already issued elsewhere.
       const existing = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) ${makeId('keepid01')}`;
       const result = run({
         fileContents: `const a = 1;\n${existing}\nconst x = 2;`,
@@ -219,22 +211,6 @@ describe('addLegacyStatements', () => {
         'const a = 1;',
         `// eslint-disable-next-line new-rule, old-rule -- ${DEFAULT_PRAGMA} (new-rule, old-rule) ${makeId('keepid01')}`,
         'const x = 2;',
-      ]);
-    });
-
-    it('records the full union of legacied rules against the reused id in the ids map', () => {
-      const existing = `// eslint-disable-next-line old-rule -- ${DEFAULT_PRAGMA} (old-rule) ${makeId('keepid20')}`;
-      run({
-        fileContents: `const a = 1;\n${existing}\nconst x = 2;`,
-        entries: [[2, ['new-rule']]],
-      });
-      // The database entry for a merged legacy tracks every legacied rule (the
-      // new lint error unioned with the previously-legacied rule), not just the
-      // new one — otherwise re-legacying would silently drop the old rule from
-      // the database.
-      expect(getIds().get(makeId('keepid20'))).toEqual([
-        'new-rule',
-        'old-rule',
       ]);
     });
 
@@ -347,32 +323,6 @@ describe('addLegacyStatements', () => {
         `// eslint-disable-next-line rule-c -- ${DEFAULT_PRAGMA} (rule-c) ${issuedIds[0]}`,
         'const c = 3;',
       ]);
-    });
-  });
-
-  describe('id collision guard', () => {
-    it('regenerates the id when nanoid first returns an already-used value', () => {
-      // First insertion consumes the "dupe" id. The second insertion's first
-      // nanoid call returns that same value, forcing the while loop to spin
-      // again and take the unique "fresh" id.
-      nanoidMock
-        .mockReturnValueOnce(makeId('dupe'))
-        .mockReturnValueOnce(makeId('dupe'))
-        .mockReturnValueOnce(makeId('fresh'));
-      const result = run({
-        fileContents: 'const a = 1;\nconst b = 2;\nconst c = 3;',
-        entries: [
-          [0, ['rule-a']],
-          [2, ['rule-c']],
-        ],
-      });
-      const lines = result.split('\n');
-      // Reverse iteration: the line-2 error is processed first and takes the
-      // "dupe" id (lines[3] after insertion); the line-0 error is processed
-      // second, collides on it, and falls through to the "fresh" id (lines[0]).
-      expect(lines[3]).toContain(makeId('dupe'));
-      expect(lines[0]).toContain(makeId('fresh'));
-      expect(nanoidMock).toHaveBeenCalledTimes(3);
     });
   });
 

@@ -9,6 +9,8 @@ A tool for enabling ESLint/Oxlint rules on codebases with legacy errors
 To legacy new rules (say cause you added new lint rules to the config): Disable
 the CI check in the PR that re-legacies, then re-enable in follow up PR
 
+When legacying new rules on a codebase that has been previously legacied, always run the validate command first to ensure there are no existing validation errors (it won't pick up on the new rules)
+
 ## Known limitations
 
 - If a second violation of the same rule is added to the same line with an already legacied error that is non-disableable, then it won't get flagged as violation
@@ -24,3 +26,4 @@ the CI check in the PR that re-legacies, then re-enable in follow up PR
 
 - Rule name normalization is different between ESLint and Oxlint. We apply how each linter works for accuracy, but you should be aware of some peculiar design choices in Oxlint. Oxlint actually ignores namespaces in rule names, so `@typescript-eslint/no-explicit-any` and `eslint/no-explicit-any` are treated as the same rule, and `// oxlint-disable @typescript-eslint/no-explicit-any` will disable `eslint/no-explicit-any` errors in addition to the typescript ones.
 - Talk about collision odds and what happens, referencing src/util/constants.ts
+- Explicitly call out that lint results should be piped directly to the legacy command, and doing anything else is at your own risk
