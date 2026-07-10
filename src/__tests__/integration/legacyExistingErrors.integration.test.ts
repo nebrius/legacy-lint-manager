@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { Readable } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -368,6 +368,29 @@ describe('legacy-errors (integration)', () => {
     expect(readData()).toEqual(dataAfterFirstRun);
     expect(readFileSync(CONSOLE_FILE, 'utf-8')).toBe(consoleAfterFirstRun);
     expect(readFileSync(DEBUGGER_FILE, 'utf-8')).toBe(debuggerAfterFirstRun);
+  });
+
+  it('resolves a relative config path against the current working directory', async () => {
+    const legacyExistingErrors = await loadCommand();
+    const json = runEslint(['src/usesConsole.ts']);
+
+    // Passing the config as a bare filename forces the relative-path branch,
+    // which resolves it against cwd — so the command must run from the work dir.
+    const originalCwd = process.cwd();
+    process.chdir(WORK_DIR);
+    try {
+      await legacyExistingErrors(
+        { config: basename(CONFIG_FILE), verbose: false },
+        Readable.from([json])
+      );
+    } finally {
+      process.chdir(originalCwd);
+    }
+
+    // The relative config resolved correctly, so the error was legacied and
+    // recorded just as with an absolute path.
+    expect(hasLegacyComment(CONSOLE_FILE, 'no-console')).toBe(true);
+    expect(readData()).toHaveLength(1);
   });
 
   it('aborts when the codebase already contains a duplicate legacy id', async () => {
