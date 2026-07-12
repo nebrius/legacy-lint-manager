@@ -1,4 +1,3 @@
 - Fail if there are uncommitted changes when running legacy-errors
-- Switch to`lintCommand` config option instead of piping
 - Add basic monorepo support, which doesn't allow per-package config
 - Create docs

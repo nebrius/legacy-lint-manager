@@ -49,8 +49,14 @@ export async function readResults({
               // type and type assertions are. This type is always an Error, but
               // TypeScript always types caught errors as `unknown`, but for some
               // reason the linter still thinks the cast is unecessary.
-              // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-              reject(error as Error);
+
+              reject(
+                errorOutput.length > 0
+                  ? new Error(errorOutput.join('\n'))
+                  : // We know that this error is always an Error, but TypeScript
+                    // always types caught errors as `unknown`
+                    (error as Error)
+              );
             }
             break;
           }
@@ -78,8 +84,14 @@ export async function readResults({
           // type and type assertions are. This type is always an Error, but
           // TypeScript always types caught errors as `unknown`, but for some
           // reason the linter still thinks the cast is unecessary.
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-          reject(error as Error);
+
+          reject(
+            errorOutput.length > 0
+              ? new Error(errorOutput.join('\n'))
+              : // We know that this error is always an Error, but TypeScript
+                // always types caught errors as `unknown`
+                (error as Error)
+          );
         }
       }
     });
