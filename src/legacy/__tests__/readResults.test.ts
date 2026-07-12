@@ -2,7 +2,17 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { MockInstance } from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 
 import { readResults } from '../readResults.js';
 
@@ -15,10 +25,57 @@ function cmd(script: string, ...extra: string[]) {
   return { command: process.execPath, args: ['-e', script, ...extra] };
 }
 
+function loggedErrors(spy: { mock: { calls: unknown[][] } }): string {
+  return spy.mock.calls.map((call) => String(call[0])).join('\n');
+}
+
+// On a parse failure or unexpected exit code, readResults logs diagnostics and
+// calls process.exit(1) — from inside the child's async 'close' handler, which
+// can fire slightly after the test that started it has moved on. The stubs are
+// therefore installed for the whole file rather than per test: a per-test stub
+// torn down in afterEach would let a late 'close' reach vitest's real
+// process.exit guard and surface as an unhandled error. Kept file-wide, a late
+// exit call just hits the no-op.
+let exitSpy: MockInstance<typeof process.exit>;
+let errorSpy: MockInstance<typeof console.error>;
+
+beforeAll(() => {
+  exitSpy = vi
+    .spyOn(process, 'exit')
+    .mockImplementation(() => undefined as never);
+  errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+});
+
+afterAll(() => {
+  exitSpy.mockRestore();
+  errorSpy.mockRestore();
+});
+
+// Runs a command down the process-exit path and resolves with the exit code and
+// the diagnostics logged along the way. A one-shot implementation captures this
+// test's exit call (the persistent no-op above absorbs any other), so awaiting
+// keeps the test alive until that specific exit has run.
+function runToExit(
+  args: Parameters<typeof readResults>[0]
+): Promise<{ code: number | undefined; logged: string }> {
+  return new Promise((resolve) => {
+    exitSpy.mockImplementationOnce((code) => {
+      resolve({
+        code: typeof code === 'number' ? code : undefined,
+        logged: loggedErrors(errorSpy),
+      });
+      return undefined as never;
+    });
+    void readResults(args);
+  });
+}
+
 let dir: string;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'legacy-lint-read-results-'));
+  exitSpy.mockClear();
+  errorSpy.mockClear();
 });
 
 afterEach(() => {
@@ -52,36 +109,42 @@ describe('readResults', () => {
       ).resolves.toEqual([]);
     });
 
-    it('rejects when stdout is not valid JSON', async () => {
-      await expect(
-        readResults({
-          linterType: 'eslint',
-          lintCommand: cmd('process.stdout.write("not json")'),
-          dir,
-        })
-      ).rejects.toThrow();
+    it('exits 1 and logs guidance plus the offending stdout when it is not valid JSON', async () => {
+      const { code, logged } = await runToExit({
+        linterType: 'eslint',
+        lintCommand: cmd('process.stdout.write("not json")'),
+        dir,
+      });
+
+      expect(code).toBe(1);
+      expect(logged).toContain('Could not JSON parse linter output');
+      // The unparseable stdout is echoed back to help diagnose the failure.
+      expect(logged).toContain('not json');
     });
 
-    it('rejects with the stderr output when the command exits with an unexpected code', async () => {
-      await expect(
-        readResults({
-          linterType: 'eslint',
-          lintCommand: cmd('process.stderr.write("boom"); process.exit(2)'),
-          dir,
-        })
-      ).rejects.toThrow('boom');
-    });
+    it('exits 1 and logs the exit code and stderr on an unexpected exit code', async () => {
+      const { code, logged } = await runToExit({
+        linterType: 'eslint',
+        lintCommand: cmd('process.stderr.write("boom"); process.exit(2)'),
+        dir,
+      });
 
-    it('rejects with a code-bearing fallback message when there is no stderr', async () => {
-      await expect(
-        readResults({
-          linterType: 'eslint',
-          lintCommand: cmd('process.exit(2)'),
-          dir,
-        })
-      ).rejects.toThrow(
+      expect(code).toBe(1);
+      expect(logged).toContain(
         'ESLint did not run successfully and exited with code 2'
       );
+      expect(logged).toContain('boom');
+    });
+
+    it('truncates the logged stdout to the last 1kb for a large invalid payload', async () => {
+      const { code, logged } = await runToExit({
+        linterType: 'eslint',
+        lintCommand: cmd('process.stdout.write("x".repeat(2000))'),
+        dir,
+      });
+
+      expect(code).toBe(1);
+      expect(logged).toContain('stdout (last 1kb only)');
     });
   });
 
@@ -99,14 +162,15 @@ describe('readResults', () => {
       ).resolves.toEqual([]);
     });
 
-    it('rejects when stdout is not valid JSON', async () => {
-      await expect(
-        readResults({
-          linterType: 'oxlint',
-          lintCommand: cmd('process.stdout.write("nope"); process.exit(1)'),
-          dir,
-        })
-      ).rejects.toThrow();
+    it('exits 1 and logs guidance when stdout is not valid JSON', async () => {
+      const { code, logged } = await runToExit({
+        linterType: 'oxlint',
+        lintCommand: cmd('process.stdout.write("nope"); process.exit(1)'),
+        dir,
+      });
+
+      expect(code).toBe(1);
+      expect(logged).toContain('Could not JSON parse linter output');
     });
   });
 

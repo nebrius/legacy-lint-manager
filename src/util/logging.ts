@@ -1,3 +1,5 @@
+import { styleText } from 'node:util';
+
 /* eslint-disable no-console */
 let verboseEnabled = false;
 export function setVerbose(verbose: boolean) {
@@ -5,7 +7,7 @@ export function setVerbose(verbose: boolean) {
 }
 
 export function error(msg: string) {
-  console.error(msg);
+  console.error(styleText('red', msg));
 }
 
 export function info(msg: string) {
@@ -14,7 +16,7 @@ export function info(msg: string) {
 
 function debug(msg: string) {
   if (verboseEnabled) {
-    console.debug(`[Debug]: ${msg}`);
+    console.debug(styleText('gray', `[Debug]: ${msg}`));
   }
 }
 

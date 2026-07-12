@@ -22,6 +22,7 @@ When legacying new rules on a codebase that has been previously legacied, always
 - API is not idempotent. The second run will produce spurious and unreliable IDs
 - There are a small number of rules in Oxlint (5 in v1.71.0) where we cannot determine where the disable comment should be placed, and will place it on the wrong line when editing. This happens in rules where diagnostics correspond to more than one statement (called a span internally), and they don't surface which span the disable comment should be placed next to, nor is there a way for us to deterministically infer it.
 - `legacy-errors` is not supported on Windows systems outside of WSL due to subprocess commands
+- In monorepo mode, if the legacy processessing for a package half way throught the list of packages fails, then the remaining packages will not be processed.
 
 ## Random notes
 

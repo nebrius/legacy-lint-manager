@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 
 import type { Config } from '../util/config.js';
+import { error } from '../util/logging.js';
 
 export async function readResults({
   linterType,
@@ -33,9 +34,41 @@ export async function readResults({
       errorOutput.push(data);
     });
 
-    commandProcess.on('error', (error) => {
-      reject(error);
+    commandProcess.on('error', (err) => {
+      reject(err);
     });
+
+    function exitWithParseError({
+      err,
+      preamble,
+    }: {
+      err?: Error;
+      preamble?: string;
+    }) {
+      error(
+        preamble ??
+          'Could not JSON parse linter output. Did you forget `--format=json` in your lintCommand?'
+      );
+      if (err) {
+        error('\n\n--- Error ---\n\n');
+        error(err.toString());
+      }
+      if (errorOutput.length > 0) {
+        error(`\n\n--- ${linterType} stderr ---\n\n`);
+        error(errorOutput.join(''));
+      }
+      if (results.length > 0) {
+        const stdout = results.join('');
+        if (stdout.length > 1_024) {
+          error(`\n\n--- ${linterType} stdout (last 1kb only) ---\n\n`);
+          error(stdout.slice(stdout.length - 1_024));
+        } else {
+          error(`\n\n--- ${linterType} stdout ---\n\n`);
+          error(stdout);
+        }
+      }
+      process.exit(1);
+    }
 
     commandProcess.on('close', (code) => {
       if (linterType === 'eslint') {
@@ -44,30 +77,18 @@ export async function readResults({
           case 1: {
             try {
               resolve(JSON.parse(results.join('')));
-            } catch (error) {
-              // There are several systems fighting here over what the correct
-              // type and type assertions are. This type is always an Error, but
-              // TypeScript always types caught errors as `unknown`, but for some
-              // reason the linter still thinks the cast is unecessary.
-
-              reject(
-                errorOutput.length > 0
-                  ? new Error(errorOutput.join('\n'))
-                  : // We know that this error is always an Error, but TypeScript
-                    // always types caught errors as `unknown`
-                    (error as Error)
-              );
+            } catch (err) {
+              exitWithParseError({ err: err as Error });
             }
             break;
           }
           default: {
-            reject(
-              new Error(
-                errorOutput.join('\n') ||
-                  'ESLint did not run successfully' +
-                    (code ? ` and exited with code ${code.toString()}` : '')
-              )
-            );
+            exitWithParseError({
+              preamble:
+                'ESLint did not run successfully' +
+                (code ? ` and exited with code ${code.toString()}` : ''),
+            });
+            break;
           }
         }
       } else {
@@ -79,19 +100,8 @@ export async function readResults({
         // otherwise we consider it a failure.
         try {
           resolve(JSON.parse(results.join('')));
-        } catch (error) {
-          // There are several systems fighting here over what the correct
-          // type and type assertions are. This type is always an Error, but
-          // TypeScript always types caught errors as `unknown`, but for some
-          // reason the linter still thinks the cast is unecessary.
-
-          reject(
-            errorOutput.length > 0
-              ? new Error(errorOutput.join('\n'))
-              : // We know that this error is always an Error, but TypeScript
-                // always types caught errors as `unknown`
-                (error as Error)
-          );
+        } catch (err) {
+          exitWithParseError({ err: err as Error });
         }
       }
     });
