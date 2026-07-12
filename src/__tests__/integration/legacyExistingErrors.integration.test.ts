@@ -204,7 +204,10 @@ describe('legacy-errors (integration)', () => {
   });
 
   it('legacies an ESLint warning when the config sets ignoreWarnings false', async () => {
-    writeConfig({ ignoreWarnings: false, lintCommand: eslintCommand(VAR_REL_FILES) });
+    writeConfig({
+      ignoreWarnings: false,
+      lintCommand: eslintCommand(VAR_REL_FILES),
+    });
 
     await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
 
@@ -214,7 +217,10 @@ describe('legacy-errors (integration)', () => {
   });
 
   it('does not legacy an ESLint warning when the config sets ignoreWarnings true', async () => {
-    writeConfig({ ignoreWarnings: true, lintCommand: eslintCommand(VAR_REL_FILES) });
+    writeConfig({
+      ignoreWarnings: true,
+      lintCommand: eslintCommand(VAR_REL_FILES),
+    });
 
     await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
 

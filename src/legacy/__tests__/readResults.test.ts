@@ -66,9 +66,7 @@ describe('readResults', () => {
       await expect(
         readResults({
           linterType: 'eslint',
-          lintCommand: cmd(
-            'process.stderr.write("boom"); process.exit(2)'
-          ),
+          lintCommand: cmd('process.stderr.write("boom"); process.exit(2)'),
           dir,
         })
       ).rejects.toThrow('boom');
@@ -81,7 +79,9 @@ describe('readResults', () => {
           lintCommand: cmd('process.exit(2)'),
           dir,
         })
-      ).rejects.toThrow('ESLint did not run successfully and exited with code 2');
+      ).rejects.toThrow(
+        'ESLint did not run successfully and exited with code 2'
+      );
     });
   });
 
