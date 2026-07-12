@@ -101,6 +101,12 @@ function type(value: string): void {
   }
 }
 
+function backspace(count: number): void {
+  for (let i = 0; i < count; i++) {
+    input.emit('keypress', '', { name: 'backspace' });
+  }
+}
+
 beforeEach(() => {
   input = new MockReadable();
   output = new MockWritable();
@@ -131,6 +137,9 @@ describe('init (interactive)', () => {
     await waitForText('Which linter do you use?');
     press('return'); // first option: ESLint
 
+    await waitForText('command should I run');
+    press('return'); // accept the default lint command
+
     await waitForText('Ignore lint warnings?');
     press('return'); // initialValue: false
 
@@ -153,6 +162,7 @@ describe('init (interactive)', () => {
     const config = readConfig(join(workDir, 'legacy-lint.config.jsonc'));
     expect(config).toEqual({
       linterType: 'eslint',
+      lintCommand: { command: 'npx', args: ['eslint', '--format=json'] },
       ignoreWarnings: false,
       pragma: DEFAULT_PRAGMA,
       // init stores databaseFile relative, but readConfig resolves it to an
@@ -175,6 +185,9 @@ describe('init (interactive)', () => {
     press('down'); // move from ESLint to Oxlint
     press('return');
 
+    await waitForText('command should I run');
+    press('return'); // accept the default lint command
+
     await waitForText('Ignore lint warnings?');
     press('return');
 
@@ -195,6 +208,11 @@ describe('init (interactive)', () => {
 
     const config = readConfig(join(workDir, 'legacy-lint.config.jsonc'));
     expect(config.linterType).toBe('oxlint');
+    // The default lint command reflects the chosen linter.
+    expect(config.lintCommand).toEqual({
+      command: 'npx',
+      args: ['oxlint', '--format=json'],
+    });
     expect(config.nonDisableableRules).toEqual(['no-debugger']);
   });
 
@@ -208,6 +226,9 @@ describe('init (interactive)', () => {
     );
 
     const result = init({ input, output });
+
+    await waitForText('command should I run');
+    press('return'); // accept the default lint command
 
     await waitForText('Ignore lint warnings?');
     press('return');
@@ -238,6 +259,9 @@ describe('init (interactive)', () => {
     writeFileSync(join(workDir, '.oxlintrc.json'), '{}\n');
 
     const result = init({ input, output });
+
+    await waitForText('command should I run');
+    press('return'); // accept the default lint command
 
     await waitForText('Ignore lint warnings?');
     press('return');
@@ -273,6 +297,9 @@ describe('init (interactive)', () => {
     await waitForText('Which linter do you use?');
     press('return');
 
+    await waitForText('command should I run');
+    press('return'); // accept the default lint command
+
     await waitForText('Ignore lint warnings?');
     press('return');
 
@@ -300,6 +327,82 @@ describe('init (interactive)', () => {
     // non-disableable rules.
     expect(config.nonDisableableRules).toEqual([]);
     expect(spawnSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('records a custom lint command split into command and args', async () => {
+    const result = init({ input, output });
+
+    await waitForText('Which linter do you use?');
+    press('return'); // ESLint
+
+    await waitForText('command should I run');
+    type('pnpm exec eslint -f json');
+    press('return');
+
+    await waitForText('Ignore lint warnings?');
+    press('return');
+
+    await waitForText('prefixed with');
+    press('return');
+
+    await waitForText('flagged if disabled');
+    press('return'); // accept the empty default rules list
+
+    await waitForText('compared against');
+    press('return');
+
+    await waitForText('database file be stored');
+    press('return');
+
+    await result;
+
+    const config = readConfig(join(workDir, 'legacy-lint.config.jsonc'));
+    // The whitespace-separated command becomes { command, args }.
+    expect(config.lintCommand).toEqual({
+      command: 'pnpm',
+      args: ['exec', 'eslint', '-f', 'json'],
+    });
+  });
+
+  it('rejects a lint command with quoted args and accepts a corrected one', async () => {
+    const result = init({ input, output });
+
+    await waitForText('Which linter do you use?');
+    press('return'); // ESLint
+
+    await waitForText('command should I run');
+    const rejected = 'eslint "src/**"';
+    type(rejected);
+    press('return'); // validation fails: the value contains a quote
+
+    await waitForText('cannot contain quoted arguments');
+    // The rejected value stays in the buffer, so clear it before retyping.
+    backspace(rejected.length);
+    type('eslint -f json');
+    press('return');
+
+    await waitForText('Ignore lint warnings?');
+    press('return');
+
+    await waitForText('prefixed with');
+    press('return');
+
+    await waitForText('flagged if disabled');
+    press('return');
+
+    await waitForText('compared against');
+    press('return');
+
+    await waitForText('database file be stored');
+    press('return');
+
+    await result;
+
+    const config = readConfig(join(workDir, 'legacy-lint.config.jsonc'));
+    expect(config.lintCommand).toEqual({
+      command: 'eslint',
+      args: ['-f', 'json'],
+    });
   });
 
   it('exits without writing a config when the user cancels', async () => {

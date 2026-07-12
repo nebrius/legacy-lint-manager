@@ -1,7 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { Readable } from 'node:stream';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -45,34 +44,42 @@ function git(args: string[]) {
   execFileSync('git', args, { cwd: WORK_DIR, stdio: 'pipe' });
 }
 
-// eslint/oxlint exit non-zero when lint errors exist, so execFileSync throws;
-// the JSON we want is on the thrown error's stdout.
-function runLinter(bin: string, args: string[]): string {
-  try {
-    return execFileSync(bin, args, { cwd: WORK_DIR, encoding: 'utf-8' });
-  } catch (err) {
-    const stdout = (err as { stdout?: string }).stdout;
-    if (typeof stdout !== 'string' || stdout.length === 0) {
-      throw err;
-    }
-    return stdout;
-  }
-}
+// The tool now spawns the configured lint command itself (readResults sets the
+// spawn cwd to the repo root, i.e. WORK_DIR), so each test points lintCommand at
+// the real eslint/oxlint binary. eslint/oxlint exit non-zero when they report
+// errors, which readResults treats as success.
+const eslintCommand = (files: string[] = REL_FILES) => ({
+  command: ESLINT_BIN,
+  args: ['--no-ignore', '--format=json', ...files],
+});
 
-function runEslint(files: string[] = REL_FILES): string {
-  return runLinter(ESLINT_BIN, ['--no-ignore', '--format=json', ...files]);
-}
+const oxlintCommand = (files: string[] = REL_FILES) => ({
+  command: OXLINT_BIN,
+  args: ['-f', 'json', ...files],
+});
 
-function runOxlint(files: string[] = REL_FILES): string {
-  return runLinter(OXLINT_BIN, ['-f', 'json', ...files]);
-}
+// Emits an empty result set without running a linter, for the re-run scenarios
+// that assert behavior when no new errors are reported.
+const EMPTY_COMMAND = {
+  command: process.execPath,
+  args: ['-e', 'process.stdout.write("[]")'],
+};
 
 // Write a config file pointing at the work-dir data file. databaseFile is an
 // absolute path so readDatabase resolves it regardless of the process cwd.
-function writeConfig(ignoreWarnings = false, linterType = 'eslint') {
+function writeConfig({
+  ignoreWarnings = false,
+  linterType = 'eslint',
+  lintCommand = eslintCommand(),
+}: {
+  ignoreWarnings?: boolean;
+  linterType?: 'eslint' | 'oxlint';
+  lintCommand?: { command: string; args: string[] };
+} = {}) {
   writeFileSync(
     CONFIG_FILE,
     JSON.stringify({
+      lintCommand,
       ignoreWarnings,
       pragma: DEFAULT_PRAGMA,
       databaseFile: WORKING_DATA,
@@ -132,12 +139,8 @@ afterEach(() => {
 
 describe('legacy-errors (integration)', () => {
   it('legacies real ESLint errors and records their ids', async () => {
-    const json = runEslint();
-
-    await legacyExistingErrors(
-      { config: CONFIG_FILE, verbose: false },
-      Readable.from([json])
-    );
+    // beforeEach already wrote the default config (eslint over REL_FILES).
+    await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
 
     expect(readFileSync(CONSOLE_FILE, 'utf-8')).toMatch(
       new RegExp(
@@ -164,18 +167,14 @@ describe('legacy-errors (integration)', () => {
   });
 
   it('legacies real Oxlint errors and records their ids', async () => {
-    writeConfig(false, 'oxlint');
-    const json = runOxlint();
+    writeConfig({ linterType: 'oxlint', lintCommand: oxlintCommand() });
 
     // Oxlint emits filenames relative to its cwd, so the command's readFileSync
     // resolves them against the work directory only if that is the cwd.
     const originalCwd = process.cwd();
     process.chdir(WORK_DIR);
     try {
-      await legacyExistingErrors(
-        { config: CONFIG_FILE, verbose: false },
-        Readable.from([json])
-      );
+      await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
     } finally {
       process.chdir(originalCwd);
     }
@@ -205,13 +204,9 @@ describe('legacy-errors (integration)', () => {
   });
 
   it('legacies an ESLint warning when the config sets ignoreWarnings false', async () => {
-    writeConfig(false);
-    const json = runEslint(VAR_REL_FILES);
+    writeConfig({ ignoreWarnings: false, lintCommand: eslintCommand(VAR_REL_FILES) });
 
-    await legacyExistingErrors(
-      { config: CONFIG_FILE, verbose: false },
-      Readable.from([json])
-    );
+    await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
 
     // Both the no-var warning and the no-console error get legacied.
     expect(hasLegacyComment(VAR_FILE, 'no-var')).toBe(true);
@@ -219,13 +214,9 @@ describe('legacy-errors (integration)', () => {
   });
 
   it('does not legacy an ESLint warning when the config sets ignoreWarnings true', async () => {
-    writeConfig(true);
-    const json = runEslint(VAR_REL_FILES);
+    writeConfig({ ignoreWarnings: true, lintCommand: eslintCommand(VAR_REL_FILES) });
 
-    await legacyExistingErrors(
-      { config: CONFIG_FILE, verbose: false },
-      Readable.from([json])
-    );
+    await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
 
     // The no-console error is still legacied; the no-var warning is skipped.
     expect(hasLegacyComment(VAR_FILE, 'no-console')).toBe(true);
@@ -233,16 +224,16 @@ describe('legacy-errors (integration)', () => {
   });
 
   it('does not legacy an Oxlint warning when the config sets ignoreWarnings true', async () => {
-    writeConfig(true, 'oxlint');
-    const json = runOxlint(VAR_REL_FILES);
+    writeConfig({
+      ignoreWarnings: true,
+      linterType: 'oxlint',
+      lintCommand: oxlintCommand(VAR_REL_FILES),
+    });
 
     const originalCwd = process.cwd();
     process.chdir(WORK_DIR);
     try {
-      await legacyExistingErrors(
-        { config: CONFIG_FILE, verbose: false },
-        Readable.from([json])
-      );
+      await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
     } finally {
       process.chdir(originalCwd);
     }
@@ -272,16 +263,13 @@ describe('legacy-errors (integration)', () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('process.exit called');
     });
-    const json = runEslint(['src/usesMalformed.ts']);
+    writeConfig({ lintCommand: eslintCommand(['src/usesMalformed.ts']) });
 
     // addLegacyStatements skips the file, but the database-rebuild pass re-scans
     // the tree, re-encounters the malformed comment, and aborts the whole run so
     // a partial/incorrect database is never written.
     await expect(
-      legacyExistingErrors(
-        { config: CONFIG_FILE, verbose: false },
-        Readable.from([json])
-      )
+      legacyExistingErrors({ config: CONFIG_FILE, verbose: false })
     ).rejects.toThrow('process.exit called');
     expect(exitSpy).toHaveBeenCalledWith(1);
 
@@ -303,10 +291,8 @@ describe('legacy-errors (integration)', () => {
 
   it('preserves previously-legacied statements from files without new errors on a re-run', async () => {
     // First run legacies only the console file, recording its id.
-    await legacyExistingErrors(
-      { config: CONFIG_FILE, verbose: false },
-      Readable.from([runEslint(['src/usesConsole.ts'])])
-    );
+    writeConfig({ lintCommand: eslintCommand(['src/usesConsole.ts']) });
+    await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
     const firstData = readData();
     expect(firstData).toHaveLength(1);
     const consoleId = firstData[0][0];
@@ -314,10 +300,8 @@ describe('legacy-errors (integration)', () => {
     // Second run legacies only the debugger file. usesConsole.ts has no new
     // error this time, so it is never rewritten — but its previously-legacied
     // statement must survive in the rebuilt database rather than being dropped.
-    await legacyExistingErrors(
-      { config: CONFIG_FILE, verbose: false },
-      Readable.from([runEslint(['src/usesDebugger.ts'])])
-    );
+    writeConfig({ lintCommand: eslintCommand(['src/usesDebugger.ts']) });
+    await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
 
     const debuggerId = idsInFile(DEBUGGER_FILE)[0];
     expect(new Map(readData())).toEqual(
@@ -329,20 +313,16 @@ describe('legacy-errors (integration)', () => {
   });
 
   it('is idempotent when re-run with no new errors', async () => {
-    await legacyExistingErrors(
-      { config: CONFIG_FILE, verbose: false },
-      Readable.from([runEslint()])
-    );
+    // beforeEach already wrote the default config (eslint over REL_FILES).
+    await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
     const dataAfterFirstRun = readData();
     const consoleAfterFirstRun = readFileSync(CONSOLE_FILE, 'utf-8');
     const debuggerAfterFirstRun = readFileSync(DEBUGGER_FILE, 'utf-8');
 
     // Re-run with empty lint output: nothing new to legacy, so no file changes,
     // and the database rebuilt from the existing comments comes back identical.
-    await legacyExistingErrors(
-      { config: CONFIG_FILE, verbose: false },
-      Readable.from(['[]'])
-    );
+    writeConfig({ lintCommand: EMPTY_COMMAND });
+    await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
 
     expect(readData()).toEqual(dataAfterFirstRun);
     expect(readFileSync(CONSOLE_FILE, 'utf-8')).toBe(consoleAfterFirstRun);
@@ -350,17 +330,17 @@ describe('legacy-errors (integration)', () => {
   });
 
   it('resolves a relative config path against the current working directory', async () => {
-    const json = runEslint(['src/usesConsole.ts']);
+    writeConfig({ lintCommand: eslintCommand(['src/usesConsole.ts']) });
 
     // Passing the config as a bare filename forces the relative-path branch,
     // which resolves it against cwd — so the command must run from the work dir.
     const originalCwd = process.cwd();
     process.chdir(WORK_DIR);
     try {
-      await legacyExistingErrors(
-        { config: basename(CONFIG_FILE), verbose: false },
-        Readable.from([json])
-      );
+      await legacyExistingErrors({
+        config: basename(CONFIG_FILE),
+        verbose: false,
+      });
     } finally {
       process.chdir(originalCwd);
     }
@@ -392,11 +372,9 @@ describe('legacy-errors (integration)', () => {
       throw new Error('process.exit called');
     });
 
+    writeConfig({ lintCommand: EMPTY_COMMAND });
     await expect(
-      legacyExistingErrors(
-        { config: CONFIG_FILE, verbose: false },
-        Readable.from(['[]'])
-      )
+      legacyExistingErrors({ config: CONFIG_FILE, verbose: false })
     ).rejects.toThrow('process.exit called');
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(

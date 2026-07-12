@@ -215,6 +215,10 @@ describe('Comment parsing', () => {
     it('ignores a prefix that is not a real directive (no word boundary)', () => {
       expect(parse('// eslint-disablexyz')).toEqual([]);
       expect(parse('// eslint-disable-foo')).toEqual([]);
+      // Oxlint prefixes skip the block-only guard the eslint forms hit, so this
+      // one reaches the word-boundary check itself: the text after the prefix is
+      // neither whitespace nor empty, so it is not treated as a directive.
+      expect(parse('// oxlint-disablexyz')).toEqual([]);
     });
 
     it('records the correct file and 0-indexed line for each comment', () => {

@@ -35,7 +35,7 @@ addCommonOptions(program.command('validate'))
 addCommonOptions(program.command('legacy-errors'))
   .description('Mark existing lint errors as legacied')
   .action((options) => {
-    void legacyExistingErrors(options, process.stdin);
+    void legacyExistingErrors(options);
   });
 
 addCommonOptions(program.command('init'))

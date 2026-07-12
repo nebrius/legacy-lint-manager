@@ -1,70 +1,143 @@
-import { Readable } from 'node:stream';
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { readResults } from '../readResults.js';
 
-// Builds an in-memory readable stream from the given chunks. readResults only
-// uses the Readable surface (setEncoding, resume, async-iteration), so a
-// Readable.from(...) is a complete stand-in for process.stdin.
-function streamOf(...chunks: Array<string | Buffer>) {
-  return Readable.from(chunks);
+// readResults spawns the configured lint command and reads its stdout, so the
+// tests drive it with real subprocesses instead of a fake ChildProcess. `node`
+// is always available (process.execPath) and `-e` lets each case emit exactly
+// the stdout/stderr and exit code the branch under test needs. This mirrors how
+// the integration and smoke tests already shell out to real binaries.
+function cmd(script: string, ...extra: string[]) {
+  return { command: process.execPath, args: ['-e', script, ...extra] };
 }
 
-const PARSE_ERROR_MESSAGE =
-  'Could not parse piped results. Did you remember to add --format=json when piping the output?';
+let dir: string;
+
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), 'legacy-lint-read-results-'));
+});
+
+afterEach(() => {
+  rmSync(dir, { recursive: true, force: true });
+});
 
 describe('readResults', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  describe('valid JSON', () => {
-    it('parses a single-chunk JSON payload', async () => {
+  describe('eslint', () => {
+    it('parses stdout as JSON when the command exits 0', async () => {
       const payload = [{ filePath: 'a.ts', messages: [] }];
       await expect(
-        readResults(streamOf(JSON.stringify(payload)))
+        readResults({
+          linterType: 'eslint',
+          lintCommand: cmd(
+            `process.stdout.write(${JSON.stringify(JSON.stringify(payload))})`
+          ),
+          dir,
+        })
       ).resolves.toEqual(payload);
     });
 
-    it('reassembles input split across multiple chunks', async () => {
-      await expect(readResults(streamOf('{"a":', '1}'))).resolves.toEqual({
-        a: 1,
-      });
-    });
-
-    it('parses an empty array payload', async () => {
-      await expect(readResults(streamOf('[]'))).resolves.toEqual([]);
-    });
-
-    it('parses an empty object payload', async () => {
-      await expect(readResults(streamOf('{}'))).resolves.toEqual({});
-    });
-
-    it('decodes Buffer chunks as utf-8 strings', async () => {
+    it('parses stdout as JSON when the command exits 1 (errors found)', async () => {
+      // ESLint exits 1 when it reports lint errors, which is the common case
+      // for this tool, so exit 1 must still be treated as success.
       await expect(
-        readResults(streamOf(Buffer.from('{"a":1}')))
-      ).resolves.toEqual({ a: 1 });
+        readResults({
+          linterType: 'eslint',
+          lintCommand: cmd('process.stdout.write("[]"); process.exit(1)'),
+          dir,
+        })
+      ).resolves.toEqual([]);
+    });
+
+    it('rejects when stdout is not valid JSON', async () => {
+      await expect(
+        readResults({
+          linterType: 'eslint',
+          lintCommand: cmd('process.stdout.write("not json")'),
+          dir,
+        })
+      ).rejects.toThrow();
+    });
+
+    it('rejects with the stderr output when the command exits with an unexpected code', async () => {
+      await expect(
+        readResults({
+          linterType: 'eslint',
+          lintCommand: cmd(
+            'process.stderr.write("boom"); process.exit(2)'
+          ),
+          dir,
+        })
+      ).rejects.toThrow('boom');
+    });
+
+    it('rejects with a code-bearing fallback message when there is no stderr', async () => {
+      await expect(
+        readResults({
+          linterType: 'eslint',
+          lintCommand: cmd('process.exit(2)'),
+          dir,
+        })
+      ).rejects.toThrow('ESLint did not run successfully and exited with code 2');
     });
   });
 
-  describe('invalid JSON', () => {
-    it('rejects and logs guidance for malformed input', async () => {
-      const errorSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => undefined);
-
-      await expect(readResults(streamOf('not json'))).rejects.toThrow();
-      expect(errorSpy).toHaveBeenCalledWith(PARSE_ERROR_MESSAGE);
+  describe('oxlint', () => {
+    it('parses stdout as JSON regardless of the exit code', async () => {
+      // Oxlint's exit codes are not meaningful (1 covers both "errors found"
+      // and "config broken"), so a non-zero exit with parseable JSON on stdout
+      // is still treated as success.
+      await expect(
+        readResults({
+          linterType: 'oxlint',
+          lintCommand: cmd('process.stdout.write("[]"); process.exit(1)'),
+          dir,
+        })
+      ).resolves.toEqual([]);
     });
 
-    it('rejects and logs guidance for empty input', async () => {
-      const errorSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => undefined);
-
-      await expect(readResults(streamOf(''))).rejects.toThrow();
-      expect(errorSpy).toHaveBeenCalledWith(PARSE_ERROR_MESSAGE);
+    it('rejects when stdout is not valid JSON', async () => {
+      await expect(
+        readResults({
+          linterType: 'oxlint',
+          lintCommand: cmd('process.stdout.write("nope"); process.exit(1)'),
+          dir,
+        })
+      ).rejects.toThrow();
     });
+  });
+
+  it('rejects when the command cannot be spawned', async () => {
+    await expect(
+      readResults({
+        linterType: 'eslint',
+        lintCommand: {
+          command: 'definitely-not-a-real-binary-xyz',
+          args: [],
+        },
+        dir,
+      })
+    ).rejects.toThrow(/ENOENT/);
+  });
+
+  it('runs the command in the given directory and forwards its args', async () => {
+    // The child reports its own cwd and first extra arg back as JSON, proving
+    // both that `dir` becomes the spawn cwd and that args after the script are
+    // forwarded. realpathSync resolves the macOS /var -> /private/var symlink so
+    // the comparison holds there and is a no-op on Linux CI.
+    const result = (await readResults({
+      linterType: 'eslint',
+      lintCommand: cmd(
+        'process.stdout.write(JSON.stringify({ cwd: process.cwd(), arg: process.argv[1] }))',
+        'MARKER'
+      ),
+      dir,
+    })) as { cwd: string; arg: string };
+
+    expect(result.cwd).toBe(realpathSync(dir));
+    expect(result.arg).toBe('MARKER');
   });
 });

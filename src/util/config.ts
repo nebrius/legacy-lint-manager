@@ -9,6 +9,13 @@ import { validateSchema } from './validateSchema.js';
 
 const ConfigSchema = TypeBox.Object(
   {
+    lintCommand: TypeBox.Object(
+      {
+        command: TypeBox.String(),
+        args: TypeBox.Array(TypeBox.String()),
+      },
+      { additionalProperties: false }
+    ),
     ignoreWarnings: TypeBox.Boolean(),
     pragma: TypeBox.String(),
     databaseFile: TypeBox.String(),

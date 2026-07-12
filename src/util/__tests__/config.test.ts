@@ -11,6 +11,7 @@ const CONFIG_FILE = join(tmpdir(), 'legacy-lint-config-test.jsonc');
 const MISSING_CONFIG = join(tmpdir(), 'legacy-lint-config-missing.jsonc');
 
 const VALID_CONFIG: Config = {
+  lintCommand: { command: 'npx', args: ['eslint', '--format=json'] },
   ignoreWarnings: false,
   pragma: 'This lint error is legacied. DO NOT COPY',
   databaseFile: 'legacy-lint.data.json',
@@ -54,6 +55,7 @@ describe('config', () => {
           '{',
           '  // whether warnings are ignored',
           '  "ignoreWarnings": false,',
+          '  "lintCommand": { "command": "npx", "args": ["eslint"] },',
           '  "pragma": "P",',
           '  "databaseFile": "db.json",',
           '  "nonDisableableRules": [],',
@@ -65,6 +67,7 @@ describe('config', () => {
 
       expect(readConfig(CONFIG_FILE)).toEqual({
         ignoreWarnings: false,
+        lintCommand: { command: 'npx', args: ['eslint'] },
         pragma: 'P',
         // The relative databaseFile is resolved against the config's directory.
         databaseFile: resolve(dirname(CONFIG_FILE), 'db.json'),
@@ -147,6 +150,26 @@ describe('config', () => {
 
     it('throws when the config does not match the schema', () => {
       writeFileSync(CONFIG_FILE, JSON.stringify({ ignoreWarnings: 'yes' }));
+      expect(() => readConfig(CONFIG_FILE)).toThrow('Invalid config file');
+    });
+
+    it('throws when lintCommand is missing', () => {
+      const config: Record<string, unknown> = { ...VALID_CONFIG };
+      delete config.lintCommand;
+      writeFileSync(CONFIG_FILE, JSON.stringify(config));
+      expect(() => readConfig(CONFIG_FILE)).toThrow('Invalid config file');
+    });
+
+    it('throws when lintCommand has the wrong shape', () => {
+      // command must be a string and args an array of strings, so a numeric
+      // command fails the nested schema.
+      writeFileSync(
+        CONFIG_FILE,
+        JSON.stringify({
+          ...VALID_CONFIG,
+          lintCommand: { command: 123, args: [] },
+        })
+      );
       expect(() => readConfig(CONFIG_FILE)).toThrow('Invalid config file');
     });
   });

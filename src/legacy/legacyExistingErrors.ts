@@ -1,6 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
-import type { Readable } from 'node:stream';
 
 import { readConfig } from '../util/config.js';
 import { createDatabase } from '../util/db.js';
@@ -14,10 +13,7 @@ import { buildDatabase } from './buildDatabase.js';
 import { parseResults } from './parseResults.js';
 import { readResults } from './readResults.js';
 
-export async function legacyExistingErrors(
-  options: CommonOptions,
-  inputStream: Readable
-) {
+export async function legacyExistingErrors(options: CommonOptions) {
   setVerbose(options.verbose);
   if (!isAbsolute(options.config)) {
     options.config = resolve(process.cwd(), options.config);
@@ -29,8 +25,11 @@ export async function legacyExistingErrors(
     nonDisableableRules,
     pragma,
     linterType,
+    lintCommand,
   } = readConfig(options.config);
-  const results = await time('reading results', () => readResults(inputStream));
+  const results = await time('reading results', () =>
+    readResults({ lintCommand, linterType, dir: getRepoRoot(options.config) })
+  );
   const lintErrors = time('parsing results', () =>
     parseResults({ results, ignoreWarnings, linterType })
   );

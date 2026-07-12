@@ -48,6 +48,7 @@ function setupRepo(scenario: string) {
   writeFileSync(
     join(REPO_DIR, CONFIG_REL),
     JSON.stringify({
+      lintCommand: { command: 'npx', args: ['eslint', '--format=json'] },
       ignoreWarnings: false,
       pragma: DEFAULT_PRAGMA,
       databaseFile: DATA_REL,

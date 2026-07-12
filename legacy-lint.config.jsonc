@@ -1,10 +1,25 @@
 {
   "linterType": "eslint",
+  "lintCommand": {
+    "command": "npx",
+    "args": [
+      "eslint",
+      "--format=json"
+    ]
+  },
   "ignoreWarnings": false,
   "pragma": "This lint error is legacied. DO NOT COPY",
   "databaseFile": "legacy-lint.data.json",
   "compareBranch": "main",
   "nonDisableableRules": [
-    "import-integrity/no-unused-exports"
+    "import-integrity/no-cycle",
+    "import-integrity/no-empty-entry-points",
+    "import-integrity/no-entry-point-imports",
+    "import-integrity/no-external-barrel-reexports",
+    "import-integrity/no-test-imports-in-prod",
+    "import-integrity/no-test-only-imports",
+    "import-integrity/no-unresolved-imports",
+    "import-integrity/no-unused-exports",
+    "import-integrity/require-node-prefix"
   ]
 }

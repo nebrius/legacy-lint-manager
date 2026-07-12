@@ -27,6 +27,7 @@ const CONFIG_FILE = 'legacy-lint.config.jsonc';
 const DB_FILE = 'legacy-lint.data.json';
 
 const BASE_CONFIG: Config = {
+  lintCommand: { command: 'npx', args: ['eslint', '--format=json'] },
   ignoreWarnings: false,
   pragma: 'This lint error is legacied. DO NOT COPY',
   databaseFile: DB_FILE,

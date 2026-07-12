@@ -48,6 +48,7 @@ type DatabaseContents = [string, string[]][];
 
 function makeConfig(nonDisableableRules: string[] = []) {
   return {
+    lintCommand: { command: 'npx', args: ['eslint', '--format=json'] },
     ignoreWarnings: false,
     pragma: DEFAULT_PRAGMA,
     databaseFile: DATA_REL,

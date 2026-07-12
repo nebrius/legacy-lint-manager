@@ -13,6 +13,7 @@ import {
   text,
 } from '@clack/prompts';
 
+import type { Config } from '../util/config.js';
 import { createConfig } from '../util/config.js';
 import {
   DEFAULT_CONFIG_FILE_NAME,
@@ -36,6 +37,7 @@ export async function init(io: IO) {
   const rootDir = getRepoRoot(process.cwd());
 
   const linterType = await getLinterType(rootDir, io);
+  const lintCommand = await getLintCommand(io, linterType.type);
   const ignoreWarnings = await getIgnoreWarnings(io);
   const pragma = await getPragma(io);
   const nonDisableableRules = await getNonDisableableRules(
@@ -49,6 +51,7 @@ export async function init(io: IO) {
   createConfig({
     data: {
       linterType: linterType.type,
+      lintCommand,
       ignoreWarnings,
       pragma,
       databaseFile,
@@ -66,7 +69,7 @@ export async function init(io: IO) {
   db.save();
 
   outro(
-    `You're all set! Now run \`npx ${linterType.type} --format=json | npx legacy-lint-manager legacy-errors\` to get started.`
+    `You're all set! Now run \`npx legacy-lint-manager legacy-errors\` to get started.`
   );
 }
 
@@ -119,6 +122,40 @@ async function getLinterType(
   } else {
     return { type: 'oxlint' };
   }
+}
+
+async function getLintCommand(
+  io: IO,
+  linterType: 'eslint' | 'oxlint'
+): Promise<Config['lintCommand']> {
+  const defaultCommand = `npx ${linterType} --format=json`;
+  const value = await wrap(() =>
+    text({
+      message:
+        'What command should I run to get the list of lint errors when adding legacy comments?',
+      defaultValue: defaultCommand,
+      placeholder: defaultCommand,
+      ...io,
+      validate(value) {
+        // We allow empty values since we supply a default
+        if (!value) {
+          return;
+        }
+        if (
+          value.includes('"') ||
+          value.includes("'") ||
+          value.includes('\\ ')
+        ) {
+          return 'Command cannot contain quoted arguments or escaped spaces. If you need these, add a dummy value here and edit the config file directly after initialization';
+        }
+      },
+    })
+  );
+  const [command, ...args] = value.trim().split(/\s+/);
+  return {
+    command,
+    args,
+  };
 }
 
 async function getIgnoreWarnings(io: IO): Promise<boolean> {
