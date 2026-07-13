@@ -30,6 +30,7 @@
     "@clack/prompts": "1.6.0",
     "@commander-js/extra-typings": "^15.0.0",
     "@eslint/config-array": "0.23.5",
+    "@manypkg/get-packages": "3.1.0",
     "commander": "^15.0.0",
     "ignore": "^7.0.5",
     "jsonc-parser": "3.3.1",

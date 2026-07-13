@@ -1,5 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { basename, join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -71,20 +77,27 @@ function writeConfig({
   ignoreWarnings = false,
   linterType = 'eslint',
   lintCommand = eslintCommand(),
+  configFile = CONFIG_FILE,
+  databaseFile = WORKING_DATA,
+  monorepo = false,
 }: {
   ignoreWarnings?: boolean;
   linterType?: 'eslint' | 'oxlint';
   lintCommand?: { command: string; args: string[] };
+  configFile?: string;
+  databaseFile?: string;
+  monorepo?: boolean;
 } = {}) {
   writeFileSync(
-    CONFIG_FILE,
+    configFile,
     JSON.stringify({
       lintCommand,
       ignoreWarnings,
       pragma: DEFAULT_PRAGMA,
-      databaseFile: WORKING_DATA,
+      databaseFile,
       nonDisableableRules: [],
       compareBranch: 'main',
+      monorepo,
       linterType,
     })
   );
@@ -388,5 +401,98 @@ describe('legacy-errors (integration)', () => {
         String(msg).includes('Duplicate ID errors found')
       )
     ).toBe(true);
+  });
+
+  // In monorepo mode the command runs the lint command once per workspace
+  // package (with that package as cwd) and folds every package's new legacy
+  // comments into a single shared database.
+  describe('monorepo', () => {
+    const PKG_A_DIR = join(WORK_DIR, 'packages', 'a');
+    const PKG_B_DIR = join(WORK_DIR, 'packages', 'b');
+    const PKG_A_INDEX = join(PKG_A_DIR, 'src', 'index.ts');
+    const PKG_B_INDEX = join(PKG_B_DIR, 'src', 'index.ts');
+
+    // Rebuild WORK_DIR (already gitignored and cleaned up by the outer afterEach)
+    // as a two-package npm workspace. manypkg needs the lockfile marker to
+    // recognize the workspace, and each package needs a named package.json. The
+    // shared eslint flat config lives at the root so eslint resolves it — and its
+    // typescript-eslint parser, via the repo's node_modules — when run from each
+    // package's cwd. WORK_DIR gets its own .git so getRepoRoot/getFileList anchor
+    // here rather than walking up to this tool's own repo.
+    function initMonorepo() {
+      rmSync(WORK_DIR, { recursive: true, force: true });
+      mkdirSync(join(PKG_A_DIR, 'src'), { recursive: true });
+      mkdirSync(join(PKG_B_DIR, 'src'), { recursive: true });
+      writeFileSync(
+        join(WORK_DIR, 'package.json'),
+        JSON.stringify({
+          name: 'root',
+          version: '1.0.0',
+          private: true,
+          workspaces: ['packages/*'],
+        })
+      );
+      writeFileSync(join(WORK_DIR, 'package-lock.json'), '{}');
+      cpSync(
+        join(SOURCES_DIR, 'eslint.config.mjs'),
+        join(WORK_DIR, 'eslint.config.mjs')
+      );
+      writeFileSync(
+        join(PKG_A_DIR, 'package.json'),
+        JSON.stringify({ name: 'a', version: '1.0.0' })
+      );
+      writeFileSync(
+        join(PKG_B_DIR, 'package.json'),
+        JSON.stringify({ name: 'b', version: '1.0.0' })
+      );
+      writeFileSync(
+        PKG_A_INDEX,
+        "export function logSomething(): void {\n  console.log('x');\n}\n"
+      );
+      writeFileSync(
+        PKG_B_INDEX,
+        'export function debugSomething(): void {\n  debugger;\n}\n'
+      );
+      git(['init']);
+      writeConfig({
+        monorepo: true,
+        lintCommand: eslintCommand(['src/index.ts']),
+      });
+    }
+
+    it('legacies errors in every package into a single shared database', async () => {
+      initMonorepo();
+
+      const infoSpy = vi
+        .spyOn(console, 'info')
+        .mockImplementation(() => undefined);
+      await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
+
+      // Each package's own error is legacied in place.
+      expect(hasLegacyComment(PKG_A_INDEX, 'no-console')).toBe(true);
+      expect(hasLegacyComment(PKG_B_INDEX, 'no-debugger')).toBe(true);
+
+      // The one shared database holds the id from each package with its rule.
+      const consoleId = idsInFile(PKG_A_INDEX)[0];
+      const debuggerId = idsInFile(PKG_B_INDEX)[0];
+      expect(new Map(readData())).toEqual(
+        new Map([
+          [consoleId, ['no-console']],
+          [debuggerId, ['no-debugger']],
+        ])
+      );
+
+      // Each package is announced as it is processed.
+      expect(
+        infoSpy.mock.calls.some(([msg]) =>
+          String(msg).includes(`Legacying errors in ${PKG_A_DIR}`)
+        )
+      ).toBe(true);
+      expect(
+        infoSpy.mock.calls.some(([msg]) =>
+          String(msg).includes(`Legacying errors in ${PKG_B_DIR}`)
+        )
+      ).toBe(true);
+    });
   });
 });

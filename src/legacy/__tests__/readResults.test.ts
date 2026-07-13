@@ -92,7 +92,7 @@ describe('readResults', () => {
           lintCommand: cmd(
             `process.stdout.write(${JSON.stringify(JSON.stringify(payload))})`
           ),
-          dir,
+          packageRootDir: dir,
         })
       ).resolves.toEqual(payload);
     });
@@ -104,7 +104,7 @@ describe('readResults', () => {
         readResults({
           linterType: 'eslint',
           lintCommand: cmd('process.stdout.write("[]"); process.exit(1)'),
-          dir,
+          packageRootDir: dir,
         })
       ).resolves.toEqual([]);
     });
@@ -113,7 +113,7 @@ describe('readResults', () => {
       const { code, logged } = await runToExit({
         linterType: 'eslint',
         lintCommand: cmd('process.stdout.write("not json")'),
-        dir,
+        packageRootDir: dir,
       });
 
       expect(code).toBe(1);
@@ -126,7 +126,7 @@ describe('readResults', () => {
       const { code, logged } = await runToExit({
         linterType: 'eslint',
         lintCommand: cmd('process.stderr.write("boom"); process.exit(2)'),
-        dir,
+        packageRootDir: dir,
       });
 
       expect(code).toBe(1);
@@ -140,7 +140,7 @@ describe('readResults', () => {
       const { code, logged } = await runToExit({
         linterType: 'eslint',
         lintCommand: cmd('process.stdout.write("x".repeat(2000))'),
-        dir,
+        packageRootDir: dir,
       });
 
       expect(code).toBe(1);
@@ -157,7 +157,7 @@ describe('readResults', () => {
         readResults({
           linterType: 'oxlint',
           lintCommand: cmd('process.stdout.write("[]"); process.exit(1)'),
-          dir,
+          packageRootDir: dir,
         })
       ).resolves.toEqual([]);
     });
@@ -166,7 +166,7 @@ describe('readResults', () => {
       const { code, logged } = await runToExit({
         linterType: 'oxlint',
         lintCommand: cmd('process.stdout.write("nope"); process.exit(1)'),
-        dir,
+        packageRootDir: dir,
       });
 
       expect(code).toBe(1);
@@ -182,7 +182,7 @@ describe('readResults', () => {
           command: 'definitely-not-a-real-binary-xyz',
           args: [],
         },
-        dir,
+        packageRootDir: dir,
       })
     ).rejects.toThrow(/ENOENT/);
   });
@@ -198,7 +198,7 @@ describe('readResults', () => {
         'process.stdout.write(JSON.stringify({ cwd: process.cwd(), arg: process.argv[1] }))',
         'MARKER'
       ),
-      dir,
+      packageRootDir: dir,
     })) as { cwd: string; arg: string };
 
     expect(result.cwd).toBe(realpathSync(dir));

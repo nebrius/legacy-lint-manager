@@ -6,11 +6,11 @@ import { error } from '../util/logging.js';
 export async function readResults({
   linterType,
   lintCommand,
-  dir,
+  packageRootDir,
 }: {
   linterType: Config['linterType'];
   lintCommand: Config['lintCommand'];
-  dir: string;
+  packageRootDir: string;
 }) {
   /* v8 ignore start */
   if (process.platform === 'win32') {
@@ -19,7 +19,7 @@ export async function readResults({
   /* v8 ignore end */
   return new Promise<unknown>((resolve, reject) => {
     const commandProcess = spawn(lintCommand.command, lintCommand.args, {
-      cwd: dir,
+      cwd: packageRootDir,
     });
 
     const results: string[] = [];

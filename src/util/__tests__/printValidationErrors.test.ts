@@ -22,7 +22,7 @@ describe('printValidationErrors', () => {
 
   it('prints nothing when there are no validation errors', () => {
     const messages = captureErrors();
-    printValidationErrors({ validationErrors: [], rootDir: ROOT });
+    printValidationErrors({ validationErrors: [], repoRootDir: ROOT });
     expect(messages).toEqual([]);
   });
 
@@ -34,8 +34,8 @@ describe('printValidationErrors', () => {
         location: { file: `${ROOT}/src/foo.ts`, line: 12 },
       },
     ];
-    printValidationErrors({ validationErrors: errors, rootDir: ROOT });
-    // rootDir is stripped from the header; the detail is indented and prefixed
+    printValidationErrors({ validationErrors: errors, repoRootDir: ROOT });
+    // repoRootDir is stripped from the header; the detail is indented and prefixed
     // with the line number. Stored lines are 0-indexed and displayed 1-indexed,
     // so line 12 prints as "13:".
     expect(messages).toEqual(['src/foo.ts:', '  13: bad thing']);
@@ -49,7 +49,7 @@ describe('printValidationErrors', () => {
         location: { file: `${ROOT}/src/foo.ts`, line: 0 },
       },
     ];
-    printValidationErrors({ validationErrors: errors, rootDir: ROOT });
+    printValidationErrors({ validationErrors: errors, repoRootDir: ROOT });
     // line 0 is the first line; a truthiness check would drop the prefix, so the
     // number is rendered via an explicit typeof check and displayed as "1:".
     expect(messages).toEqual(['src/foo.ts:', '  1: top of file']);
@@ -62,7 +62,7 @@ describe('printValidationErrors', () => {
       { message: 'first', location: { file, line: 1 } },
       { message: 'second', location: { file, line: 4 } },
     ];
-    printValidationErrors({ validationErrors: errors, rootDir: ROOT });
+    printValidationErrors({ validationErrors: errors, repoRootDir: ROOT });
     // Lines are displayed 1-indexed, so 0-indexed 1 and 4 print as "2:"/"5:".
     expect(messages).toEqual(['src/foo.ts:', '  2: first', '  5: second']);
   });
@@ -70,8 +70,8 @@ describe('printValidationErrors', () => {
   it('prints location-less errors under a Global header with no line prefix', () => {
     const messages = captureErrors();
     const errors: ValidationError[] = [{ message: 'no file for this one' }];
-    printValidationErrors({ validationErrors: errors, rootDir: ROOT });
-    // 'Global' has no rootDir prefix to strip, and with no location there is no
+    printValidationErrors({ validationErrors: errors, repoRootDir: ROOT });
+    // 'Global' has no repoRootDir prefix to strip, and with no location there is no
     // line number to prepend.
     expect(messages).toEqual(['Global:', '  no file for this one']);
   });
@@ -82,7 +82,7 @@ describe('printValidationErrors', () => {
       { message: 'alpha' },
       { message: 'beta' },
     ];
-    printValidationErrors({ validationErrors: errors, rootDir: ROOT });
+    printValidationErrors({ validationErrors: errors, repoRootDir: ROOT });
     expect(messages).toEqual(['Global:', '  alpha', '  beta']);
   });
 
@@ -92,7 +92,7 @@ describe('printValidationErrors', () => {
       { message: 'located', location: { file: `${ROOT}/a.ts`, line: 2 } },
       { message: 'floating' },
     ];
-    printValidationErrors({ validationErrors: errors, rootDir: ROOT });
+    printValidationErrors({ validationErrors: errors, repoRootDir: ROOT });
     expect(messages).toEqual([
       'a.ts:',
       '  3: located',

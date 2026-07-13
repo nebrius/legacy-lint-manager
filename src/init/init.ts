@@ -12,6 +12,7 @@ import {
   select,
   text,
 } from '@clack/prompts';
+import { getPackages } from '@manypkg/get-packages';
 
 import type { Config } from '../util/config.js';
 import { createConfig } from '../util/config.js';
@@ -34,20 +35,21 @@ type IO = {
 // init takes in IO so that we can override it in tests
 export async function init(io: IO) {
   intro(`legacy-lint-manager`);
-  const rootDir = getRepoRoot(process.cwd());
+  const repoRootDir = getRepoRoot(process.cwd());
 
-  const linterType = await getLinterType(rootDir, io);
+  const linterType = await getLinterType(repoRootDir, io);
   const lintCommand = await getLintCommand(io, linterType.type);
   const ignoreWarnings = await getIgnoreWarnings(io);
+  const isMonorepo = await getIsMonorepo(io);
   const pragma = await getPragma(io);
   const nonDisableableRules = await getNonDisableableRules(
     linterType.eslintRules,
     io
   );
-  const compareBranch = await getCompareBranch(rootDir, io);
+  const compareBranch = await getCompareBranch(repoRootDir, io);
   const databaseFile = await getDatabaseFile(io);
 
-  const configFilePath = join(rootDir, DEFAULT_CONFIG_FILE_NAME);
+  const configFilePath = join(repoRootDir, DEFAULT_CONFIG_FILE_NAME);
   createConfig({
     data: {
       linterType: linterType.type,
@@ -57,6 +59,7 @@ export async function init(io: IO) {
       databaseFile,
       compareBranch,
       nonDisableableRules,
+      monorepo: isMonorepo,
     },
     filePath: configFilePath,
   });
@@ -83,13 +86,13 @@ async function wrap<T>(fn: () => Promise<T | symbol>): Promise<T> {
 }
 
 async function getLinterType(
-  rootDir: string,
+  repoRootDir: string,
   io: IO
 ): Promise<{
   type: 'eslint' | 'oxlint';
   eslintRules?: string[];
 }> {
-  const lintConfigs = getLintConfigFiles(rootDir);
+  const lintConfigs = getLintConfigFiles(repoRootDir);
 
   let type: 'eslint' | 'oxlint' | undefined =
     lintConfigs.eslint.length && !lintConfigs.oxlint.length
@@ -168,6 +171,17 @@ async function getIgnoreWarnings(io: IO): Promise<boolean> {
   );
 }
 
+async function getIsMonorepo(io: IO): Promise<boolean> {
+  const { tool } = await getPackages(process.cwd());
+  return wrap(() =>
+    confirm({
+      message: 'Do you want to enable monorepo mode?',
+      initialValue: tool.type !== 'root',
+      ...io,
+    })
+  );
+}
+
 async function getPragma(io: IO): Promise<string> {
   return wrap(() =>
     text({
@@ -191,13 +205,13 @@ async function getDatabaseFile(io: IO): Promise<string> {
   );
 }
 
-function getCompareBranch(rootDir: string, io: IO) {
+function getCompareBranch(repoRootDir: string, io: IO) {
   // Get the default branch if an explicit branch was not provided
   const defaultCompareBranch = execSync(
     'git symbolic-ref refs/remotes/origin/HEAD --short',
     {
       encoding: 'utf-8',
-      cwd: rootDir,
+      cwd: repoRootDir,
     }
   )
     .replace('origin/', '')

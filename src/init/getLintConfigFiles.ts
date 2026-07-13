@@ -13,14 +13,14 @@ const OXLINT_LINT_CONFIG_FILES = ['.oxlintrc.json', 'oxlint.config.ts'];
 
 import { join } from 'node:path';
 
-export function getLintConfigFiles(rootDir: string) {
-  const dirContents = readdirSync(rootDir);
+export function getLintConfigFiles(repoRootDir: string) {
+  const dirContents = readdirSync(repoRootDir);
   const eslintConfigFiles = dirContents
     .filter((file) => ESLINT_LINT_CONFIG_FILES.includes(file))
-    .map((file) => join(rootDir, file));
+    .map((file) => join(repoRootDir, file));
   const oxlintConfigFiles = dirContents
     .filter((file) => OXLINT_LINT_CONFIG_FILES.includes(file))
-    .map((file) => join(rootDir, file));
+    .map((file) => join(repoRootDir, file));
   return {
     eslint: eslintConfigFiles,
     oxlint: oxlintConfigFiles,

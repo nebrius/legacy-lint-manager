@@ -6,10 +6,10 @@ const GLOBAL_ERROR_PREFIX = 'Global';
 
 export function printValidationErrors({
   validationErrors,
-  rootDir,
+  repoRootDir,
 }: {
   validationErrors: ValidationError[];
-  rootDir: string;
+  repoRootDir: string;
 }): void {
   const groupedErrors = new Map<string, ValidationError[]>();
   for (const validationError of validationErrors) {
@@ -29,7 +29,7 @@ export function printValidationErrors({
     error(
       file === GLOBAL_ERROR_PREFIX
         ? `${GLOBAL_ERROR_PREFIX}:`
-        : getUnprefixedRelativeDir({ path: file, rootDir }) + `:`
+        : getUnprefixedRelativeDir({ path: file, repoRootDir }) + `:`
     );
     for (const err of errors) {
       const line =

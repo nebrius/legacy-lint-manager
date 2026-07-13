@@ -173,36 +173,42 @@ describe('getRepoRoot', () => {
 });
 
 describe('getUnprefixedRelativeDir', () => {
-  it('returns the repo-relative path (no leading ./) for an absolute path under rootDir', () => {
+  it('returns the repo-relative path (no leading ./) for an absolute path under repoRootDir', () => {
     expect(
-      getUnprefixedRelativeDir({ path: '/repo/src/foo.ts', rootDir: '/repo' })
+      getUnprefixedRelativeDir({
+        path: '/repo/src/foo.ts',
+        repoRootDir: '/repo',
+      })
     ).toBe('src/foo.ts');
   });
 
-  it('returns a bare filename for a file directly inside rootDir', () => {
+  it('returns a bare filename for a file directly inside repoRootDir', () => {
     expect(
-      getUnprefixedRelativeDir({ path: '/repo/foo.ts', rootDir: '/repo' })
+      getUnprefixedRelativeDir({ path: '/repo/foo.ts', repoRootDir: '/repo' })
     ).toBe('foo.ts');
   });
 
   it('throws when the path is not absolute', () => {
     expect(() =>
-      getUnprefixedRelativeDir({ path: 'src/foo.ts', rootDir: '/repo' })
+      getUnprefixedRelativeDir({ path: 'src/foo.ts', repoRootDir: '/repo' })
     ).toThrow('to be an absolute path');
   });
 
-  it('throws when the path is absolute but not under rootDir', () => {
+  it('throws when the path is absolute but not under repoRootDir', () => {
     expect(() =>
-      getUnprefixedRelativeDir({ path: '/other/foo.ts', rootDir: '/repo' })
+      getUnprefixedRelativeDir({ path: '/other/foo.ts', repoRootDir: '/repo' })
     ).toThrow('to start with');
   });
 
-  it('throws when rootDir is a string prefix but not a path-boundary ancestor', () => {
+  it('throws when repoRootDir is a string prefix but not a path-boundary ancestor', () => {
     // '/repo-other' starts with the string '/repo' but is not under it as a path
-    // segment; the `rootDir + sep` guard must reject it rather than slice into
-    // the middle of a directory name.
+    // segment; the `repoRootDir + sep` guard must reject it rather than slice
+    // into the middle of a directory name.
     expect(() =>
-      getUnprefixedRelativeDir({ path: '/repo-other/foo.ts', rootDir: '/repo' })
+      getUnprefixedRelativeDir({
+        path: '/repo-other/foo.ts',
+        repoRootDir: '/repo',
+      })
     ).toThrow('to start with');
   });
 });

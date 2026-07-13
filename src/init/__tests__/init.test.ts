@@ -112,12 +112,20 @@ beforeEach(() => {
   output = new MockWritable();
   originalCwd = process.cwd();
   workDir = mkdtempSync(join(tmpdir(), 'legacy-lint-init-'));
-  // init derives its rootDir via getRepoRoot(process.cwd()), which walks up to
-  // the nearest .git directory, so the work dir must look like a repo root.
+  // init derives its repoRootDir via getRepoRoot(process.cwd()), which walks up
+  // to the nearest .git directory, so the work dir must look like a repo root.
   // node:child_process is mocked in this file, so a real `git init` isn't
   // available — but getRepoRoot only checks for a `.git` entry on disk, so an
-  // empty .git directory is enough to anchor rootDir at workDir.
+  // empty .git directory is enough to anchor repoRootDir at workDir.
   mkdirSync(join(workDir, '.git'));
+  // getIsMonorepo calls @manypkg/get-packages, which reads a package.json to
+  // decide the monorepo default. Without one it throws, so give the work dir a
+  // plain single-package manifest: manypkg resolves it as a lone `root` package,
+  // making the monorepo prompt default to No.
+  writeFileSync(
+    join(workDir, 'package.json'),
+    JSON.stringify({ name: 'work', version: '1.0.0', private: true })
+  );
   process.chdir(workDir);
 });
 
@@ -142,6 +150,9 @@ describe('init (interactive)', () => {
 
     await waitForText('Ignore lint warnings?');
     press('return'); // initialValue: false
+
+    await waitForText('monorepo mode');
+    press('return'); // initialValue: false (single root package)
 
     await waitForText('prefixed with');
     press('return'); // defaultValue: DEFAULT_PRAGMA
@@ -169,6 +180,7 @@ describe('init (interactive)', () => {
       // absolute path against the config's directory (the work dir).
       databaseFile: join(workDir, DEFAULT_DATABASE_FILE_NAME),
       compareBranch: 'main',
+      monorepo: false,
       nonDisableableRules: ['no-console', 'no-debugger'],
     });
 
@@ -190,6 +202,9 @@ describe('init (interactive)', () => {
 
     await waitForText('Ignore lint warnings?');
     press('return');
+
+    await waitForText('monorepo mode');
+    press('return'); // initialValue: false (single root package)
 
     await waitForText('prefixed with');
     press('return');
@@ -233,6 +248,9 @@ describe('init (interactive)', () => {
     await waitForText('Ignore lint warnings?');
     press('return');
 
+    await waitForText('monorepo mode');
+    press('return'); // initialValue: false (single root package)
+
     await waitForText('prefixed with');
     press('return');
 
@@ -266,6 +284,9 @@ describe('init (interactive)', () => {
     await waitForText('Ignore lint warnings?');
     press('return');
 
+    await waitForText('monorepo mode');
+    press('return'); // initialValue: false (single root package)
+
     await waitForText('prefixed with');
     press('return');
 
@@ -286,6 +307,59 @@ describe('init (interactive)', () => {
     expect(output.buffer.join('')).not.toContain('Which linter do you use?');
   });
 
+  it('defaults monorepo mode to on when a workspace is detected', async () => {
+    // Overwrite the plain single-package manifest from beforeEach with a
+    // workspace manypkg recognizes (a lockfile marker plus a named child
+    // package), so getIsMonorepo reads tool.type !== 'root' and the confirm
+    // prompt defaults to Yes. Accepting that default records monorepo: true.
+    writeFileSync(
+      join(workDir, 'package.json'),
+      JSON.stringify({
+        name: 'root',
+        version: '1.0.0',
+        private: true,
+        workspaces: ['packages/*'],
+      })
+    );
+    writeFileSync(join(workDir, 'package-lock.json'), '{}');
+    mkdirSync(join(workDir, 'packages', 'a'), { recursive: true });
+    writeFileSync(
+      join(workDir, 'packages', 'a', 'package.json'),
+      JSON.stringify({ name: 'a', version: '1.0.0' })
+    );
+
+    const result = init({ input, output });
+
+    await waitForText('Which linter do you use?');
+    press('return'); // ESLint
+
+    await waitForText('command should I run');
+    press('return'); // accept the default lint command
+
+    await waitForText('Ignore lint warnings?');
+    press('return');
+
+    await waitForText('monorepo mode');
+    press('return'); // initialValue: true (workspace detected)
+
+    await waitForText('prefixed with');
+    press('return');
+
+    await waitForText('flagged if disabled');
+    press('return'); // accept the empty default rules list
+
+    await waitForText('compared against');
+    press('return');
+
+    await waitForText('database file be stored');
+    press('return');
+
+    await result;
+
+    const config = readConfig(join(workDir, 'legacy-lint.config.jsonc'));
+    expect(config.monorepo).toBe(true);
+  });
+
   it('rejects a non-existent compare branch and accepts it on retry', async () => {
     // First validation fails (branch missing), second succeeds.
     vi.mocked(spawnSync).mockReturnValueOnce({
@@ -302,6 +376,9 @@ describe('init (interactive)', () => {
 
     await waitForText('Ignore lint warnings?');
     press('return');
+
+    await waitForText('monorepo mode');
+    press('return'); // initialValue: false (single root package)
 
     await waitForText('prefixed with');
     press('return');
@@ -341,6 +418,9 @@ describe('init (interactive)', () => {
 
     await waitForText('Ignore lint warnings?');
     press('return');
+
+    await waitForText('monorepo mode');
+    press('return'); // initialValue: false (single root package)
 
     await waitForText('prefixed with');
     press('return');
@@ -383,6 +463,9 @@ describe('init (interactive)', () => {
 
     await waitForText('Ignore lint warnings?');
     press('return');
+
+    await waitForText('monorepo mode');
+    press('return'); // initialValue: false (single root package)
 
     await waitForText('prefixed with');
     press('return');

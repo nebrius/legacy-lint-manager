@@ -72,7 +72,7 @@ function runRaw({
     lintErrors: makeLintErrors(type, entries, filePath),
     fileContents,
     filePath,
-    rootDir,
+    repoRootDir: rootDir,
   });
 }
 

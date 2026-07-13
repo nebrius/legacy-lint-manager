@@ -17,6 +17,7 @@ const VALID_CONFIG: Config = {
   databaseFile: 'legacy-lint.data.json',
   nonDisableableRules: ['no-console'],
   compareBranch: 'main',
+  monorepo: false,
   linterType: 'eslint',
 };
 
@@ -60,6 +61,7 @@ describe('config', () => {
           '  "databaseFile": "db.json",',
           '  "nonDisableableRules": [],',
           '  "compareBranch": "main",',
+          '  "monorepo": false,',
           '  "linterType": "eslint",',
           '}',
         ].join('\n')
@@ -73,6 +75,7 @@ describe('config', () => {
         databaseFile: resolve(dirname(CONFIG_FILE), 'db.json'),
         nonDisableableRules: [],
         compareBranch: 'main',
+        monorepo: false,
         linterType: 'eslint',
       });
     });

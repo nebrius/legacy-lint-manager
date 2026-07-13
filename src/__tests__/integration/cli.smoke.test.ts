@@ -54,6 +54,7 @@ function setupRepo(scenario: string) {
       databaseFile: DATA_REL,
       nonDisableableRules: [],
       compareBranch: 'main',
+      monorepo: false,
       linterType: 'eslint',
     })
   );

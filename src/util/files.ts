@@ -39,26 +39,28 @@ export function getRepoRoot(fileOrDirectory: string) {
 // This computes a relative path from the root directory
 export function getUnprefixedRelativeDir({
   path,
-  rootDir,
+  repoRootDir,
 }: {
   path: string;
-  rootDir: string;
+  repoRootDir: string;
 }) {
   if (!isAbsolute(path)) {
     throw new InternalError(
       `Expected ${path} to be an absolute path but it was not`
     );
   }
-  if (!path.startsWith(rootDir + sep)) {
-    throw new InternalError(`Expected ${path} to start with ${rootDir + sep}`);
+  if (!path.startsWith(repoRootDir + sep)) {
+    throw new InternalError(
+      `Expected ${path} to start with ${repoRootDir + sep}`
+    );
   }
-  return path.slice(rootDir.length + 1);
+  return path.slice(repoRootDir.length + 1);
 }
 
-export function getFileList(rootDir: string) {
+export function getFileList(packageRootDir: string) {
   // Collect gitignore files that apply to this root dir
   const baseIgnoreFiles: { path: string; ignores: Ignore[] }[] = [];
-  let currentDir = rootDir;
+  let currentDir = packageRootDir;
   while (currentDir !== '/') {
     const contents = readdirSync(currentDir);
     if (contents.includes('.gitignore')) {
@@ -73,7 +75,7 @@ export function getFileList(rootDir: string) {
     currentDir = dirname(currentDir);
   }
 
-  return getFilesList(rootDir, baseIgnoreFiles);
+  return getFilesList(packageRootDir, baseIgnoreFiles);
 }
 
 // Get a potential list of files, automatically filtering out a few directories

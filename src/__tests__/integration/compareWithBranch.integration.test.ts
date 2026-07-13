@@ -33,6 +33,7 @@ const BASE_CONFIG: Config = {
   databaseFile: DB_FILE,
   nonDisableableRules: [],
   compareBranch: 'main',
+  monorepo: false,
   linterType: 'eslint',
 };
 
@@ -63,8 +64,8 @@ function initRepo({
   git(['checkout', '-b', 'feature']);
 }
 
-// compareWithBranch takes an absolute configFilePath plus the repo rootDir, and
-// shells out to git with rootDir as the cwd, so it does not depend on
+// compareWithBranch takes an absolute configFilePath plus the repoRootDir, and
+// shells out to git with repoRootDir as the cwd, so it does not depend on
 // process.cwd(). The relative CONFIG_FILE/DB_FILE constants describe the on-disk
 // repo layout; only the value handed to compareWithBranch is made absolute,
 // mirroring how validate.ts resolves and passes them in production.
@@ -81,7 +82,7 @@ function runCompare({
     currentConfig,
     configFilePath: join(REPO_DIR, CONFIG_FILE),
     validationErrors,
-    rootDir: REPO_DIR,
+    repoRootDir: REPO_DIR,
   });
   return validationErrors;
 }

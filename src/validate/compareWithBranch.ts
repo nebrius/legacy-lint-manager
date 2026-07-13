@@ -18,21 +18,19 @@ export function compareWithBranch({
   currentConfig,
   configFilePath,
   validationErrors,
-  rootDir,
+  repoRootDir,
 }: {
   currentDatabase: Database;
   currentConfig: Config;
   configFilePath: string;
   validationErrors: ValidationError[];
-  rootDir: string;
+  repoRootDir: string;
 }) {
   const { compareBranchName, compareDatabase, compareConfig } = getCompareInfo({
     compareBranch: currentConfig.compareBranch,
     configFilePath,
-    rootDir,
+    repoRootDir,
   });
-
-  // Ensure all IDs in the current database exist in the compare database
   for (const [id, rules] of currentDatabase.getIds()) {
     const compareRules = compareDatabase.getIds().get(id);
     if (!compareRules) {
@@ -105,18 +103,18 @@ export function compareWithBranch({
 function getCompareInfo({
   compareBranch,
   configFilePath,
-  rootDir,
+  repoRootDir,
 }: {
   compareBranch: string;
   configFilePath: string;
-  rootDir: string;
+  repoRootDir: string;
 }): CompareInfo {
   // Read in the config from the compare branch
   const compareConfigContent = execSync(
-    `git show ${compareBranch}:${getUnprefixedRelativeDir({ path: configFilePath, rootDir })}`,
+    `git show ${compareBranch}:${getUnprefixedRelativeDir({ path: configFilePath, repoRootDir })}`,
     {
       encoding: 'utf-8',
-      cwd: rootDir,
+      cwd: repoRootDir,
     }
   );
   const compareConfig = parseConfig({
@@ -127,10 +125,10 @@ function getCompareInfo({
   // Read in the database from the compare branch, using the compare config
   // to track potential renames of the database file
   const compareDatabaseContent = execSync(
-    `git show ${compareBranch}:${getUnprefixedRelativeDir({ path: compareConfig.databaseFile, rootDir })}`,
+    `git show ${compareBranch}:${getUnprefixedRelativeDir({ path: compareConfig.databaseFile, repoRootDir })}`,
     {
       encoding: 'utf-8',
-      cwd: rootDir,
+      cwd: repoRootDir,
     }
   );
   const compareDatabase = createDatabase({

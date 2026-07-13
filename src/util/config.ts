@@ -21,6 +21,7 @@ const ConfigSchema = TypeBox.Object(
     databaseFile: TypeBox.String(),
     nonDisableableRules: TypeBox.Array(TypeBox.String()),
     compareBranch: TypeBox.String(),
+    monorepo: TypeBox.Boolean(),
     linterType: TypeBox.Union([
       TypeBox.Literal('eslint'),
       TypeBox.Literal('oxlint'),

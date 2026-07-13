@@ -46,7 +46,7 @@ const WORKING_DATA = join(REPO_DIR, DATA_REL);
 
 type DatabaseContents = [string, string[]][];
 
-function makeConfig(nonDisableableRules: string[] = []) {
+function makeConfig(nonDisableableRules: string[] = [], monorepo = false) {
   return {
     lintCommand: { command: 'npx', args: ['eslint', '--format=json'] },
     ignoreWarnings: false,
@@ -54,6 +54,7 @@ function makeConfig(nonDisableableRules: string[] = []) {
     databaseFile: DATA_REL,
     nonDisableableRules,
     compareBranch: 'main',
+    monorepo,
     linterType: 'eslint',
   };
 }
@@ -268,7 +269,7 @@ describe('validate (integration)', () => {
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
       // Errors are grouped under a per-file header (relative to the config's
-      // rootDir), then listed indented and prefixed with the offending line
+      // repoRootDir), then listed indented and prefixed with the offending line
       // number. The comment sits on the second line, displayed 1-indexed as
       // `2:`.
       expect(errorSpy).toHaveBeenCalledWith(`${join('src', 'bad.ts')}:`);
@@ -392,7 +393,7 @@ describe('validate (integration)', () => {
         runValidate();
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
-      // The error is grouped under the file header (relative to rootDir) and
+      // The error is grouped under the file header (relative to repoRootDir) and
       // listed with its line displayed 1-indexed as `2:`, proving the parser
       // offset was resolved to a location rather than falling back to the
       // "Global" bucket.
@@ -438,6 +439,179 @@ describe('validate (integration)', () => {
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining('does not exist in the database on main')
       );
+    });
+  });
+
+  // In monorepo mode validate fans out over every workspace package, scanning
+  // each package's files but validating them against the one shared database.
+  // These cases exercise that fan-out: ids found across different packages, a
+  // duplicate id caught across packages via the shared database map, and the
+  // fixed-id cleanup derived from the combined per-package results.
+  describe('monorepo', () => {
+    const CONSOLE_ID = makeId('mrconsole');
+    const DEBUGGER_ID = makeId('mrdebugger');
+    const UNUSED_ID = makeId('mrunused');
+
+    // A workspace layout manypkg recognizes: root package.json with `workspaces`
+    // plus an npm lockfile marker (a bare `workspaces` field alone is not enough
+    // — manypkg would fall back to treating the root as a single package).
+    function seedWorkspaceRoot() {
+      writeFileSync(
+        join(REPO_DIR, 'package.json'),
+        JSON.stringify({
+          name: 'root',
+          version: '1.0.0',
+          private: true,
+          workspaces: ['packages/*'],
+        })
+      );
+      writeFileSync(join(REPO_DIR, 'package-lock.json'), '{}');
+    }
+
+    // Write a source file under packages/<pkg>/src, creating the package (with a
+    // named package.json, which manypkg requires) on first use.
+    function seedPackageSource(pkg: string, name: string, lines: string[]) {
+      const pkgDir = join(REPO_DIR, 'packages', pkg);
+      const srcDir = join(pkgDir, 'src');
+      mkdirSync(srcDir, { recursive: true });
+      writeFileSync(
+        join(pkgDir, 'package.json'),
+        JSON.stringify({ name: pkg, version: '1.0.0' })
+      );
+      writeFileSync(join(srcDir, name), lines.join('\n'));
+    }
+
+    function legacyLine(rule: string, id: string): string {
+      return `  // eslint-disable-next-line ${rule} -- ${DEFAULT_PRAGMA} (${rule}) ${id}`;
+    }
+
+    // Like initRepo, but lays down a two-package workspace and a monorepo config.
+    function initMonorepo({
+      db,
+      seedPackages,
+    }: {
+      db: DatabaseContents;
+      seedPackages: () => void;
+    }) {
+      rmSync(REPO_DIR, { recursive: true, force: true });
+      mkdirSync(REPO_DIR, { recursive: true });
+      git(['init', '-b', 'main']);
+      git(['config', 'user.email', 'test@example.com']);
+      git(['config', 'user.name', 'Test']);
+      writeFileSync(
+        join(REPO_DIR, CONFIG_REL),
+        JSON.stringify(makeConfig([], true))
+      );
+      writeFileSync(WORKING_DATA, JSON.stringify(db));
+      seedWorkspaceRoot();
+      seedPackages();
+      git(['add', '-A']);
+      git(['commit', '-m', 'baseline']);
+      git(['checkout', '-b', 'feature']);
+    }
+
+    function seedConsolePackage() {
+      seedPackageSource('a', 'uses.ts', [
+        'export function logSomething(): void {',
+        legacyLine('no-console', CONSOLE_ID),
+        "  console.log('x');",
+        '}',
+        '',
+      ]);
+    }
+
+    function seedDebuggerPackage() {
+      seedPackageSource('b', 'uses.ts', [
+        'export function debugSomething(): void {',
+        legacyLine('no-debugger', DEBUGGER_ID),
+        '  debugger;',
+        '}',
+        '',
+      ]);
+    }
+
+    it('passes cleanly when every database id is found across packages', () => {
+      initMonorepo({
+        db: [
+          [CONSOLE_ID, ['no-console']],
+          [DEBUGGER_ID, ['no-debugger']],
+        ],
+        seedPackages: () => {
+          seedConsolePackage();
+          seedDebuggerPackage();
+        },
+      });
+
+      expect(() => {
+        runValidate();
+      }).not.toThrow();
+      // Each id is found in a different package, so the shared database survives.
+      expect(readData()).toEqual([
+        [CONSOLE_ID, ['no-console']],
+        [DEBUGGER_ID, ['no-debugger']],
+      ]);
+    });
+
+    it('rejects the same legacy id reused across two packages', () => {
+      const sharedId = makeId('mrshared');
+      initMonorepo({
+        db: [[sharedId, ['no-console']]],
+        seedPackages: () => {
+          seedPackageSource('a', 'uses.ts', [
+            'export function a(): void {',
+            legacyLine('no-console', sharedId),
+            "  console.log('a');",
+            '}',
+            '',
+          ]);
+          seedPackageSource('b', 'uses.ts', [
+            'export function b(): void {',
+            legacyLine('no-console', sharedId),
+            "  console.log('b');",
+            '}',
+            '',
+          ]);
+        },
+      });
+
+      const exitSpy = mockExit();
+      const errorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      expect(() => {
+        runValidate();
+      }).toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      // The id is marked found in package a, then re-encountered in package b via
+      // the database map shared across packages, which flags it as a duplicate.
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Duplicate legacy ID')
+      );
+    });
+
+    it('drops an id found in no package when --update rewrites the shared database', () => {
+      initMonorepo({
+        db: [
+          [CONSOLE_ID, ['no-console']],
+          [DEBUGGER_ID, ['no-debugger']],
+          [UNUSED_ID, ['no-console']],
+        ],
+        seedPackages: () => {
+          seedConsolePackage();
+          seedDebuggerPackage();
+        },
+      });
+
+      vi.spyOn(console, 'info').mockImplementation(() => undefined);
+      runValidate(true);
+
+      // UNUSED_ID matched no comment in any package, so it is dropped; the ids
+      // found across packages a and b survive with their recorded rules.
+      expect(readData()).toEqual([
+        [CONSOLE_ID, ['no-console']],
+        [DEBUGGER_ID, ['no-debugger']],
+      ]);
     });
   });
 });

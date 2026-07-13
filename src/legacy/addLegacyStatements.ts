@@ -16,13 +16,13 @@ export function addLegacyStatements({
   lintErrors,
   fileContents,
   filePath,
-  rootDir,
+  repoRootDir,
 }: {
   pragma: string;
   lintErrors: LintErrors;
   fileContents: string;
   filePath: string;
-  rootDir: string;
+  repoRootDir: string;
 }) {
   const fileContentsByLine = fileContents.split('\n');
   const validationErrors: ValidationError[] = [];
@@ -37,7 +37,7 @@ export function addLegacyStatements({
   });
 
   if (validationErrors.length > 0) {
-    printValidationErrors({ validationErrors, rootDir });
+    printValidationErrors({ validationErrors, repoRootDir });
     error('Errors in this file will not be legacied');
     return undefined;
   }
@@ -88,7 +88,7 @@ export function addLegacyStatements({
         if (validationErrors.length > 0) {
           printValidationErrors({
             validationErrors,
-            rootDir,
+            repoRootDir,
           });
           error('Errors in this file will not be legacied');
           return undefined;

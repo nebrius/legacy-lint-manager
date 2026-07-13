@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_ID_BASE, makeId } from '../../__tests__/helpers/ids.js';
-import { createDatabase } from '../../util/db.js';
 import type {
   LegacyComment,
   NonLegacyComment,
@@ -12,6 +11,28 @@ import { validateDisableComments } from '../validateDisableComments.js';
 // An arbitrary valid id, shared between each test's database entry and the
 // legacy comment that references it; the exact value is irrelevant.
 const ID = makeId(DEFAULT_ID_BASE);
+
+// The database is now passed in already reduced to the "map" form validate.ts
+// builds before fanning out across packages: id -> { foundInCode, rules }.
+// validateDisableComments mutates this map in place (flipping foundInCode as it
+// matches comments) and returns nothing, so tests assert on the mutated map.
+type DatabaseMap = Map<string, { foundInCode: boolean; rules: string[] }>;
+
+function makeDatabaseMap(entries: [string, string[]][]): DatabaseMap {
+  return new Map(
+    entries.map(([id, rules]) => [id, { foundInCode: false, rules }])
+  );
+}
+
+// The sorted ids the run marked as found in code — the successor to the old
+// return value's `ids` map. Deriving the new database (and wereErrorsFixed) from
+// these flags now lives in validate.ts and is covered by its integration tests.
+function foundIds(map: DatabaseMap): string[] {
+  return Array.from(map.entries())
+    .filter(([, { foundInCode }]) => foundInCode)
+    .map(([id]) => id)
+    .sort();
+}
 
 function makeLegacy(overrides: Partial<LegacyComment> = {}): LegacyComment {
   return {
@@ -40,96 +61,85 @@ function makeNonLegacy(
 }
 
 // Most tests only care about a few inputs; this wrapper fills the rest with inert
-// defaults so each call can focus on the inputs it actually exercises.
+// defaults so each call can focus on the inputs it actually exercises. It builds
+// (or accepts) the database map, runs validation, and returns the mutated map.
 function callValidate(
   overrides: Partial<Parameters<typeof validateDisableComments>[0]> = {}
-) {
-  return validateDisableComments({
-    database: createDatabase({ filePath: undefined, databaseContents: [] }),
+): DatabaseMap {
+  const databaseMap = overrides.databaseMap ?? makeDatabaseMap([]);
+  validateDisableComments({
     nonDisableableRules: [],
     validationErrors: [],
     legacyComments: [],
     nonLegacyComments: [],
     linterType: 'eslint',
     ...overrides,
+    databaseMap,
   });
+  return databaseMap;
 }
 
 describe('validateDisableComments', () => {
   describe('tracking which database ids were found in code', () => {
-    it('returns an empty map and no fixes when the database is empty and there are no comments', () => {
-      const result = callValidate();
-      expect(result).toEqual({ ids: new Map(), wereErrorsFixed: false });
+    it('marks nothing when the database is empty and there are no comments', () => {
+      const databaseMap = callValidate();
+      expect(foundIds(databaseMap)).toEqual([]);
     });
 
-    it('reports errors as fixed when a database id has no matching comment', () => {
-      const result = callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [
-            ['id1', ['no-console']],
-            ['id2', ['no-console']],
-            ['id3', ['no-console']],
-          ],
-        }),
+    it('leaves every id unmarked when no comment matches', () => {
+      const databaseMap = callValidate({
+        databaseMap: makeDatabaseMap([
+          ['id1', ['no-console']],
+          ['id2', ['no-console']],
+          ['id3', ['no-console']],
+        ]),
       });
-      // No comment matches any id, so every id counts as a fixed (removed) error.
-      expect(result).toEqual({ ids: new Map(), wereErrorsFixed: true });
+      // No comment matches any id, so none are marked as found (each is a fixed,
+      // now-removed error as far as validate.ts is concerned).
+      expect(foundIds(databaseMap)).toEqual([]);
     });
 
-    it('keeps an id when a matching comment is found', () => {
+    it('marks an id as found when a matching comment exists', () => {
       const validationErrors: ValidationError[] = [];
-      const result = callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [
-            ['id1', ['no-console']],
-            ['id2', ['no-console']],
-          ],
-        }),
+      const databaseMap = callValidate({
+        databaseMap: makeDatabaseMap([
+          ['id1', ['no-console']],
+          ['id2', ['no-console']],
+        ]),
         validationErrors,
         legacyComments: [makeLegacy({ id: 'id1' })],
       });
-      // id1 was found in code (kept), id2 was not (a fixed error).
-      expect(result).toEqual({
-        ids: new Map([['id1', ['no-console']]]),
-        wereErrorsFixed: true,
-      });
+      // id1 was found in code (marked), id2 was not.
+      expect(foundIds(databaseMap)).toEqual(['id1']);
       expect(validationErrors).toEqual([]);
     });
 
-    it('carries each kept id’s rules through from the database', () => {
-      const result = callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [
-            ['a', ['no-console', 'no-debugger']],
-            ['b', ['no-var']],
-          ],
-        }),
+    it('preserves each matched id’s database rules while marking it found', () => {
+      const databaseMap = callValidate({
+        databaseMap: makeDatabaseMap([
+          ['a', ['no-console', 'no-debugger']],
+          ['b', ['no-var']],
+        ]),
         legacyComments: [
           makeLegacy({ id: 'a', legaciedRules: ['no-console', 'no-debugger'] }),
           makeLegacy({ id: 'b', legaciedRules: ['no-var'] }),
         ],
       });
-      expect(result).toEqual({
-        ids: new Map([
-          ['a', ['no-console', 'no-debugger']],
-          ['b', ['no-var']],
-        ]),
-        wereErrorsFixed: false,
-      });
+      // Both are found, and the rules carried in from the database are untouched.
+      expect(databaseMap).toEqual(
+        new Map([
+          ['a', { foundInCode: true, rules: ['no-console', 'no-debugger'] }],
+          ['b', { foundInCode: true, rules: ['no-var'] }],
+        ])
+      );
     });
   });
 
   describe('unregistered legacy errors', () => {
     it('records an error when a comment id is not in the database', () => {
       const validationErrors: ValidationError[] = [];
-      const result = callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [['id1', ['no-console']]],
-        }),
+      const databaseMap = callValidate({
+        databaseMap: makeDatabaseMap([['id1', ['no-console']]]),
         validationErrors,
         legacyComments: [
           makeLegacy({
@@ -146,23 +156,20 @@ describe('validateDisableComments', () => {
           location: { file: 'src/a.ts', line: 12 },
         },
       ]);
-      // An unregistered id never enters the database map, so it is not kept, and
-      // the registered id1 (never found) counts as a fixed error.
-      expect(result).toEqual({ ids: new Map(), wereErrorsFixed: true });
+      // An unregistered id never enters the database map, so it is not marked,
+      // and the registered id1 (never found) is left unmarked too.
+      expect(foundIds(databaseMap)).toEqual([]);
     });
   });
 
   describe('duplicate legacy ids', () => {
     it('records an error for the second use of the same id', () => {
       const validationErrors: ValidationError[] = [];
-      const result = callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [
-            ['dup', ['no-console']],
-            ['other', ['no-console']],
-          ],
-        }),
+      const databaseMap = callValidate({
+        databaseMap: makeDatabaseMap([
+          ['dup', ['no-console']],
+          ['other', ['no-console']],
+        ]),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'dup', file: 'a.ts', startLine: 1, endLine: 1 }),
@@ -176,20 +183,14 @@ describe('validateDisableComments', () => {
           location: { file: 'b.ts', line: 2 },
         },
       ]);
-      // A duplicated id is still kept exactly once; "other" was never found.
-      expect(result).toEqual({
-        ids: new Map([['dup', ['no-console']]]),
-        wereErrorsFixed: true,
-      });
+      // A duplicated id is still marked found exactly once; "other" was not found.
+      expect(foundIds(databaseMap)).toEqual(['dup']);
     });
 
     it('records an error for every use beyond the first', () => {
       const validationErrors: ValidationError[] = [];
       callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [['dup', ['no-console']]],
-        }),
+        databaseMap: makeDatabaseMap([['dup', ['no-console']]]),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'dup', file: 'a.ts', startLine: 1, endLine: 1 }),
@@ -217,11 +218,8 @@ describe('validateDisableComments', () => {
       // The comment claims to legacy a rule that was never recorded against this
       // id, which would smuggle a new violation in under an existing legacy.
       const validationErrors: ValidationError[] = [];
-      const result = callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [['id1', ['no-console']]],
-        }),
+      const databaseMap = callValidate({
+        databaseMap: makeDatabaseMap([['id1', ['no-console']]]),
         validationErrors,
         legacyComments: [
           makeLegacy({
@@ -240,20 +238,14 @@ describe('validateDisableComments', () => {
           location: { file: 'src/a.ts', line: 4 },
         },
       ]);
-      // The id is still found in code, so it is kept with its database rules.
-      expect(result).toEqual({
-        ids: new Map([['id1', ['no-console']]]),
-        wereErrorsFixed: false,
-      });
+      // The id is still found in code, so it is marked.
+      expect(foundIds(databaseMap)).toEqual(['id1']);
     });
 
     it('records one error per undefined rule', () => {
       const validationErrors: ValidationError[] = [];
       callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [['id1', ['no-console']]],
-        }),
+        databaseMap: makeDatabaseMap([['id1', ['no-console']]]),
         validationErrors,
         legacyComments: [
           makeLegacy({
@@ -284,10 +276,7 @@ describe('validateDisableComments', () => {
       // were fixed), so no error is recorded.
       const validationErrors: ValidationError[] = [];
       callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [['id1', ['no-console', 'no-debugger']]],
-        }),
+        databaseMap: makeDatabaseMap([['id1', ['no-console', 'no-debugger']]]),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'id1', legaciedRules: ['no-console'] }),
@@ -300,7 +289,7 @@ describe('validateDisableComments', () => {
   describe('non-disableable rules', () => {
     it('records an error when a non-legacy comment disables a non-disableable rule', () => {
       const validationErrors: ValidationError[] = [];
-      const result = callValidate({
+      const databaseMap = callValidate({
         nonDisableableRules: ['no-console'],
         validationErrors,
         nonLegacyComments: [
@@ -314,7 +303,7 @@ describe('validateDisableComments', () => {
         },
       ]);
       // Non-legacy comments never participate in id tracking.
-      expect(result).toEqual({ ids: new Map(), wereErrorsFixed: false });
+      expect(foundIds(databaseMap)).toEqual([]);
     });
 
     it('records no error when a non-legacy comment disables a rule that is not non-disableable', () => {
@@ -395,10 +384,7 @@ describe('validateDisableComments', () => {
       // The non-legacied rule is a new disable and must still be caught.
       const validationErrors: ValidationError[] = [];
       callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [[ID, ['no-console']]],
-        }),
+        databaseMap: makeDatabaseMap([[ID, ['no-console']]]),
         nonDisableableRules: ['no-debugger'],
         validationErrors,
         legacyComments: [
@@ -424,10 +410,7 @@ describe('validateDisableComments', () => {
       // when it is on the non-disableable list; otherwise it is a normal disable.
       const validationErrors: ValidationError[] = [];
       callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [[ID, ['no-console']]],
-        }),
+        databaseMap: makeDatabaseMap([[ID, ['no-console']]]),
         nonDisableableRules: ['no-debugger'],
         validationErrors,
         legacyComments: [
@@ -444,11 +427,8 @@ describe('validateDisableComments', () => {
       // The whole point of the legacy system: a grandfathered violation of a
       // non-disableable rule is permitted, only new ones are rejected.
       const validationErrors: ValidationError[] = [];
-      const result = callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [[ID, ['no-console']]],
-        }),
+      const databaseMap = callValidate({
+        databaseMap: makeDatabaseMap([[ID, ['no-console']]]),
         nonDisableableRules: ['no-console'],
         validationErrors,
         legacyComments: [
@@ -456,10 +436,7 @@ describe('validateDisableComments', () => {
         ],
       });
       expect(validationErrors).toEqual([]);
-      expect(result).toEqual({
-        ids: new Map([[ID, ['no-console']]]),
-        wereErrorsFixed: false,
-      });
+      expect(foundIds(databaseMap)).toEqual([ID]);
     });
   });
 
@@ -631,10 +608,7 @@ describe('validateDisableComments', () => {
         const validationErrors: ValidationError[] = [];
         callValidate({
           linterType: 'oxlint',
-          database: createDatabase({
-            filePath: undefined,
-            databaseContents: [[ID, ['no-console']]],
-          }),
+          databaseMap: makeDatabaseMap([[ID, ['no-console']]]),
           nonDisableableRules: ['typescript/no-explicit-any'],
           validationErrors,
           legacyComments: [
@@ -658,17 +632,14 @@ describe('validateDisableComments', () => {
   });
 
   describe('combined scenarios', () => {
-    it('handles kept, fixed, unregistered, and duplicate ids together', () => {
+    it('handles found, fixed, unregistered, and duplicate ids together', () => {
       const validationErrors: ValidationError[] = [];
-      const result = callValidate({
-        database: createDatabase({
-          filePath: undefined,
-          databaseContents: [
-            ['dup', ['no-console']],
-            ['unused', ['no-console']],
-            ['used', ['no-console']],
-          ],
-        }),
+      const databaseMap = callValidate({
+        databaseMap: makeDatabaseMap([
+          ['dup', ['no-console']],
+          ['unused', ['no-console']],
+          ['used', ['no-console']],
+        ]),
         validationErrors,
         legacyComments: [
           makeLegacy({ id: 'used', file: 'a.ts', startLine: 1, endLine: 1 }),
@@ -677,13 +648,8 @@ describe('validateDisableComments', () => {
           makeLegacy({ id: 'ghost', file: 'd.ts', startLine: 4, endLine: 4 }),
         ],
       });
-      expect(result).toEqual({
-        ids: new Map([
-          ['dup', ['no-console']],
-          ['used', ['no-console']],
-        ]),
-        wereErrorsFixed: true,
-      });
+      // dup and used were found; unused never matched; ghost is unregistered.
+      expect(foundIds(databaseMap)).toEqual(['dup', 'used']);
       expect(validationErrors).toEqual([
         {
           message:
