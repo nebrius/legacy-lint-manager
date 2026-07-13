@@ -79,14 +79,14 @@ function writeConfig({
   lintCommand = eslintCommand(),
   configFile = CONFIG_FILE,
   databaseFile = WORKING_DATA,
-  monorepo = false,
+  monorepoConfig,
 }: {
   ignoreWarnings?: boolean;
   linterType?: 'eslint' | 'oxlint';
   lintCommand?: { command: string; args: string[] };
   configFile?: string;
   databaseFile?: string;
-  monorepo?: boolean;
+  monorepoConfig?: { ignorePackagePaths: string[] };
 } = {}) {
   writeFileSync(
     configFile,
@@ -97,7 +97,9 @@ function writeConfig({
       databaseFile,
       nonDisableableRules: [],
       compareBranch: 'main',
-      monorepo,
+      // Presence of monorepoConfig is what enables monorepo mode; omit it for
+      // single-package configs.
+      ...(monorepoConfig ? { monorepoConfig } : {}),
       linterType,
     })
   );
@@ -409,20 +411,34 @@ describe('legacy-errors (integration)', () => {
   describe('monorepo', () => {
     const PKG_A_DIR = join(WORK_DIR, 'packages', 'a');
     const PKG_B_DIR = join(WORK_DIR, 'packages', 'b');
+    const PKG_C_DIR = join(WORK_DIR, 'packages', 'c');
     const PKG_A_INDEX = join(PKG_A_DIR, 'src', 'index.ts');
     const PKG_B_INDEX = join(PKG_B_DIR, 'src', 'index.ts');
+    const PKG_C_INDEX = join(PKG_C_DIR, 'src', 'index.ts');
+
+    function seedPackage(dir: string, name: string, source: string) {
+      mkdirSync(join(dir, 'src'), { recursive: true });
+      writeFileSync(
+        join(dir, 'package.json'),
+        JSON.stringify({ name, version: '1.0.0' })
+      );
+      writeFileSync(join(dir, 'src', 'index.ts'), source);
+    }
 
     // Rebuild WORK_DIR (already gitignored and cleaned up by the outer afterEach)
-    // as a two-package npm workspace. manypkg needs the lockfile marker to
-    // recognize the workspace, and each package needs a named package.json. The
-    // shared eslint flat config lives at the root so eslint resolves it — and its
+    // as an npm workspace. manypkg needs the lockfile marker to recognize the
+    // workspace, and each package needs a named package.json. The shared eslint
+    // flat config lives at the root so eslint resolves it — and its
     // typescript-eslint parser, via the repo's node_modules — when run from each
     // package's cwd. WORK_DIR gets its own .git so getRepoRoot/getFileList anchor
-    // here rather than walking up to this tool's own repo.
-    function initMonorepo() {
+    // here rather than walking up to this tool's own repo. Ignore paths are
+    // repo-relative; readConfig resolves them against the config dir.
+    function initMonorepo({
+      ignorePackagePaths = [],
+      seedPackageC = false,
+    }: { ignorePackagePaths?: string[]; seedPackageC?: boolean } = {}) {
       rmSync(WORK_DIR, { recursive: true, force: true });
-      mkdirSync(join(PKG_A_DIR, 'src'), { recursive: true });
-      mkdirSync(join(PKG_B_DIR, 'src'), { recursive: true });
+      mkdirSync(WORK_DIR, { recursive: true });
       writeFileSync(
         join(WORK_DIR, 'package.json'),
         JSON.stringify({
@@ -437,25 +453,26 @@ describe('legacy-errors (integration)', () => {
         join(SOURCES_DIR, 'eslint.config.mjs'),
         join(WORK_DIR, 'eslint.config.mjs')
       );
-      writeFileSync(
-        join(PKG_A_DIR, 'package.json'),
-        JSON.stringify({ name: 'a', version: '1.0.0' })
-      );
-      writeFileSync(
-        join(PKG_B_DIR, 'package.json'),
-        JSON.stringify({ name: 'b', version: '1.0.0' })
-      );
-      writeFileSync(
-        PKG_A_INDEX,
+      seedPackage(
+        PKG_A_DIR,
+        'a',
         "export function logSomething(): void {\n  console.log('x');\n}\n"
       );
-      writeFileSync(
-        PKG_B_INDEX,
+      seedPackage(
+        PKG_B_DIR,
+        'b',
         'export function debugSomething(): void {\n  debugger;\n}\n'
       );
+      if (seedPackageC) {
+        seedPackage(
+          PKG_C_DIR,
+          'c',
+          "export function logC(): void {\n  console.log('c');\n}\n"
+        );
+      }
       git(['init']);
       writeConfig({
-        monorepo: true,
+        monorepoConfig: { ignorePackagePaths },
         lintCommand: eslintCommand(['src/index.ts']),
       });
     }
@@ -493,6 +510,47 @@ describe('legacy-errors (integration)', () => {
           String(msg).includes(`Legacying errors in ${PKG_B_DIR}`)
         )
       ).toBe(true);
+    });
+
+    it('does not legacy errors in a package listed in ignorePackagePaths', async () => {
+      initMonorepo({
+        ignorePackagePaths: ['packages/c'],
+        seedPackageC: true,
+      });
+
+      vi.spyOn(console, 'info').mockImplementation(() => undefined);
+      await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
+
+      // Packages a and b are legacied; the ignored package c is never scanned, so
+      // its error is left untouched and its file has no legacy comment.
+      expect(hasLegacyComment(PKG_A_INDEX, 'no-console')).toBe(true);
+      expect(hasLegacyComment(PKG_B_INDEX, 'no-debugger')).toBe(true);
+      expect(hasLegacyComment(PKG_C_INDEX, 'no-console')).toBe(false);
+      // Only the two scanned packages contribute ids to the shared database.
+      expect(readData()).toHaveLength(2);
+    });
+
+    it('aborts before legacying when an ignore path is not a package', async () => {
+      initMonorepo({ ignorePackagePaths: ['packages/nope'] });
+
+      const errorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit called');
+      });
+
+      await expect(
+        legacyExistingErrors({ config: CONFIG_FILE, verbose: false })
+      ).rejects.toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(
+        errorSpy.mock.calls.some(([msg]) =>
+          String(msg).includes('Invalid ignore package paths found')
+        )
+      ).toBe(true);
+      // The run bailed before touching any source files.
+      expect(hasLegacyComment(PKG_A_INDEX, 'no-console')).toBe(false);
     });
   });
 });

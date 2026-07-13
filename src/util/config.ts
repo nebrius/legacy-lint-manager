@@ -21,7 +21,16 @@ const ConfigSchema = TypeBox.Object(
     databaseFile: TypeBox.String(),
     nonDisableableRules: TypeBox.Array(TypeBox.String()),
     compareBranch: TypeBox.String(),
-    monorepo: TypeBox.Boolean(),
+    // The presense or absence of this object indicates whether or not this
+    // config enables monorepo mode
+    monorepoConfig: TypeBox.Optional(
+      TypeBox.Object(
+        {
+          ignorePackagePaths: TypeBox.Array(TypeBox.String()),
+        },
+        { additionalProperties: false }
+      )
+    ),
     linterType: TypeBox.Union([
       TypeBox.Literal('eslint'),
       TypeBox.Literal('oxlint'),
@@ -82,6 +91,17 @@ export function parseConfig({
 
   if (!isAbsolute(data.databaseFile)) {
     data.databaseFile = resolve(dirname(configFilePath), data.databaseFile);
+  }
+  if (data.monorepoConfig) {
+    for (let i = 0; i < data.monorepoConfig.ignorePackagePaths.length; i++) {
+      const ignorePath = data.monorepoConfig.ignorePackagePaths[i];
+      if (!isAbsolute(ignorePath)) {
+        data.monorepoConfig.ignorePackagePaths[i] = resolve(
+          dirname(configFilePath),
+          ignorePath
+        );
+      }
+    }
   }
 
   return data;

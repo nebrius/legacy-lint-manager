@@ -30,3 +30,4 @@ When legacying new rules on a codebase that has been previously legacied, always
 - Rule name normalization is different between ESLint and Oxlint. We apply how each linter works for accuracy, but you should be aware of some peculiar design choices in Oxlint. Oxlint actually ignores namespaces in rule names, so `@typescript-eslint/no-explicit-any` and `eslint/no-explicit-any` are treated as the same rule, and `// oxlint-disable @typescript-eslint/no-explicit-any` will disable `eslint/no-explicit-any` errors in addition to the typescript ones.
 - Talk about collision odds and what happens, referencing src/util/constants.ts
 - Explicitly call out that lint results should be piped directly to the legacy command, and doing anything else is at your own risk
+- Make sure to document that ignored packages need to be added manually, since init skips them.

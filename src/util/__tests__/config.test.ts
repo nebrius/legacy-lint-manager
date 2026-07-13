@@ -17,7 +17,6 @@ const VALID_CONFIG: Config = {
   databaseFile: 'legacy-lint.data.json',
   nonDisableableRules: ['no-console'],
   compareBranch: 'main',
-  monorepo: false,
   linterType: 'eslint',
 };
 
@@ -61,7 +60,6 @@ describe('config', () => {
           '  "databaseFile": "db.json",',
           '  "nonDisableableRules": [],',
           '  "compareBranch": "main",',
-          '  "monorepo": false,',
           '  "linterType": "eslint",',
           '}',
         ].join('\n')
@@ -75,7 +73,6 @@ describe('config', () => {
         databaseFile: resolve(dirname(CONFIG_FILE), 'db.json'),
         nonDisableableRules: [],
         compareBranch: 'main',
-        monorepo: false,
         linterType: 'eslint',
       });
     });
@@ -174,6 +171,55 @@ describe('config', () => {
         })
       );
       expect(() => readConfig(CONFIG_FILE)).toThrow('Invalid config file');
+    });
+
+    describe('monorepoConfig', () => {
+      it('round-trips a monorepoConfig, leaving absolute ignore paths unchanged', () => {
+        const ignoreDir = join(tmpdir(), 'packages', 'legacy-pkg');
+        createConfig({
+          data: {
+            ...VALID_CONFIG,
+            monorepoConfig: { ignorePackagePaths: [ignoreDir] },
+          },
+          filePath: CONFIG_FILE,
+        });
+        expect(readConfig(CONFIG_FILE)).toEqual({
+          ...VALID_CONFIG_READBACK,
+          monorepoConfig: { ignorePackagePaths: [ignoreDir] },
+        });
+      });
+
+      it('resolves relative ignorePackagePaths against the config directory', () => {
+        createConfig({
+          data: {
+            ...VALID_CONFIG,
+            monorepoConfig: {
+              ignorePackagePaths: ['packages/a', 'packages/b'],
+            },
+          },
+          filePath: CONFIG_FILE,
+        });
+        // Each ignore path is anchored at the config file's directory, mirroring
+        // how databaseFile is resolved.
+        expect(readConfig(CONFIG_FILE).monorepoConfig).toEqual({
+          ignorePackagePaths: [
+            resolve(dirname(CONFIG_FILE), 'packages/a'),
+            resolve(dirname(CONFIG_FILE), 'packages/b'),
+          ],
+        });
+      });
+
+      it('rejects a monorepoConfig with an unknown field', () => {
+        // The nested monorepoConfig schema is additionalProperties: false.
+        writeFileSync(
+          CONFIG_FILE,
+          JSON.stringify({
+            ...VALID_CONFIG,
+            monorepoConfig: { ignorePackagePaths: [], extra: true },
+          })
+        );
+        expect(() => readConfig(CONFIG_FILE)).toThrow('Invalid config file');
+      });
     });
   });
 });

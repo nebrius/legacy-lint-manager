@@ -180,7 +180,6 @@ describe('init (interactive)', () => {
       // absolute path against the config's directory (the work dir).
       databaseFile: join(workDir, DEFAULT_DATABASE_FILE_NAME),
       compareBranch: 'main',
-      monorepo: false,
       nonDisableableRules: ['no-console', 'no-debugger'],
     });
 
@@ -357,7 +356,9 @@ describe('init (interactive)', () => {
     await result;
 
     const config = readConfig(join(workDir, 'legacy-lint.config.jsonc'));
-    expect(config.monorepo).toBe(true);
+    // A detected workspace records a monorepoConfig (its presence is what enables
+    // monorepo mode), seeded with an empty ignore list for the user to fill in.
+    expect(config.monorepoConfig).toEqual({ ignorePackagePaths: [] });
   });
 
   it('rejects a non-existent compare branch and accepts it on retry', async () => {

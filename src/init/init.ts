@@ -50,17 +50,22 @@ export async function init(io: IO) {
   const databaseFile = await getDatabaseFile(io);
 
   const configFilePath = join(repoRootDir, DEFAULT_CONFIG_FILE_NAME);
+  const configData: Config = {
+    linterType: linterType.type,
+    lintCommand,
+    ignoreWarnings,
+    pragma,
+    databaseFile,
+    compareBranch,
+    nonDisableableRules,
+  };
+  if (isMonorepo) {
+    configData.monorepoConfig = {
+      ignorePackagePaths: [],
+    };
+  }
   createConfig({
-    data: {
-      linterType: linterType.type,
-      lintCommand,
-      ignoreWarnings,
-      pragma,
-      databaseFile,
-      compareBranch,
-      nonDisableableRules,
-      monorepo: isMonorepo,
-    },
+    data: configData,
     filePath: configFilePath,
   });
 

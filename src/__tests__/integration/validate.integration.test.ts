@@ -46,7 +46,10 @@ const WORKING_DATA = join(REPO_DIR, DATA_REL);
 
 type DatabaseContents = [string, string[]][];
 
-function makeConfig(nonDisableableRules: string[] = [], monorepo = false) {
+function makeConfig(
+  nonDisableableRules: string[] = [],
+  monorepoConfig?: { ignorePackagePaths: string[] }
+) {
   return {
     lintCommand: { command: 'npx', args: ['eslint', '--format=json'] },
     ignoreWarnings: false,
@@ -54,7 +57,9 @@ function makeConfig(nonDisableableRules: string[] = [], monorepo = false) {
     databaseFile: DATA_REL,
     nonDisableableRules,
     compareBranch: 'main',
-    monorepo,
+    // Presence of monorepoConfig is what enables monorepo mode; omit it entirely
+    // for single-package configs.
+    ...(monorepoConfig ? { monorepoConfig } : {}),
     linterType: 'eslint',
   };
 }
@@ -485,13 +490,16 @@ describe('validate (integration)', () => {
       return `  // eslint-disable-next-line ${rule} -- ${DEFAULT_PRAGMA} (${rule}) ${id}`;
     }
 
-    // Like initRepo, but lays down a two-package workspace and a monorepo config.
+    // Like initRepo, but lays down a workspace and a monorepo config. Ignore
+    // paths are repo-relative; readConfig resolves them against the config dir.
     function initMonorepo({
       db,
       seedPackages,
+      ignorePackagePaths = [],
     }: {
       db: DatabaseContents;
       seedPackages: () => void;
+      ignorePackagePaths?: string[];
     }) {
       rmSync(REPO_DIR, { recursive: true, force: true });
       mkdirSync(REPO_DIR, { recursive: true });
@@ -500,7 +508,7 @@ describe('validate (integration)', () => {
       git(['config', 'user.name', 'Test']);
       writeFileSync(
         join(REPO_DIR, CONFIG_REL),
-        JSON.stringify(makeConfig([], true))
+        JSON.stringify(makeConfig([], { ignorePackagePaths }))
       );
       writeFileSync(WORKING_DATA, JSON.stringify(db));
       seedWorkspaceRoot();
@@ -612,6 +620,61 @@ describe('validate (integration)', () => {
         [CONSOLE_ID, ['no-console']],
         [DEBUGGER_ID, ['no-debugger']],
       ]);
+    });
+
+    it('does not scan a package listed in ignorePackagePaths', () => {
+      const strayId = makeId('mrstray');
+      initMonorepo({
+        db: [
+          [CONSOLE_ID, ['no-console']],
+          [DEBUGGER_ID, ['no-debugger']],
+        ],
+        ignorePackagePaths: ['packages/c'],
+        seedPackages: () => {
+          seedConsolePackage();
+          seedDebuggerPackage();
+          // Package c carries an unregistered legacy id that would fail
+          // validation, but it is ignored, so it is never scanned.
+          seedPackageSource('c', 'uses.ts', [
+            'export function stray(): void {',
+            legacyLine('no-console', strayId),
+            "  console.log('c');",
+            '}',
+            '',
+          ]);
+        },
+      });
+
+      expect(() => {
+        runValidate();
+      }).not.toThrow();
+    });
+
+    it('exits with an error when an ignore path is not a package', () => {
+      initMonorepo({
+        db: [
+          [CONSOLE_ID, ['no-console']],
+          [DEBUGGER_ID, ['no-debugger']],
+        ],
+        ignorePackagePaths: ['packages/nope'],
+        seedPackages: () => {
+          seedConsolePackage();
+          seedDebuggerPackage();
+        },
+      });
+
+      const exitSpy = mockExit();
+      const errorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      expect(() => {
+        runValidate();
+      }).toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Unknown ignore package path')
+      );
     });
   });
 });

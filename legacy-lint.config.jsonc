@@ -21,6 +21,5 @@
     "import-integrity/no-unresolved-imports",
     "import-integrity/no-unused-exports",
     "import-integrity/require-node-prefix"
-  ],
-  "monorepo": false
+  ]
 }

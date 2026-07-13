@@ -33,7 +33,6 @@ const BASE_CONFIG: Config = {
   databaseFile: DB_FILE,
   nonDisableableRules: [],
   compareBranch: 'main',
-  monorepo: false,
   linterType: 'eslint',
 };
 
@@ -90,6 +89,13 @@ function runCompare({
 // Build the in-memory "current" database the same way the real code does.
 function makeDatabase(contents: [string, string[]][]): Database {
   return createDatabase({ filePath: undefined, databaseContents: contents });
+}
+
+// A monorepo variant of a config. Ignore paths are absolute (as they are once a
+// real config is parsed) and under REPO_DIR so the drift message can render them
+// relative to the repo root.
+function withMonorepo(config: Config, ignorePackagePaths: string[]): Config {
+  return { ...config, monorepoConfig: { ignorePackagePaths } };
 }
 
 describe('compareWithBranch (integration)', () => {
@@ -269,6 +275,69 @@ describe('compareWithBranch (integration)', () => {
             'The non-disableable rule "no-eval" is not defined in the current config. Non-disableable rules cannot be removed from the compare branch.',
         },
       ]);
+    });
+  });
+
+  // The monorepo shape of the config is itself load-bearing: it cannot silently
+  // appear/disappear between branches, and its ignore list can only shrink — a
+  // new ignored package would hide errors that the compare branch still enforces.
+  describe('monorepo config drift', () => {
+    it('records an error when the current config is a monorepo but the compare branch is not', () => {
+      initRepo({ config: BASE_CONFIG, db: [] });
+
+      const errors = runCompare({
+        currentConfig: withMonorepo(BASE_CONFIG, []),
+        currentDatabase: makeDatabase([]),
+      });
+
+      expect(errors).toEqual([
+        { message: 'The config has been converted from a monorepo config.' },
+      ]);
+    });
+
+    it('records an error when the compare branch is a monorepo but the current config is not', () => {
+      initRepo({ config: withMonorepo(BASE_CONFIG, []), db: [] });
+
+      const errors = runCompare({
+        currentConfig: BASE_CONFIG,
+        currentDatabase: makeDatabase([]),
+      });
+
+      expect(errors).toEqual([
+        { message: 'The config has been converted to a monorepo config.' },
+      ]);
+    });
+
+    it('records an error when a new ignored package is added relative to the compare branch', () => {
+      const existing = join(REPO_DIR, 'packages', 'existing');
+      const added = join(REPO_DIR, 'packages', 'added');
+      initRepo({ config: withMonorepo(BASE_CONFIG, [existing]), db: [] });
+
+      const errors = runCompare({
+        currentConfig: withMonorepo(BASE_CONFIG, [existing, added]),
+        currentDatabase: makeDatabase([]),
+      });
+
+      // Only the newly-ignored package is reported, rendered relative to the repo.
+      expect(errors).toEqual([
+        {
+          message: `New ignored packages cannot be added to the config. New packages found: ${join('packages', 'added')}`,
+        },
+      ]);
+    });
+
+    it('records no error when the monorepo ignore lists match', () => {
+      const ignored = join(REPO_DIR, 'packages', 'ignored');
+      initRepo({ config: withMonorepo(BASE_CONFIG, [ignored]), db: [] });
+
+      const errors = runCompare({
+        currentConfig: withMonorepo(BASE_CONFIG, [ignored]),
+        currentDatabase: makeDatabase([]),
+      });
+
+      // Removing an ignored package is allowed (it only re-enables enforcement),
+      // so an identical list — and a shorter one — must not be flagged.
+      expect(errors).toEqual([]);
     });
   });
 

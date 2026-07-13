@@ -49,8 +49,12 @@ export function validate({
     });
   });
 
-  if (config.monorepo) {
-    const packageRootDirs = getPackageRootDirs(repoRootDir);
+  if (config.monorepoConfig) {
+    const packageRootDirs = getPackageRootDirs({
+      repoRootDir,
+      monorepoConfig: config.monorepoConfig,
+      validationErrors,
+    });
     for (const packageRootDir of packageRootDirs) {
       validatePackage({
         config,

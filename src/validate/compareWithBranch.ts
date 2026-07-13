@@ -61,12 +61,14 @@ export function compareWithBranch({
     ignoreWarnings: currentIgnoreWarnings,
     pragma: currentPragma,
     compareBranch: currentCompareBranch,
+    monorepoConfig: currentMonorepoConfig,
   } = currentConfig;
   const {
     nonDisableableRules: compareNonDisableableRules,
     ignoreWarnings: compareIgnoreWarnings,
     pragma: comparePragma,
     compareBranch: compareCompareBranch,
+    monorepoConfig: compareMonorepoConfig,
   } = compareConfig;
 
   // Check that the compare branch is the same
@@ -95,6 +97,25 @@ export function compareWithBranch({
     if (!currentNonDisableableRules.includes(rule)) {
       validationErrors.push({
         message: `The non-disableable rule "${rule}" is not defined in the current config. Non-disableable rules cannot be removed from the compare branch.`,
+      });
+    }
+  }
+
+  // Check that no new ignored packages have been added, if this is a monorepo
+  if (!!currentMonorepoConfig !== !!compareMonorepoConfig) {
+    validationErrors.push({
+      message: `The config has been converted ${currentMonorepoConfig ? 'from' : 'to'} a monorepo config.`,
+    });
+  }
+  if (currentMonorepoConfig && compareMonorepoConfig) {
+    const excessPackages = currentMonorepoConfig.ignorePackagePaths.filter(
+      (path) => !compareMonorepoConfig.ignorePackagePaths.includes(path)
+    );
+    if (excessPackages.length > 0) {
+      validationErrors.push({
+        message: `New ignored packages cannot be added to the config. New packages found: ${excessPackages
+          .map((path) => getUnprefixedRelativeDir({ path, repoRootDir }))
+          .join(', ')}`,
       });
     }
   }

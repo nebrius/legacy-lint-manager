@@ -28,8 +28,20 @@ export async function legacyExistingErrors(options: CommonOptions) {
 
   const repoRootDir = getRepoRoot(options.config);
   const legacyComments: LegacyComment[] = [];
-  if (config.monorepo) {
-    const packagePaths = getPackageRootDirs(repoRootDir);
+  if (config.monorepoConfig) {
+    const validationErrors: ValidationError[] = [];
+    const packagePaths = getPackageRootDirs({
+      repoRootDir,
+      monorepoConfig: config.monorepoConfig,
+      validationErrors,
+    });
+    if (validationErrors.length > 0) {
+      error(
+        `Invalid ignore package paths found while trying to legacy existing errors. Please fix the following errors and try again:`
+      );
+      printValidationErrors({ validationErrors, repoRootDir });
+      process.exit(1);
+    }
     for (const packagePath of packagePaths) {
       info(`Legacying errors in ${packagePath}...`);
       const packageLegacyComments = await legacyPackage({
