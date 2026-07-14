@@ -58,7 +58,7 @@ export function parseResults({
     if (!Value.Check(EslintSchema, results)) {
       const errors = Value.Errors(EslintSchema, results);
       throw new Error(
-        'Could not parse piped ESLint results: ' +
+        'Could not parse ESLint results: ' +
           JSON.stringify(Array.from(errors), null, 2)
       );
     }
@@ -108,7 +108,7 @@ export function parseResults({
     if (!Value.Check(OxlintSchema, results)) {
       const errors = Value.Errors(OxlintSchema, results);
       throw new Error(
-        'Could not parse piped Oxlint results: ' +
+        'Could not parse Oxlint results: ' +
           JSON.stringify(Array.from(errors), null, 2)
       );
     }

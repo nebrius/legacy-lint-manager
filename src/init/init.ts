@@ -23,6 +23,7 @@ import {
 } from '../util/constants.js';
 import { createDatabase } from '../util/db.js';
 import { getRepoRoot } from '../util/files.js';
+import { setVerbose, time } from '../util/logging.js';
 import { commaSeparatedStringToArray } from '../util/string.js';
 import { getEslintRules } from './getEslintRules.js';
 import { getLintConfigFiles } from './getLintConfigFiles.js';
@@ -31,9 +32,13 @@ type IO = {
   input: Readable;
   output: Writable;
 };
+type Params = IO & {
+  verbose: boolean;
+};
 
 // init takes in IO so that we can override it in tests
-export async function init(io: IO) {
+export async function init({ verbose, ...io }: Params) {
+  setVerbose(verbose);
   intro(`legacy-lint-manager`);
   const repoRootDir = getRepoRoot(process.cwd());
 
@@ -64,17 +69,22 @@ export async function init(io: IO) {
       ignorePackagePaths: [],
     };
   }
-  createConfig({
-    data: configData,
-    filePath: configFilePath,
+
+  time(`Creating config file at ${configFilePath}...`, () => {
+    createConfig({
+      data: configData,
+      filePath: configFilePath,
+    });
   });
 
-  const databaseFilePath = join(dirname(configFilePath), databaseFile);
-  const db = createDatabase({
-    filePath: databaseFilePath,
-    databaseContents: [],
+  time(`Creating database at ${databaseFile}...`, () => {
+    const databaseFilePath = join(dirname(configFilePath), databaseFile);
+    const db = createDatabase({
+      filePath: databaseFilePath,
+      databaseContents: [],
+    });
+    db.save();
   });
-  db.save();
 
   outro(
     `You're all set! Now run \`npx legacy-lint-manager legacy-errors\` to get started.`

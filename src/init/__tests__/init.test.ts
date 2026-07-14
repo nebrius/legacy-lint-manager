@@ -18,6 +18,7 @@ import {
   DEFAULT_DATABASE_FILE_NAME,
   DEFAULT_PRAGMA,
 } from '../../util/constants.js';
+import { setVerbose } from '../../util/logging.js';
 import { init } from '../init.js';
 
 // getCompareBranch shells out to git unconditionally (default-branch lookup +
@@ -135,12 +136,15 @@ afterEach(() => {
   input.close();
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  // setVerbose mutates module-level state in logging.js; reset it so the
+  // verbose-enabled test can't leak into others.
+  setVerbose(false);
 });
 
 describe('init (interactive)', () => {
   it('writes a config and empty database from the prompt answers', async () => {
     // Empty work dir => no lint config detected => the linter must be selected.
-    const result = init({ input, output });
+    const result = init({ input, output, verbose: false });
 
     await waitForText('Which linter do you use?');
     press('return'); // first option: ESLint
@@ -189,8 +193,53 @@ describe('init (interactive)', () => {
     expect(database).toEqual([]);
   });
 
+  it('emits timing logs for the file writes when verbose is enabled', async () => {
+    // init wires the verbose flag into setVerbose and wraps the config and
+    // database writes in time(), so enabling verbose surfaces a labeled debug
+    // line for each write. time() itself is unit-tested in logging.test.ts;
+    // this covers the init-level wiring.
+    const messages: string[] = [];
+    vi.spyOn(console, 'debug').mockImplementation((msg: string) => {
+      messages.push(msg);
+    });
+
+    // Empty work dir => the linter must be selected; drive the full prompt flow
+    // so init reaches the writes that time() instruments.
+    const result = init({ input, output, verbose: true });
+
+    await waitForText('Which linter do you use?');
+    press('return');
+
+    await waitForText('command should I run');
+    press('return');
+
+    await waitForText('Ignore lint warnings?');
+    press('return');
+
+    await waitForText('monorepo mode');
+    press('return');
+
+    await waitForText('prefixed with');
+    press('return');
+
+    await waitForText('flagged if disabled');
+    press('return');
+
+    await waitForText('compared against');
+    press('return');
+
+    await waitForText('database file be stored');
+    press('return');
+
+    await result;
+
+    const joined = messages.join('\n');
+    expect(joined).toContain('Creating config file at');
+    expect(joined).toContain('Creating database at');
+  });
+
   it('records oxlint when it is chosen from the linter prompt', async () => {
-    const result = init({ input, output });
+    const result = init({ input, output, verbose: false });
 
     await waitForText('Which linter do you use?');
     press('down'); // move from ESLint to Oxlint
@@ -239,7 +288,7 @@ describe('init (interactive)', () => {
       "export default [{ rules: { 'no-console': 'error' } }];\n"
     );
 
-    const result = init({ input, output });
+    const result = init({ input, output, verbose: false });
 
     await waitForText('command should I run');
     press('return'); // accept the default lint command
@@ -275,7 +324,7 @@ describe('init (interactive)', () => {
     // An Oxlint config on disk is detected directly, so no linter prompt shows.
     writeFileSync(join(workDir, '.oxlintrc.json'), '{}\n');
 
-    const result = init({ input, output });
+    const result = init({ input, output, verbose: false });
 
     await waitForText('command should I run');
     press('return'); // accept the default lint command
@@ -327,7 +376,7 @@ describe('init (interactive)', () => {
       JSON.stringify({ name: 'a', version: '1.0.0' })
     );
 
-    const result = init({ input, output });
+    const result = init({ input, output, verbose: false });
 
     await waitForText('Which linter do you use?');
     press('return'); // ESLint
@@ -367,7 +416,7 @@ describe('init (interactive)', () => {
       status: 1,
     } as unknown as ReturnType<typeof spawnSync>);
 
-    const result = init({ input, output });
+    const result = init({ input, output, verbose: false });
 
     await waitForText('Which linter do you use?');
     press('return');
@@ -408,7 +457,7 @@ describe('init (interactive)', () => {
   });
 
   it('records a custom lint command split into command and args', async () => {
-    const result = init({ input, output });
+    const result = init({ input, output, verbose: false });
 
     await waitForText('Which linter do you use?');
     press('return'); // ESLint
@@ -446,7 +495,7 @@ describe('init (interactive)', () => {
   });
 
   it('rejects a lint command with quoted args and accepts a corrected one', async () => {
-    const result = init({ input, output });
+    const result = init({ input, output, verbose: false });
 
     await waitForText('Which linter do you use?');
     press('return'); // ESLint
@@ -494,7 +543,7 @@ describe('init (interactive)', () => {
       throw new Error('process.exit called');
     });
 
-    const result = init({ input, output });
+    const result = init({ input, output, verbose: false });
 
     await waitForText('Which linter do you use?');
     press('escape');

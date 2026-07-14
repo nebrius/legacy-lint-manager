@@ -38,12 +38,15 @@ addCommonOptions(program.command('legacy-errors'))
     void legacyExistingErrors(options);
   });
 
-addCommonOptions(program.command('init'))
+program
+  .command('init')
   .description('Create a new configuration file')
-  .action(() => {
+  .option('--verbose', 'enable verbose logging', false)
+  .action((options) => {
     void init({
       input: process.stdin,
       output: process.stdout,
+      ...options,
     });
   });
 

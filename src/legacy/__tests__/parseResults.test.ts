@@ -648,7 +648,7 @@ describe('parseResults', () => {
           ignoreWarnings: false,
           linterType: 'oxlint',
         })
-      ).toThrow('Could not parse piped Oxlint results');
+      ).toThrow('Could not parse Oxlint results');
     });
 
     it('throws for null', () => {
@@ -658,7 +658,7 @@ describe('parseResults', () => {
           ignoreWarnings: false,
           linterType: 'oxlint',
         })
-      ).toThrow('Could not parse piped Oxlint results');
+      ).toThrow('Could not parse Oxlint results');
     });
 
     it('throws for undefined', () => {
@@ -668,7 +668,7 @@ describe('parseResults', () => {
           ignoreWarnings: false,
           linterType: 'oxlint',
         })
-      ).toThrow('Could not parse piped Oxlint results');
+      ).toThrow('Could not parse Oxlint results');
     });
 
     it('throws for a primitive string', () => {
@@ -678,7 +678,7 @@ describe('parseResults', () => {
           ignoreWarnings: false,
           linterType: 'oxlint',
         })
-      ).toThrow('Could not parse piped Oxlint results');
+      ).toThrow('Could not parse Oxlint results');
     });
 
     it('throws for a primitive number', () => {
@@ -688,7 +688,7 @@ describe('parseResults', () => {
           ignoreWarnings: false,
           linterType: 'oxlint',
         })
-      ).toThrow('Could not parse piped Oxlint results');
+      ).toThrow('Could not parse Oxlint results');
     });
 
     it('throws for a boolean', () => {
@@ -698,7 +698,7 @@ describe('parseResults', () => {
           ignoreWarnings: false,
           linterType: 'oxlint',
         })
-      ).toThrow('Could not parse piped Oxlint results');
+      ).toThrow('Could not parse Oxlint results');
     });
 
     // With linterType 'eslint', malformed input is run against the ESLint
@@ -710,7 +710,7 @@ describe('parseResults', () => {
           ignoreWarnings: false,
           linterType: 'eslint',
         })
-      ).toThrow('Could not parse piped ESLint results');
+      ).toThrow('Could not parse ESLint results');
     });
 
     it('throws when an ESLint message is missing its ruleId', () => {
@@ -719,7 +719,7 @@ describe('parseResults', () => {
       const results = [{ filePath: 'a.ts', messages: [{ line: 1 }] }];
       expect(() =>
         parseResults({ results, ignoreWarnings: false, linterType: 'eslint' })
-      ).toThrow('Could not parse piped ESLint results');
+      ).toThrow('Could not parse ESLint results');
     });
 
     it('throws when an Oxlint diagnostic is missing its filename', () => {
@@ -730,7 +730,7 @@ describe('parseResults', () => {
       };
       expect(() =>
         parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
-      ).toThrow('Could not parse piped Oxlint results');
+      ).toThrow('Could not parse Oxlint results');
     });
 
     it('throws when an Oxlint diagnostic is missing its labels', () => {
@@ -741,7 +741,7 @@ describe('parseResults', () => {
       };
       expect(() =>
         parseResults({ results, ignoreWarnings: false, linterType: 'oxlint' })
-      ).toThrow('Could not parse piped Oxlint results');
+      ).toThrow('Could not parse Oxlint results');
     });
 
     it('throws when Oxlint diagnostics is not an array', () => {
@@ -751,7 +751,7 @@ describe('parseResults', () => {
           ignoreWarnings: false,
           linterType: 'oxlint',
         })
-      ).toThrow('Could not parse piped Oxlint results');
+      ).toThrow('Could not parse Oxlint results');
     });
   });
 });

@@ -13,7 +13,6 @@
   "license": "MIT",
   "author": "Bryan Hughes <bryan@nebri.us>",
   "type": "module",
-  "main": "dist/api.js",
   "bin": {
     "legacy-lint-manager": "dist/cli.js"
   },
