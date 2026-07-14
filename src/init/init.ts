@@ -234,8 +234,7 @@ function getCompareBranch(repoRootDir: string, io: IO) {
 
   return wrap(() =>
     text({
-      message:
-        'What branch should CI compare the legacied errors list be compared against?',
+      message: 'What branch should validate compare against?',
       defaultValue: defaultCompareBranch,
       placeholder: defaultCompareBranch,
       validate: (value) => {

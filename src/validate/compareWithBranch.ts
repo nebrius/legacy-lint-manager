@@ -104,7 +104,7 @@ export function compareWithBranch({
   // Check that no new ignored packages have been added, if this is a monorepo
   if (!!currentMonorepoConfig !== !!compareMonorepoConfig) {
     validationErrors.push({
-      message: `The config has been converted ${currentMonorepoConfig ? 'from' : 'to'} a monorepo config.`,
+      message: `The config has been converted ${currentMonorepoConfig ? 'to' : 'from'} a monorepo config.`,
     });
   }
   if (currentMonorepoConfig && compareMonorepoConfig) {
