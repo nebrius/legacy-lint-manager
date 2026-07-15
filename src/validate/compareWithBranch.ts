@@ -27,7 +27,7 @@ export function compareWithBranch({
   repoRootDir: string;
 }) {
   const { compareBranchName, compareDatabase, compareConfig } = getCompareInfo({
-    compareBranch: currentConfig.compareBranch,
+    compareBranchName: currentConfig.compareBranch,
     configFilePath,
     repoRootDir,
   });
@@ -122,22 +122,39 @@ export function compareWithBranch({
 }
 
 function getCompareInfo({
-  compareBranch,
+  compareBranchName,
   configFilePath,
   repoRootDir,
 }: {
-  compareBranch: string;
+  compareBranchName: string;
   configFilePath: string;
   repoRootDir: string;
 }): CompareInfo {
-  // Read in the config from the compare branch
-  const compareConfigContent = execSync(
-    `git show ${compareBranch}:${getUnprefixedRelativeDir({ path: configFilePath, repoRootDir })}`,
-    {
+  // Check if we need to use `compareBranch` or `origin/compareBranch`. In most
+  // cases, we can use the branch directly. However in CI environments where
+  // only the branch being tested is fetched, we need to use the origin branch.
+  // That said, a repo recently created with `git init` won't yet have an
+  // origin, so we need to handle that case too. There is no lowest common
+  // denominator approach to use, so we try and infer.
+  let resolvedBranchName: string = compareBranchName;
+  try {
+    execSync(`git rev-parse --verify --quiet ${compareBranchName}`, {
       encoding: 'utf-8',
       cwd: repoRootDir,
-    }
-  );
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch {
+    // The branch doesn't resolve as a local ref, so fall back to the
+    // remote-tracking branch (the CI single-branch-checkout case).
+    resolvedBranchName = `origin/${compareBranchName}`;
+  }
+
+  // Read in the config from the compare branch
+  const compareConfigContent = gitShow({
+    resolvedBranchName,
+    path: configFilePath,
+    repoRootDir,
+  });
   const compareConfig = parseConfig({
     configFilePath,
     configFileContents: compareConfigContent,
@@ -145,13 +162,11 @@ function getCompareInfo({
 
   // Read in the database from the compare branch, using the compare config
   // to track potential renames of the database file
-  const compareDatabaseContent = execSync(
-    `git show ${compareBranch}:${getUnprefixedRelativeDir({ path: compareConfig.databaseFile, repoRootDir })}`,
-    {
-      encoding: 'utf-8',
-      cwd: repoRootDir,
-    }
-  );
+  const compareDatabaseContent = gitShow({
+    resolvedBranchName,
+    path: compareConfig.databaseFile,
+    repoRootDir,
+  });
   const compareDatabase = createDatabase({
     filePath: undefined,
     databaseContents: JSON.parse(compareDatabaseContent) as unknown,
@@ -160,6 +175,26 @@ function getCompareInfo({
   return {
     compareDatabase,
     compareConfig,
-    compareBranchName: compareBranch,
+    compareBranchName,
   };
+}
+
+function gitShow({
+  resolvedBranchName,
+  path,
+  repoRootDir,
+}: {
+  resolvedBranchName: string;
+  path: string;
+  repoRootDir: string;
+}) {
+  return execSync(
+    `git show ${resolvedBranchName}:${getUnprefixedRelativeDir({ path, repoRootDir })}`,
+    {
+      encoding: 'utf-8',
+      cwd: repoRootDir,
+      // We don't hide output here though, so that if this really and truly
+      // fails, users still get an error message
+    }
+  );
 }

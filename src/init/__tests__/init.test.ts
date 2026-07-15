@@ -166,7 +166,7 @@ describe('init (interactive)', () => {
     type('no-console,no-debugger');
     press('return');
 
-    await waitForText('compared against');
+    await waitForText('compare against');
     press('return'); // defaultValue: 'main' (from mocked git)
 
     await waitForText('database file be stored');
@@ -225,7 +225,7 @@ describe('init (interactive)', () => {
     await waitForText('flagged if disabled');
     press('return');
 
-    await waitForText('compared against');
+    await waitForText('compare against');
     press('return');
 
     await waitForText('database file be stored');
@@ -261,7 +261,7 @@ describe('init (interactive)', () => {
     type('no-debugger');
     press('return');
 
-    await waitForText('compared against');
+    await waitForText('compare against');
     press('return');
 
     await waitForText('database file be stored');
@@ -307,7 +307,7 @@ describe('init (interactive)', () => {
     press('space'); // toggle the focused rule
     press('return');
 
-    await waitForText('compared against');
+    await waitForText('compare against');
     press('return');
 
     await waitForText('database file be stored');
@@ -342,7 +342,7 @@ describe('init (interactive)', () => {
     type('no-console');
     press('return');
 
-    await waitForText('compared against');
+    await waitForText('compare against');
     press('return');
 
     await waitForText('database file be stored');
@@ -396,7 +396,7 @@ describe('init (interactive)', () => {
     await waitForText('flagged if disabled');
     press('return'); // accept the empty default rules list
 
-    await waitForText('compared against');
+    await waitForText('compare against');
     press('return');
 
     await waitForText('database file be stored');
@@ -436,7 +436,7 @@ describe('init (interactive)', () => {
     await waitForText('flagged if disabled');
     press('return'); // accept the empty default rules list
 
-    await waitForText('compared against');
+    await waitForText('compare against');
     type('feature-branch');
     press('return'); // first validation: branch does not exist
 
@@ -478,7 +478,7 @@ describe('init (interactive)', () => {
     await waitForText('flagged if disabled');
     press('return'); // accept the empty default rules list
 
-    await waitForText('compared against');
+    await waitForText('compare against');
     press('return');
 
     await waitForText('database file be stored');
@@ -523,7 +523,7 @@ describe('init (interactive)', () => {
     await waitForText('flagged if disabled');
     press('return');
 
-    await waitForText('compared against');
+    await waitForText('compare against');
     press('return');
 
     await waitForText('database file be stored');

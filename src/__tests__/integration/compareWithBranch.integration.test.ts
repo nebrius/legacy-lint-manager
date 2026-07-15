@@ -22,6 +22,12 @@ const REPO_DIR = join(
   tmpdir(),
   `lint-legacies-compare-with-branch-${process.pid.toString()}`
 );
+// A bare "origin" used by the single-branch-checkout test to give REPO_DIR a
+// remote-tracking `main` ref without a local `main` branch.
+const ORIGIN_DIR = join(
+  tmpdir(),
+  `lint-legacies-compare-with-branch-origin-${process.pid.toString()}`
+);
 // git show interpolates these paths directly, so they must be repo-relative.
 const CONFIG_FILE = 'legacy-lint.config.jsonc';
 const DB_FILE = 'legacy-lint.data.json';
@@ -63,6 +69,18 @@ function initRepo({
   git(['checkout', '-b', 'feature']);
 }
 
+// Simulate a CI single-branch checkout: push `main` to a bare "origin", then
+// drop the local `main` branch so only `refs/remotes/origin/main` remains. After
+// this, `git rev-parse --verify main` fails, so getCompareInfo must fall back to
+// reading the compare config and database from `origin/main`.
+function detachMainToOrigin() {
+  git(['init', '--bare', ORIGIN_DIR]);
+  git(['remote', 'add', 'origin', ORIGIN_DIR]);
+  git(['push', 'origin', 'main']);
+  git(['fetch', 'origin']);
+  git(['branch', '-D', 'main']);
+}
+
 // compareWithBranch takes an absolute configFilePath plus the repoRootDir, and
 // shells out to git with repoRootDir as the cwd, so it does not depend on
 // process.cwd(). The relative CONFIG_FILE/DB_FILE constants describe the on-disk
@@ -101,6 +119,7 @@ function withMonorepo(config: Config, ignorePackagePaths: string[]): Config {
 describe('compareWithBranch (integration)', () => {
   afterEach(() => {
     rmSync(REPO_DIR, { recursive: true, force: true });
+    rmSync(ORIGIN_DIR, { recursive: true, force: true });
   });
 
   it('records no errors when the current config and database match the compare branch', () => {
@@ -120,6 +139,22 @@ describe('compareWithBranch (integration)', () => {
       ]),
     });
 
+    expect(errors).toEqual([]);
+  });
+
+  it('reads the compare config and database from origin when the branch is not a local ref', () => {
+    // With only a remote-tracking `origin/main` (no local `main`),
+    // getCompareInfo must fall back to reading everything from origin/main.
+    initRepo({ config: BASE_CONFIG, db: [['a', ['no-console']]] });
+    detachMainToOrigin();
+
+    const errors = runCompare({
+      currentConfig: BASE_CONFIG,
+      currentDatabase: makeDatabase([['a', ['no-console']]]),
+    });
+
+    // A clean, no-drift read proves both the config and the database were
+    // resolved and read from origin/main.
     expect(errors).toEqual([]);
   });
 
@@ -291,7 +326,7 @@ describe('compareWithBranch (integration)', () => {
       });
 
       expect(errors).toEqual([
-        { message: 'The config has been converted from a monorepo config.' },
+        { message: 'The config has been converted to a monorepo config.' },
       ]);
     });
 
@@ -304,7 +339,7 @@ describe('compareWithBranch (integration)', () => {
       });
 
       expect(errors).toEqual([
-        { message: 'The config has been converted to a monorepo config.' },
+        { message: 'The config has been converted from a monorepo config.' },
       ]);
     });
 
