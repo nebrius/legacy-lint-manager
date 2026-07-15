@@ -7,12 +7,6 @@ import { createDatabase } from '../util/db.js';
 import { getUnprefixedRelativeDir } from '../util/files.js';
 import type { ValidationError } from '../util/types.js';
 
-type CompareInfo = {
-  compareDatabase: Database;
-  compareBranchName: string;
-  compareConfig: Config;
-};
-
 export function compareWithBranch({
   currentDatabase,
   currentConfig,
@@ -26,7 +20,7 @@ export function compareWithBranch({
   validationErrors: ValidationError[];
   repoRootDir: string;
 }) {
-  const { compareBranchName, compareDatabase, compareConfig } = getCompareInfo({
+  const { compareDatabase, compareConfig } = getCompareInfo({
     compareBranchName: currentConfig.compareBranch,
     configFilePath,
     repoRootDir,
@@ -35,7 +29,7 @@ export function compareWithBranch({
     const compareRules = compareDatabase.getIds().get(id);
     if (!compareRules) {
       validationErrors.push({
-        message: `Legacy ID "${id}" does not exist in the database on ${compareBranchName}. New legacy entries cannot be added.`,
+        message: `Legacy ID "${id}" does not exist in the database on ${currentConfig.compareBranch}. New legacy entries cannot be added.`,
       });
       continue;
     }
@@ -49,7 +43,7 @@ export function compareWithBranch({
     for (const rule of rules) {
       if (!compareRules.includes(rule)) {
         validationErrors.push({
-          message: `Rule "${rule}" for legacy ID "${id}" is not defined in the database on ${compareBranchName}. New rules cannot be added to existing legacy entries.`,
+          message: `Rule "${rule}" for legacy ID "${id}" is not defined in the database on ${currentConfig.compareBranch}. New rules cannot be added to existing legacy entries.`,
         });
       }
     }
@@ -129,14 +123,13 @@ function getCompareInfo({
   compareBranchName: string;
   configFilePath: string;
   repoRootDir: string;
-}): CompareInfo {
+}) {
   // Check if we need to use `compareBranch` or `origin/compareBranch`. In most
   // cases, we can use the branch directly. However in CI environments where
   // only the branch being tested is fetched, we need to use the origin branch.
   // That said, a repo recently created with `git init` won't yet have an
   // origin, so we need to handle that case too. There is no lowest common
   // denominator approach to use, so we try and infer.
-  let resolvedBranchName: string = compareBranchName;
   try {
     execSync(`git rev-parse --verify --quiet ${compareBranchName}`, {
       encoding: 'utf-8',
@@ -146,12 +139,12 @@ function getCompareInfo({
   } catch {
     // The branch doesn't resolve as a local ref, so fall back to the
     // remote-tracking branch (the CI single-branch-checkout case).
-    resolvedBranchName = `origin/${compareBranchName}`;
+    compareBranchName = `origin/${compareBranchName}`;
   }
 
   // Read in the config from the compare branch
   const compareConfigContent = gitShow({
-    resolvedBranchName,
+    compareBranchName,
     path: configFilePath,
     repoRootDir,
   });
@@ -163,7 +156,7 @@ function getCompareInfo({
   // Read in the database from the compare branch, using the compare config
   // to track potential renames of the database file
   const compareDatabaseContent = gitShow({
-    resolvedBranchName,
+    compareBranchName,
     path: compareConfig.databaseFile,
     repoRootDir,
   });
@@ -175,21 +168,20 @@ function getCompareInfo({
   return {
     compareDatabase,
     compareConfig,
-    compareBranchName,
   };
 }
 
 function gitShow({
-  resolvedBranchName,
+  compareBranchName,
   path,
   repoRootDir,
 }: {
-  resolvedBranchName: string;
+  compareBranchName: string;
   path: string;
   repoRootDir: string;
 }) {
   return execSync(
-    `git show ${resolvedBranchName}:${getUnprefixedRelativeDir({ path, repoRootDir })}`,
+    `git show ${compareBranchName}:${getUnprefixedRelativeDir({ path, repoRootDir })}`,
     {
       encoding: 'utf-8',
       cwd: repoRootDir,
