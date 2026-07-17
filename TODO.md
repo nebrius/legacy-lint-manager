@@ -1,1 +1,2 @@
-- Create docs
+- Support package overrides in monorepos
+- Rework --update to also strip unneeded rules from legacy comments and update failure message README entry
