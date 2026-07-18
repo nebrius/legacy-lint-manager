@@ -1,10 +1,18 @@
-import { execSync } from 'node:child_process';
+import { execSync, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 import type { Config } from '../util/config.js';
-import { parseConfig } from '../util/config.js';
+import {
+  parseConfig,
+  parsePackageConfigOverride,
+  readPackageConfigOverride,
+} from '../util/config.js';
+import { DEFAULT_CONFIG_FILE_NAME } from '../util/constants.js';
 import type { Database } from '../util/db.js';
 import { createDatabase } from '../util/db.js';
 import { getUnprefixedRelativeDir } from '../util/files.js';
+import { error } from '../util/logging.js';
 import type { ValidationError } from '../util/types.js';
 
 export function compareWithBranch({
@@ -13,18 +21,21 @@ export function compareWithBranch({
   configFilePath,
   validationErrors,
   repoRootDir,
+  packageRootDirs,
 }: {
   currentDatabase: Database;
   currentConfig: Config;
   configFilePath: string;
   validationErrors: ValidationError[];
   repoRootDir: string;
+  packageRootDirs: string[] | undefined;
 }) {
-  const { compareDatabase, compareConfig } = getCompareInfo({
-    compareBranchName: currentConfig.compareBranch,
-    configFilePath,
-    repoRootDir,
-  });
+  const { compareDatabase, compareConfig, resolvedCompareBranchName } =
+    getCompareInfo({
+      compareBranchName: currentConfig.compareBranch,
+      configFilePath,
+      repoRootDir,
+    });
   for (const [id, rules] of currentDatabase.getIds()) {
     const compareRules = compareDatabase.getIds().get(id);
     if (!compareRules) {
@@ -113,6 +124,86 @@ export function compareWithBranch({
       });
     }
   }
+
+  // If this is a monorepo, check each package config
+  if (packageRootDirs?.length) {
+    // First get the list of package configs from the compare branch
+    const packageFilesToCheck = packageRootDirs.map((dir) =>
+      join(dir, DEFAULT_CONFIG_FILE_NAME)
+    );
+    const lsTreeGitCommand = spawnSync(
+      'git',
+      [
+        'ls-tree',
+        '--name-only',
+        resolvedCompareBranchName,
+        '--',
+        ...packageFilesToCheck,
+      ],
+      // stderr is inherited rather than piped so that, like gitShow below, a
+      // git failure prints its own explanation to the user
+      { cwd: repoRootDir, stdio: ['pipe', 'pipe', 'inherit'] }
+    );
+    if (lsTreeGitCommand.status !== 0) {
+      error('Failed to get package config override paths from git');
+      process.exit(1);
+    }
+
+    const comparePackageConfigOverridePaths = lsTreeGitCommand.stdout
+      .toString()
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => !!line)
+      .map((line) => join(repoRootDir, line));
+
+    // Now compare them to what's currently on disk. We don't need to check
+    // config overrides that don't exist in the compare branch, since those are
+    // by definition additive.
+    for (const comparePackageConfigOverridePath of comparePackageConfigOverridePaths) {
+      const compareConfigContent = gitShow({
+        compareBranchName: resolvedCompareBranchName,
+        path: comparePackageConfigOverridePath,
+        repoRootDir,
+      });
+      const comparePackageConfigOverride = parsePackageConfigOverride({
+        packageConfigOverrideFileContents: compareConfigContent,
+      });
+
+      // If there are no non-disableable rules in the compare branch, then we
+      // don't need to do any checking and can bail early
+      if (!comparePackageConfigOverride.nonDisableableRules?.length) {
+        continue;
+      }
+
+      // Check if the config file is no longer present. Sometimes this is an
+      // allowed use case, sometimes not
+      if (!existsSync(comparePackageConfigOverridePath)) {
+        validationErrors.push({
+          message: `Package config override file ${getUnprefixedRelativeDir({
+            path: comparePackageConfigOverridePath,
+            repoRootDir,
+          })} was deleted but it included non-disableable rules. Package config override files must not be deleted if they contain non-disableable rules`,
+        });
+      } else {
+        const currentPackageConfigOverride = readPackageConfigOverride(
+          comparePackageConfigOverridePath
+        );
+        const missingNonDisableableRules =
+          comparePackageConfigOverride.nonDisableableRules.filter(
+            (rule) =>
+              !currentPackageConfigOverride.nonDisableableRules?.includes(rule)
+          );
+        if (missingNonDisableableRules.length) {
+          validationErrors.push({
+            message: `Package config override file ${getUnprefixedRelativeDir({
+              path: comparePackageConfigOverridePath,
+              repoRootDir,
+            })} is missing non-disableable rules that were present in the compare branch: ${missingNonDisableableRules.join(', ')}`,
+          });
+        }
+      }
+    }
+  }
 }
 
 function getCompareInfo({
@@ -168,6 +259,7 @@ function getCompareInfo({
   return {
     compareDatabase,
     compareConfig,
+    resolvedCompareBranchName: compareBranchName,
   };
 }
 

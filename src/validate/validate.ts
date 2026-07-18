@@ -1,7 +1,7 @@
 import { isAbsolute, resolve } from 'node:path';
 
 import type { Config } from '../util/config.js';
-import { readConfig } from '../util/config.js';
+import { getPackageSpecificConfig, readConfig } from '../util/config.js';
 import { readDatabase } from '../util/db.js';
 import { getFileList, getRepoRoot } from '../util/files.js';
 import { getPackageRootDirs } from '../util/getPackageRootDirs.js';
@@ -39,6 +39,14 @@ export function validate({
     databaseMap.set(id, { foundInCode: false, rules });
   }
 
+  const packageRootDirs = config.monorepoConfig
+    ? getPackageRootDirs({
+        repoRootDir,
+        monorepoConfig: config.monorepoConfig,
+        validationErrors,
+      })
+    : undefined;
+
   time(`Comparing with the compare branch`, () => {
     compareWithBranch({
       currentDatabase: database,
@@ -46,18 +54,18 @@ export function validate({
       configFilePath,
       validationErrors,
       repoRootDir,
+      packageRootDirs,
     });
   });
 
-  if (config.monorepoConfig) {
-    const packageRootDirs = getPackageRootDirs({
-      repoRootDir,
-      monorepoConfig: config.monorepoConfig,
-      validationErrors,
-    });
+  if (packageRootDirs) {
     for (const packageRootDir of packageRootDirs) {
-      validatePackage({
+      const packageSpecificConfig = getPackageSpecificConfig({
+        packageRootDir,
         config,
+      });
+      validatePackage({
+        config: packageSpecificConfig,
         packageRootDir,
         databaseMap,
         validationErrors,

@@ -676,5 +676,54 @@ describe('validate (integration)', () => {
         expect.stringContaining('Unknown ignore package path')
       );
     });
+
+    it('enforces an override-added non-disableable rule only in the package that declares it', () => {
+      initMonorepo({
+        db: [],
+        seedPackages: () => {
+          // Package a declares no-console non-disableable via its override, so
+          // its plain disable comment must be rejected. Package b carries the
+          // same comment but no override, so it stays allowed.
+          seedPackageSource('a', 'uses.ts', [
+            'export function a(): void {',
+            '  // eslint-disable-next-line no-console',
+            "  console.log('a');",
+            '}',
+            '',
+          ]);
+          // Override files share the repo config's file name and live at the
+          // package root.
+          writeFileSync(
+            join(REPO_DIR, 'packages', 'a', CONFIG_REL),
+            JSON.stringify({ nonDisableableRules: ['no-console'] })
+          );
+          seedPackageSource('b', 'uses.ts', [
+            'export function b(): void {',
+            '  // eslint-disable-next-line no-console',
+            "  console.log('b');",
+            '}',
+            '',
+          ]);
+        },
+      });
+
+      const exitSpy = mockExit();
+      const errorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      expect(() => {
+        runValidate();
+      }).toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Rule "no-console" cannot be disabled.')
+      );
+      // Only package a's file is reported: the override applies to the package
+      // that declares it and nowhere else.
+      const printed = errorSpy.mock.calls.flat().join('\n');
+      expect(printed).toContain(join('packages', 'a'));
+      expect(printed).not.toContain(join('packages', 'b'));
+    });
   });
 });

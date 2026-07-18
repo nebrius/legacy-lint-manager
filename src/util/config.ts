@@ -1,21 +1,24 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { parse, printParseErrorCode } from 'jsonc-parser';
 import TypeBox from 'typebox';
 
+import { DEFAULT_CONFIG_FILE_NAME } from './constants.js';
 import { error } from './logging.js';
 import { validateSchema } from './validateSchema.js';
 
+const LintCommandSchema = TypeBox.Object(
+  {
+    command: TypeBox.String(),
+    args: TypeBox.Array(TypeBox.String()),
+  },
+  { additionalProperties: false }
+);
+
 const ConfigSchema = TypeBox.Object(
   {
-    lintCommand: TypeBox.Object(
-      {
-        command: TypeBox.String(),
-        args: TypeBox.Array(TypeBox.String()),
-      },
-      { additionalProperties: false }
-    ),
+    lintCommand: LintCommandSchema,
     ignoreWarnings: TypeBox.Boolean(),
     pragma: TypeBox.String(),
     databaseFile: TypeBox.String(),
@@ -40,6 +43,14 @@ const ConfigSchema = TypeBox.Object(
 );
 
 export type Config = TypeBox.Static<typeof ConfigSchema>;
+
+const PackageConfigOverrideSchema = TypeBox.Object(
+  {
+    lintCommand: TypeBox.Optional(LintCommandSchema),
+    nonDisableableRules: TypeBox.Optional(TypeBox.Array(TypeBox.String())),
+  },
+  { additionalProperties: false }
+);
 
 type Options = {
   data: Config;
@@ -66,22 +77,7 @@ export function parseConfig({
   configFilePath: string;
   configFileContents: string;
 }): Config {
-  // Parse the config file contents from JSON-C. jsonc-parser's parse() does not
-  // throw on malformed input — it returns a best-effort partial result and
-  // reports issues via the errors out-parameter, so we surface those manually.
-  const errors: Array<{ error: number; offset: number; length: number }> = [];
-  const config: unknown = parse(configFileContents, errors, {
-    allowTrailingComma: true,
-  });
-  if (errors.length > 0) {
-    const formatted = errors
-      .map(
-        (e) => `${printParseErrorCode(e.error)} at offset ${String(e.offset)}`
-      )
-      .join(', ');
-    error(`Failed to parse config file: ${formatted}`);
-    process.exit(1);
-  }
+  const config = parseJSONCFile(configFileContents);
 
   const data = validateSchema({
     schema: ConfigSchema,
@@ -105,4 +101,84 @@ export function parseConfig({
   }
 
   return data;
+}
+
+export function getPackageSpecificConfig({
+  packageRootDir,
+  config,
+}: {
+  packageRootDir: string;
+  config: Config;
+}): Config {
+  // Package config override names cannot be configured, so we always use
+  // the default name instead
+  const packageConfigOverrideFilePath = join(
+    packageRootDir,
+    DEFAULT_CONFIG_FILE_NAME
+  );
+  if (!existsSync(packageConfigOverrideFilePath)) {
+    return config;
+  }
+
+  const packageConfigOverride = readPackageConfigOverride(
+    packageConfigOverrideFilePath
+  );
+  return {
+    ...config,
+    ...packageConfigOverride,
+    nonDisableableRules: [
+      ...config.nonDisableableRules,
+      ...(packageConfigOverride.nonDisableableRules ?? []),
+    ],
+  };
+}
+
+// Note: consumers must check file existence before calling this function,
+// unlike readConfig(). In practice they always do implicitly since these file
+// paths are created through querying the file-system, unlike the main config
+// which comes from an arg.
+export function readPackageConfigOverride(
+  packageConfigOverrideFilePath: string
+) {
+  const packageConfigOverrideFileContents = readFileSync(
+    packageConfigOverrideFilePath,
+    'utf-8'
+  );
+  return parsePackageConfigOverride({
+    packageConfigOverrideFileContents,
+  });
+}
+
+export function parsePackageConfigOverride({
+  packageConfigOverrideFileContents,
+}: {
+  packageConfigOverrideFileContents: string;
+}) {
+  const config = parseJSONCFile(packageConfigOverrideFileContents);
+
+  return validateSchema({
+    schema: PackageConfigOverrideSchema,
+    data: config,
+    errorPrefix: 'Invalid package config override file:',
+  });
+}
+
+function parseJSONCFile(fileContents: string) {
+  // Parse the config file contents from JSON-C. jsonc-parser's parse() does not
+  // throw on malformed input — it returns a best-effort partial result and
+  // reports issues via the errors out-parameter, so we surface those manually.
+  const errors: Array<{ error: number; offset: number; length: number }> = [];
+  const config: unknown = parse(fileContents, errors, {
+    allowTrailingComma: true,
+  });
+  if (errors.length > 0) {
+    const formatted = errors
+      .map(
+        (e) => `${printParseErrorCode(e.error)} at offset ${String(e.offset)}`
+      )
+      .join(', ');
+    error(`Failed to parse config file: ${formatted}`);
+    process.exit(1);
+  }
+  return config;
 }

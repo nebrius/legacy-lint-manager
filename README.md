@@ -221,10 +221,17 @@ Monorepo mode changes how work is fanned out, but everything conceptual stays th
 
 **Execution model.** The two commands fan out differently:
 
-- `legacy-errors` runs the configured lint command once per workspace package, with that package's directory as the working directory. `lintCommand` must be identical across packages since it runs in every package folder. See [`lintCommand`](#lintcommand) for more information. Your command is likely already normalized if you run `turbo run lint` or `nx run-many -t lint`.
+- `legacy-errors` runs the configured lint command once per workspace package, with that package's directory as the working directory. The repo-level `lintCommand` runs in every package folder, so it must work in every package. Your command is likely already normalized if you run `turbo run lint` or `nx run-many -t lint`.
+  - A package that genuinely needs a different invocation can override the command for itself. See [package config overrides](#package-config-override-files) for more information.
 - `validate` does not run the lint command at all. It walks each package's source files and parses comments using [oxc-parser](https://www.npmjs.com/package/oxc-parser) (a Rust-based high-performance parser), then validates everything against the one shared database in a single pass.
 
-In both modes there is exactly one config and one database, at the repo root.
+In both modes there is exactly one database, at the repo root. There is also exactly one repo-level config, but packages can override some of its settings for themselves.
+
+**Package config overrides.** Sometimes one package legitimately differs from the rest of the repo because it needs its own lint invocation or it needs extra non-disableable rules. For these cases, add a `legacy-lint.config.jsonc` file at that package's root.
+
+Only two settings can be overridden: `lintCommand`, which _replaces_ the repo-level command for that package, and `nonDisableableRules`, which _adds to_ the repo-level list for that package.
+
+`nonDisableableRules` entries in a package config override are enforced like they are in the repo root config. Removing rules from an override, or deleting an override file that contains rules, fails validation just like removing repo-level rules does. See [Package config override files](#package-config-override-files) for the full reference.
 
 **Ignoring packages.** While I strongly discourage you from opting packages out of validation, if you have a valid reason to do so, you can add workspace-relative paths to `monorepoConfig.ignorePackagePaths`. Ignored packages are skipped by both commands.
 
@@ -235,13 +242,15 @@ Note: a path that doesn't match any workspace package is a hard error during val
 - Files not in a workspace package are not analyzed.
 - Workspace discovery follows your tool's own markers: npm, yarn, and bun are detected via their lockfiles; pnpm via `pnpm-workspace.yaml`; Lerna via `lerna.json`. A `workspaces` field in `package.json` with none of those present falls back to single-package behavior. See [@manypkg/get-packages](https://www.npmjs.com/package/@manypkg/get-packages) for more information.
 - Converting a repo between single-repo and monorepo mode fails validation by design. Such a conversion needs a sanctioned PR, just like any other enforcement-affecting config change.
+- Package config override checks only cover packages that exist on your branch. If a PR deletes or renames a package folder, that package's override (and any non-disableable rules it declared) leaves the ratchet along with it. This is by design, since the rules only governed code that no longer exists.
+  - _Important:_ this means a rename that also drops override rules isn't flagged.
 - If `legacy-errors` fails partway through the package list, the remaining packages are not processed (note: `validate` always checks every package before reporting).
 
 ## When validate fails your PR
 
 Each heading below is the error message you saw, roughly ordered by how often people hit them. When several related messages share one entry, the extras are listed in bold inside it.
 
-Note: one class of failures missing from this list are ones that come from git itself, not this tool. A raw `fatal:` error means there is a problem reading the database and config files from the branch being compared with. See [Wiring it up](#wiring-it-up) for more information.
+Note: one class of failures missing from this list are ones that come from git itself, not this tool. A raw `fatal:` error means there is a problem reading the database, config, or package config override files from the branch being compared with. See [Wiring it up](#wiring-it-up) for more information.
 
 ### "Rule X cannot be disabled."
 
@@ -285,11 +294,15 @@ Note: this is also listed under [Known limitations](#known-limitations).
 
 ### "Legacy ID X does not exist in the database on BRANCH. New legacy entries cannot be added."
 
-The database in your PR contains entries that don't exist on the compare branch, meaning the database grew. If you weren't intentionally re-legacying the whole codebase, revert your database changes. The same applies to **"New rules cannot be added to existing legacy entries."**, which is the database-file edit variant of the same drift.
+The database in your PR contains entries that don't exist on the compare branch, meaning the database grew. The fix is to revert your database changes. The same applies to **"New rules cannot be added to existing legacy entries."**, which is the database-file edit variant of the same drift.
 
 ### Config drift errors
 
 A family of errors of the form "…does not match… the compare config", covering the pragma, `ignoreWarnings`, the compare branch itself, removal of non-disableable rules (**"Non-disableable rules cannot be removed from the compare branch."**), newly ignored packages (**"New ignored packages cannot be added to the config."**, and **"Unknown ignore package path X"** for entries matching no package), and single↔monorepo conversion. All of them mean that enforcement settings changed relative to the compare branch, which is not allowed.
+
+The same ratchet covers [package config override files](#package-config-override-files): **"Package config override file X is missing non-disableable rules that were present in the compare branch"** means rules were removed from an override, and **"Package config override file X was deleted but it included non-disableable rules."** means an override that carried rules was deleted outright. Restore the rules (or the file).
+
+Note: this error only occurs when the package is still present. Package deletes and renames are not erroneously flagged.
 
 ### "Unregistered legacy error. New errors cannot be legacied."
 
@@ -340,7 +353,9 @@ By default, the configuration file is named `legacy-lint.config.jsonc` and lives
 
 The command that produces lint results, as a structured `{ "command": string, "args": string[] }`. These arguments are fed directly to `spawn` with no shell, so shell syntax won't work (quoting, environment variable prefixes, pipes, `&&`). An argument containing spaces must be hand-edited into the config file, since the init prompt doesn't distinguish spaces inside an argument from spaces between arguments. The command must print lint results as JSON to stdout, so you must add the `--format=json` flag to your command. This works for both ESLint and Oxlint.
 
-It runs with the repo root as the working directory in single repo mode, or once per workspace package with that package's folder as the working directory in monorepo mode. That second part is easy to miss: the single configured command runs in every package folder, so it must be identical for every package, with no package-specific paths or flags. You likely have done this already to ensure these commands can be run in bulk using Turbo, Nx, etc. If your packages genuinely need different lint invocations, [file an issue](https://github.com/nebrius/legacy-lint-manager/issues) describing your use case.
+It runs with the repo root as the working directory in single repo mode, or once per workspace package with that package's folder as the working directory in monorepo mode. That second part is easy to miss: the configured command runs in every package folder, so it must work in every package, with no package-specific paths or flags. You likely have done this already to ensure these commands can be run in bulk using Turbo, Nx, etc.
+
+If a package genuinely needs a different lint invocation, override `lintCommand` for that package in a [package config override file](#package-config-override-files).
 
 #### ignoreWarnings
 
@@ -356,7 +371,7 @@ Path to the legacy database, which is resolved relative to the config file and s
 
 #### nonDisableableRules
 
-Rules that may never be suppressed, but violations that were legacied by `legacy-errors` remain sanctioned. Think of this as a legacy-aware version of eslint-plugin-eslint-comments' rule bans. The list should be kept relatively short, as per the [philosophy](#the-suppression-philosophy). Removing entries is blocked by the config-drift ratchet, but adding new rules is allowed.
+Rules that may never be suppressed, but violations that were legacied by `legacy-errors` remain sanctioned. Think of this as a legacy-aware version of eslint-plugin-eslint-comments' rule bans. The list should be kept relatively short, as per the [philosophy](#the-suppression-philosophy). Removing entries is blocked by the config-drift ratchet, but adding new rules is allowed. In monorepo mode, a package can add additional rules for itself via a [package config override file](#package-config-override-files).
 
 Note for Oxlint: rule names are matched the way Oxlint itself matches them, which ignores plugin prefixes. See [Known limitations](#known-limitations) for more information, because this can be a pretty big footgun if you're not careful.
 
@@ -367,6 +382,31 @@ The branch whose committed database and config are the ratchet baseline, usually
 #### monorepoConfig
 
 Presence of this object enables monorepo mode ([Monorepos](#monorepos)). Its one field, `ignorePackagePaths`, lists workspace packages to skip, resolved relative to the config file. Entries are validated to ensure each path matches a workspace package, and additions are blocked by the config-drift ratchet.
+
+### Package config override files
+
+When monorepo mode is enabled, a package can override parts of the repo config by placing its own config file at the package root. The file is always named `legacy-lint.config.jsonc`, even if you point the CLI at a custom repo config via `--config`. It's written by hand (`init` never creates one), it's JSON-C like the repo config, and both fields are optional:
+
+```jsonc
+{
+  // Replaces the repo-level lintCommand for this package
+  "lintCommand": {
+    "command": "npx",
+    "args": ["eslint", ".", "--config=eslint.my-package.mjs", "--format=json"],
+  },
+  // Added to the repo-level list for this package
+  "nonDisableableRules": ["no-restricted-imports"],
+}
+```
+
+- `lintCommand` _replaces_ the repo-level command when `legacy-errors` runs in this package, with the same constraints as the repo-level version (JSON to stdout, no shell syntax).
+- `nonDisableableRules` _extends_ the repo-level list for this package's files: the effective list is the repo rules plus the package rules. There are no mechanisms for removing non-disableable rules from the repo config, by design.
+
+No other settings can be overridden, and unknown fields are rejected.
+
+Override rules are part of the ratchet. Adding an override file, or adding rules to one, is always allowed. Removing rules from an override, or deleting an override file that lists any rules, fails validation the same way removing repo-level rules does. `lintCommand` is not an enforcement setting though, so a `lintCommand` override can be changed or removed freely, including deleting an override file that only contains a `lintCommand`.
+
+Note that the ratchet compares each config file on its own. Moving a rule from the repo config into package overrides is flagged as a removal from the repo config, even if every single package adds it. This is by design, since such a move changes what rules are applied to new packages in the future.
 
 ### CLI
 
@@ -425,7 +465,7 @@ Flags:
 - TypeScript flat config (`eslint.config.ts`) will crash `init` on Node versions without native TypeScript type-stripping.
 - `init` derives its default compare branch from `origin/HEAD`, which always exists in cloned repos, but not in repos without an origin remote (a fresh `git init`) or after a bare `git remote add`. Without it, init fails before the compare-branch prompt. The prompt also validates against local branches only, so a branch that exists only on the remote is rejected.
 
-**Monorepo mode**: see [Monorepos](#monorepos) for the boundary list (root-level files, workspace detection markers, mode-conversion blocking, and mid-run failure behavior).
+**Monorepo mode**: see [Monorepos](#monorepos) for the boundary list (root-level files, workspace detection markers, mode-conversion blocking, override scoping on package deletes/renames, and mid-run failure behavior).
 
 ## FAQ
 

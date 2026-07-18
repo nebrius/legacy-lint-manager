@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Config } from '../../util/config.js';
 import type { Database } from '../../util/db.js';
@@ -50,13 +50,17 @@ function git(args: string[]) {
 // baseline, then move to a `feature` branch (the working branch compareWithBranch
 // reads from). The config's databaseFile controls where the database is written,
 // so a rename can be exercised by committing a config that points at a different
-// databaseFile than the current config uses.
+// databaseFile than the current config uses. `files` seeds additional
+// repo-relative files (package config overrides) into the baseline commit;
+// they remain in the working tree on `feature` until a test mutates them.
 function initRepo({
   config,
   db,
+  files = {},
 }: {
   config: Config;
   db: [string, string[]][];
+  files?: Record<string, string>;
 }) {
   mkdirSync(REPO_DIR, { recursive: true });
   git(['init', '-b', 'main']);
@@ -64,6 +68,10 @@ function initRepo({
   git(['config', 'user.name', 'Test']);
   writeFileSync(join(REPO_DIR, CONFIG_FILE), JSON.stringify(config));
   writeFileSync(join(REPO_DIR, config.databaseFile), JSON.stringify(db));
+  for (const [relPath, contents] of Object.entries(files)) {
+    mkdirSync(join(REPO_DIR, dirname(relPath)), { recursive: true });
+    writeFileSync(join(REPO_DIR, relPath), contents);
+  }
   git(['add', '-A']);
   git(['commit', '-m', 'baseline']);
   git(['checkout', '-b', 'feature']);
@@ -89,9 +97,11 @@ function detachMainToOrigin() {
 function runCompare({
   currentConfig,
   currentDatabase,
+  packageRootDirs,
 }: {
   currentConfig: Config;
   currentDatabase: Database;
+  packageRootDirs?: string[];
 }): ValidationError[] {
   const validationErrors: ValidationError[] = [];
   compareWithBranch({
@@ -100,6 +110,7 @@ function runCompare({
     configFilePath: join(REPO_DIR, CONFIG_FILE),
     validationErrors,
     repoRootDir: REPO_DIR,
+    packageRootDirs,
   });
   return validationErrors;
 }
@@ -116,8 +127,15 @@ function withMonorepo(config: Config, ignorePackagePaths: string[]): Config {
   return { ...config, monorepoConfig: { ignorePackagePaths } };
 }
 
+function mockExit() {
+  return vi.spyOn(process, 'exit').mockImplementation(() => {
+    throw new Error('process.exit called');
+  });
+}
+
 describe('compareWithBranch (integration)', () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     rmSync(REPO_DIR, { recursive: true, force: true });
     rmSync(ORIGIN_DIR, { recursive: true, force: true });
   });
@@ -373,6 +391,200 @@ describe('compareWithBranch (integration)', () => {
       // Removing an ignored package is allowed (it only re-enables enforcement),
       // so an identical list — and a shorter one — must not be flagged.
       expect(errors).toEqual([]);
+    });
+  });
+
+  // Package config overrides can add non-disableable rules, and those rules are
+  // load-bearing the same way the repo-level ones are: they can only be removed
+  // from an override (or the whole override deleted) if the compare branch's
+  // copy carried no rules. The overrides that existed on the compare branch are
+  // discovered with a single batched ls-tree over every current package root.
+  describe('package config override checks', () => {
+    const MONOREPO_CONFIG = withMonorepo(BASE_CONFIG, []);
+
+    // Override files share the repo config's file name and live at the package
+    // root; compareWithBranch receives package roots as absolute paths, the way
+    // getPackageRootDirs produces them.
+    function pkgDir(pkg: string) {
+      return join(REPO_DIR, 'packages', pkg);
+    }
+    function overrideRel(pkg: string) {
+      return join('packages', pkg, CONFIG_FILE);
+    }
+
+    function runOverrideCompare(packageRootDirs: string[]) {
+      return runCompare({
+        currentConfig: MONOREPO_CONFIG,
+        currentDatabase: makeDatabase([]),
+        packageRootDirs,
+      });
+    }
+
+    it('records no errors when a package override with rules is unchanged', () => {
+      initRepo({
+        config: MONOREPO_CONFIG,
+        db: [],
+        files: {
+          [overrideRel('a')]: JSON.stringify({
+            nonDisableableRules: ['no-eval'],
+          }),
+        },
+      });
+
+      expect(runOverrideCompare([pkgDir('a')])).toEqual([]);
+    });
+
+    it('flags only the non-disableable rules removed from a package override', () => {
+      initRepo({
+        config: MONOREPO_CONFIG,
+        db: [],
+        files: {
+          [overrideRel('a')]: JSON.stringify({
+            nonDisableableRules: ['no-eval', 'no-alert'],
+          }),
+        },
+      });
+      // no-eval is dropped from the working copy (flagged); no-alert survives.
+      writeFileSync(
+        join(REPO_DIR, overrideRel('a')),
+        JSON.stringify({ nonDisableableRules: ['no-alert'] })
+      );
+
+      expect(runOverrideCompare([pkgDir('a')])).toEqual([
+        {
+          message: `Package config override file ${overrideRel('a')} is missing non-disableable rules that were present in the compare branch: no-eval`,
+        },
+      ]);
+    });
+
+    it('flags every compare-branch rule when the current override drops the field entirely', () => {
+      initRepo({
+        config: MONOREPO_CONFIG,
+        db: [],
+        files: {
+          [overrideRel('a')]: JSON.stringify({
+            nonDisableableRules: ['no-eval', 'no-alert'],
+          }),
+        },
+      });
+      writeFileSync(join(REPO_DIR, overrideRel('a')), '{}');
+
+      expect(runOverrideCompare([pkgDir('a')])).toEqual([
+        {
+          message: `Package config override file ${overrideRel('a')} is missing non-disableable rules that were present in the compare branch: no-eval, no-alert`,
+        },
+      ]);
+    });
+
+    it('records an error when an override containing non-disableable rules is deleted', () => {
+      initRepo({
+        config: MONOREPO_CONFIG,
+        db: [],
+        files: {
+          [overrideRel('a')]: JSON.stringify({
+            nonDisableableRules: ['no-eval'],
+          }),
+        },
+      });
+      rmSync(join(REPO_DIR, overrideRel('a')));
+
+      expect(runOverrideCompare([pkgDir('a')])).toEqual([
+        {
+          message: `Package config override file ${overrideRel('a')} was deleted but it included non-disableable rules. Package config override files must not be deleted if they contain non-disableable rules`,
+        },
+      ]);
+    });
+
+    it('allows deleting an override that carries no non-disableable rules', () => {
+      // A lintCommand-only override constrains nothing, so removing it cannot
+      // loosen enforcement.
+      initRepo({
+        config: MONOREPO_CONFIG,
+        db: [],
+        files: {
+          [overrideRel('a')]: JSON.stringify({
+            lintCommand: { command: 'yarn', args: ['lint:pkg'] },
+          }),
+        },
+      });
+      rmSync(join(REPO_DIR, overrideRel('a')));
+
+      expect(runOverrideCompare([pkgDir('a')])).toEqual([]);
+    });
+
+    it('allows any change when the compare-branch rules list is empty', () => {
+      initRepo({
+        config: MONOREPO_CONFIG,
+        db: [],
+        files: {
+          [overrideRel('a')]: JSON.stringify({ nonDisableableRules: [] }),
+        },
+      });
+
+      expect(runOverrideCompare([pkgDir('a')])).toEqual([]);
+    });
+
+    it('ignores an override that only exists on the current branch', () => {
+      initRepo({ config: MONOREPO_CONFIG, db: [] });
+      // A brand-new override is purely additive, so it has nothing to regress.
+      mkdirSync(pkgDir('a'), { recursive: true });
+      writeFileSync(
+        join(REPO_DIR, overrideRel('a')),
+        JSON.stringify({ nonDisableableRules: ['no-eval'] })
+      );
+
+      expect(runOverrideCompare([pkgDir('a')])).toEqual([]);
+    });
+
+    it('checks all packages in one query and flags only the violating one', () => {
+      initRepo({
+        config: MONOREPO_CONFIG,
+        db: [],
+        files: {
+          [overrideRel('a')]: JSON.stringify({
+            nonDisableableRules: ['no-eval'],
+          }),
+          [overrideRel('b')]: JSON.stringify({
+            nonDisableableRules: ['no-alert'],
+          }),
+        },
+      });
+      rmSync(join(REPO_DIR, overrideRel('b')));
+
+      expect(runOverrideCompare([pkgDir('a'), pkgDir('b')])).toEqual([
+        {
+          message: `Package config override file ${overrideRel('b')} was deleted but it included non-disableable rules. Package config override files must not be deleted if they contain non-disableable rules`,
+        },
+      ]);
+    });
+
+    it('skips the override checks when there are no package roots', () => {
+      initRepo({ config: MONOREPO_CONFIG, db: [] });
+
+      expect(runOverrideCompare([])).toEqual([]);
+    });
+
+    it('exits when git cannot list the package override files', () => {
+      initRepo({ config: MONOREPO_CONFIG, db: [] });
+      const exitSpy = mockExit();
+      const errorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      // A package root outside the repo makes the ls-tree pathspec fatal, which
+      // is a real git failure mode this can hit after getCompareInfo has
+      // already used git successfully. git's own explanation goes straight to
+      // the inherited stderr (visible in the test output), so the tool's
+      // message only names the failed step.
+      expect(() =>
+        runOverrideCompare([join(tmpdir(), 'legacy-lint-outside-pkg')])
+      ).toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Failed to get package config override paths from git'
+        )
+      );
     });
   });
 

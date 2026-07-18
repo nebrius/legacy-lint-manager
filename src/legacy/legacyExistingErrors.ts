@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 
 import type { Config } from '../util/config.js';
-import { readConfig } from '../util/config.js';
+import { getPackageSpecificConfig, readConfig } from '../util/config.js';
 import { createDatabase } from '../util/db.js';
 import { getFileList, getRepoRoot } from '../util/files.js';
 import { getPackageRootDirs } from '../util/getPackageRootDirs.js';
@@ -42,12 +42,16 @@ export async function legacyExistingErrors(options: CommonOptions) {
       printValidationErrors({ validationErrors, repoRootDir });
       process.exit(1);
     }
-    for (const packagePath of packagePaths) {
-      info(`Legacying errors in ${packagePath}...`);
-      const packageLegacyComments = await legacyPackage({
+    for (const packageRootDir of packagePaths) {
+      info(`Legacying errors in ${packageRootDir}...`);
+      const packageSpecificConfig = getPackageSpecificConfig({
+        packageRootDir,
         config,
+      });
+      const packageLegacyComments = await legacyPackage({
+        config: packageSpecificConfig,
         repoRootDir,
-        packageRootDir: packagePath,
+        packageRootDir,
       });
       legacyComments.push(...packageLegacyComments);
     }

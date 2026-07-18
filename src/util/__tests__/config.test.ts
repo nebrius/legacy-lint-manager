@@ -1,14 +1,24 @@
-import { rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Config } from '../config.js';
-import { createConfig, readConfig } from '../config.js';
+import {
+  createConfig,
+  getPackageSpecificConfig,
+  parsePackageConfigOverride,
+  readConfig,
+} from '../config.js';
+import { DEFAULT_CONFIG_FILE_NAME } from '../constants.js';
 
 const CONFIG_FILE = join(tmpdir(), 'legacy-lint-config-test.jsonc');
 const MISSING_CONFIG = join(tmpdir(), 'legacy-lint-config-missing.jsonc');
+// A throwaway package root; override files always live at the package root
+// under the default config file name.
+const PKG_DIR = join(tmpdir(), 'legacy-lint-config-test-pkg');
+const PKG_OVERRIDE_FILE = join(PKG_DIR, DEFAULT_CONFIG_FILE_NAME);
 
 const VALID_CONFIG: Config = {
   lintCommand: { command: 'npx', args: ['eslint', '--format=json'] },
@@ -38,6 +48,7 @@ describe('config', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     rmSync(CONFIG_FILE, { force: true });
+    rmSync(PKG_DIR, { recursive: true, force: true });
   });
 
   describe('createConfig', () => {
@@ -219,6 +230,116 @@ describe('config', () => {
           })
         );
         expect(() => readConfig(CONFIG_FILE)).toThrow('Invalid config file');
+      });
+    });
+  });
+
+  describe('package config overrides', () => {
+    function writeOverride(contents: unknown) {
+      mkdirSync(PKG_DIR, { recursive: true });
+      writeFileSync(PKG_OVERRIDE_FILE, JSON.stringify(contents));
+    }
+
+    describe('getPackageSpecificConfig', () => {
+      it('returns the base config unchanged when the package has no override file', () => {
+        expect(
+          getPackageSpecificConfig({
+            packageRootDir: PKG_DIR,
+            config: VALID_CONFIG,
+          })
+        ).toEqual(VALID_CONFIG);
+      });
+
+      it('replaces lintCommand and keeps the base non-disableable rules when the override only sets lintCommand', () => {
+        writeOverride({ lintCommand: { command: 'yarn', args: ['lint:pkg'] } });
+        expect(
+          getPackageSpecificConfig({
+            packageRootDir: PKG_DIR,
+            config: VALID_CONFIG,
+          })
+        ).toEqual({
+          ...VALID_CONFIG,
+          lintCommand: { command: 'yarn', args: ['lint:pkg'] },
+        });
+      });
+
+      it('appends override rules to the base non-disableable rules and keeps the base lintCommand', () => {
+        writeOverride({ nonDisableableRules: ['no-eval'] });
+        expect(
+          getPackageSpecificConfig({
+            packageRootDir: PKG_DIR,
+            config: VALID_CONFIG,
+          })
+        ).toEqual({
+          ...VALID_CONFIG,
+          // The package's rules extend the repo's rules, they do not replace
+          // them.
+          nonDisableableRules: ['no-console', 'no-eval'],
+        });
+      });
+
+      it('applies both fields when the override sets both', () => {
+        writeOverride({
+          lintCommand: { command: 'yarn', args: ['lint:pkg'] },
+          nonDisableableRules: ['no-eval'],
+        });
+        expect(
+          getPackageSpecificConfig({
+            packageRootDir: PKG_DIR,
+            config: VALID_CONFIG,
+          })
+        ).toEqual({
+          ...VALID_CONFIG,
+          lintCommand: { command: 'yarn', args: ['lint:pkg'] },
+          nonDisableableRules: ['no-console', 'no-eval'],
+        });
+      });
+    });
+
+    describe('parsePackageConfigOverride', () => {
+      it('accepts an empty object, since both fields are optional', () => {
+        expect(
+          parsePackageConfigOverride({
+            packageConfigOverrideFileContents: '{}',
+          })
+        ).toEqual({});
+      });
+
+      it('rejects an unknown field', () => {
+        // Repo-level-only options such as pragma are not overridable, so the
+        // schema is additionalProperties: false.
+        expect(() =>
+          parsePackageConfigOverride({
+            packageConfigOverrideFileContents: JSON.stringify({ pragma: 'P' }),
+          })
+        ).toThrow('Invalid package config override file');
+      });
+
+      it('rejects a wrongly-shaped field', () => {
+        expect(() =>
+          parsePackageConfigOverride({
+            packageConfigOverrideFileContents: JSON.stringify({
+              nonDisableableRules: 'no-console',
+            }),
+          })
+        ).toThrow('Invalid package config override file');
+      });
+
+      it('exits when the override file is malformed JSON-C', () => {
+        const exitSpy = mockExit();
+        const errorSpy = vi
+          .spyOn(console, 'error')
+          .mockImplementation(() => undefined);
+
+        expect(() =>
+          parsePackageConfigOverride({
+            packageConfigOverrideFileContents: '{ "nonDisableableRules": }',
+          })
+        ).toThrow('process.exit called');
+        expect(exitSpy).toHaveBeenCalledWith(1);
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to parse config file')
+        );
       });
     });
   });
