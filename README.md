@@ -29,7 +29,7 @@ npx legacy-lint-manager init
 `init` walks you through a short series of prompts:
 
 - **Linter detection** is automatic. You're only asked which linter you use if the answer is ambiguous (both an ESLint and an Oxlint config present, or neither).
-- **Lint command**: the command that produces your lint results as JSON, e.g. `npx eslint . --format=json`. See [`lintCommand`](#lintcommand) for the details and constraints.
+- **Lint command**: the command that produces your lint results as JSON, e.g. `npx eslint . --format=json` (though running your existing lint script through your package manager is usually better). See [`lintCommand`](#lintcommand) for the details and constraints.
 - **Ignore warnings**: answering Yes legacies only errors, while answering No legacies both errors and warnings.
 - **Monorepo mode**: whether or not to fan out across workspace packages. This prompt appears even in single repos, so answer No for this walkthrough. See [Monorepos](#monorepos).
 - **Pragma**: the text prefix for every legacy comment. The default is `This lint error is legacied. DO NOT COPY`. The pragma isn't just informational though: it's used as part of validation. See [How it works](#how-it-works) for more information.
@@ -365,6 +365,40 @@ The command that produces lint results, as a structured `{ "command": string, "a
 It runs with the repo root as the working directory in single repo mode, or once per workspace package with that package's folder as the working directory in monorepo mode. That second part is easy to miss: the configured command runs in every package folder, so it must work in every package, with no package-specific paths or flags. You likely have done this already to ensure these commands can be run in bulk using Turbo, Nx, etc.
 
 If a package genuinely needs a different lint invocation, override `lintCommand` for that package in a [package config override file](#package-config-override-files).
+
+**Use a package manager script if you can.** Instead of invoking the linter directly like the `npx` example above, I recommend running the lint script you already have:
+
+```jsonc
+// npm
+"lintCommand": {
+  "command": "npm",
+  "args": ["run", "--silent", "lint", "--", "--format=json"],
+},
+
+// pnpm
+"lintCommand": {
+  "command": "pnpm",
+  "args": ["--silent", "lint", "--format=json"],
+},
+
+// yarn 1
+"lintCommand": {
+  "command": "yarn",
+  "args": ["--silent", "lint", "--format=json"],
+},
+```
+
+A script is usually better than a direct invocation for a few reasons:
+
+- The script is the same one your main CI lint job runs, so the flags and config that get legacied are exactly the ones CI enforces, and the two can never drift apart.
+- Lint scripts often carry important arguments, such as a file pattern or a subdirectory to lint, and reusing the script means you don't have to duplicate them into `lintCommand` and keep them in sync by hand.
+- In a monorepo, a package without the script fails loudly instead of silently linting with a config that isn't enforced yet. This happens when a package is partway through adopting lint: an ESLint config exists but CI doesn't run it yet (I like to gate these behind a `lint:future` script). A direct `npx eslint` invocation would happily lint against the unenforced config and legacy errors that CI never checks.
+
+Two things to get right when doing this:
+
+**The silent flag is required.** npm, pnpm, and yarn all echo the script line to stdout before running it (e.g. the `> my-package@1.0.0 lint` banner), which corrupts the JSON that `legacy-errors` parses. The silent flag prevents the banner from being shown. I recommend putting the flag in `lintCommand`, not in the script itself, since the verbosity is usually desirable when the script is run normally.
+
+Note: npm accepts `--silent` anywhere before the `--`, but pnpm and yarn treat everything after the script name as passthrough arguments for the script, so `--silent` must come before the script name as shown in the examples above.
 
 #### ignoreWarnings
 
