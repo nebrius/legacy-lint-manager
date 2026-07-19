@@ -2,7 +2,7 @@ import { isAbsolute, resolve } from 'node:path';
 
 import type { Config } from '../util/config.js';
 import { getPackageSpecificConfig, readConfig } from '../util/config.js';
-import { DEFAULT_UPDATE_COMMAND } from '../util/constants.js';
+import { AI_SKILL_HINT, UPDATE_COMMAND } from '../util/constants.js';
 import { readDatabase } from '../util/db.js';
 import { getFileList, getRepoRoot } from '../util/files.js';
 import { getPackageRootDirs } from '../util/getPackageRootDirs.js';
@@ -102,7 +102,7 @@ export function validate({
       validationErrors,
       repoRootDir,
     });
-    process.exit(1);
+    exitWithValidationFailure();
   }
 
   // Check if there were any unused IDs. Unused IDs are legacied errors listed
@@ -139,10 +139,18 @@ export function validate({
     }
   } else if (wereErrorsFixed) {
     error(
-      `Legacied lint errors were fixed, good job! Run \`${DEFAULT_UPDATE_COMMAND}\` to update the database.`
+      `Legacied lint errors were fixed, good job! Run \`${UPDATE_COMMAND}\` to update the database.`
     );
-    process.exit(1);
+    exitWithValidationFailure();
   }
+}
+
+// The AI hint is only printed for validate failures, not legacy-errors/init
+// failures, because the skill it points to only covers validation. See the
+// AI agent skill section in the README for more information.
+function exitWithValidationFailure(): never {
+  error(AI_SKILL_HINT);
+  process.exit(1);
 }
 
 function validatePackage({

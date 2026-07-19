@@ -435,7 +435,7 @@ describe('validateDisableComments', () => {
     });
 
     it('exempts a non-disableable rule that is legacied (old violations are allowed)', () => {
-      // The whole point of the legacy system: a grandfathered violation of a
+      // The whole point of the legacy system: a legacied violation of a
       // non-disableable rule is permitted, only new ones are rejected.
       const validationErrors: ValidationError[] = [];
       const databaseMap = callValidate({

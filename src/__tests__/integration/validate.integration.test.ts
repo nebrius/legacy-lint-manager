@@ -11,7 +11,7 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { DEFAULT_PRAGMA } from '../../util/constants.js';
+import { AI_SKILL_HINT, DEFAULT_PRAGMA } from '../../util/constants.js';
 import { validate } from '../../validate/validate.js';
 import { makeId } from '../helpers/ids.js';
 
@@ -216,7 +216,10 @@ describe('validate (integration)', () => {
         runValidate();
       }).toThrow('process.exit called');
       expect(exitSpy).toHaveBeenCalledWith(1);
-      expect(errorSpy).toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Legacied lint errors were fixed')
+      );
+      expect(errorSpy).toHaveBeenCalledWith(AI_SKILL_HINT);
       expect(readData()).toEqual([
         [CONSOLE_ID, ['no-console']],
         [DEBUGGER_ID, ['no-debugger']],
@@ -268,6 +271,7 @@ describe('validate (integration)', () => {
           'Rule no-debugger in legacy comment is not in the actual lint disable list'
         )
       );
+      expect(errorSpy).toHaveBeenCalledWith(AI_SKILL_HINT);
     });
 
     it('prunes the comment and shrinks the database entry in one --update run', () => {

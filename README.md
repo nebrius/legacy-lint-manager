@@ -77,6 +77,14 @@ Now, commit the modified source files, the config, and the database. They work i
 
 The final step is wiring `validate` into CI, which makes legacies durable. Without it, nothing stops new suppressions from creeping in. **Do this in a separate PR after the one above merges.** See the [bootstrap note](#wiring-it-up) for more details on why splitting into two separate PRs is necessary.
 
+Optionally, if AI coding agents work in your codebase, install the companion agent skill so they know how to resolve validation failures correctly:
+
+```sh
+npx skills add nebrius/legacy-lint-manager
+```
+
+The skill works with Claude Code, Cursor, Copilot, and any other agent that supports the [Agent Skills](https://agentskills.io) standard. See [When validate fails your PR](#when-validate-fails-your-pr) for more information on the skill.
+
 ## How it works
 
 To summarize what Legacy Lint Manager does: `legacy-errors` grants amnesty to old lint errors exactly once, records every grant in a ledger, and `validate` makes sure the ledger and the code never drift apart.
@@ -254,6 +262,8 @@ Note: a path that doesn't match any workspace package is a hard error during val
 
 Each heading below is the error message you saw, roughly ordered by how often people hit them. When several related messages share one entry, the extras are listed in bold inside it.
 
+If an AI agent is the one staring at these errors, this repo also ships an agent skill covering everything in this section, rewritten as instructions for agents. Install it into your repo with `npx skills add nebrius/legacy-lint-manager`. The skill only covers validation on purpose: initialization and legacying are rare, human-driven operations, and this README covers them well enough for agents.
+
 Note: one class of failures missing from this list are ones that come from git itself, not this tool. A raw `fatal:` error means there is a problem reading the database, config, or package config override files from the branch being compared with. See [Wiring it up](#wiring-it-up) for more information.
 
 ### "Rule X cannot be disabled."
@@ -326,6 +336,18 @@ npx legacy-lint-manager validate --update
 ```
 
 and commit the updated files. Shrinking the database means you're making progress on cleaning up the codebase, congrats!
+
+### Resolving merge conflicts on the database file
+
+It's uncommon to run into merge issues with Legacy Lint Manager because all legacy comments and the database itself each live on a single line. This means it's impossible for a git merge to corrupt a comment or the database by mixing two states, since this only happens with multiline text.
+
+That said, it's still possible to run into classic git conflicts when two branches shrank the database. Git will _always_ flag this as a merge conflict. When you hit that conflict, the resolution is mechanical, but the direction matters:
+
+1. Take the compare branch's side of the conflict. Watch out for which side that actually is: during a merge the compare branch is usually `--theirs`, but during a rebase it's usually `--ours`.
+2. Run `npx legacy-lint-manager validate --update` and commit the result. This prunes any entries whose comments no longer exist in the merged code.
+3. If that run fails with "Unregistered legacy error", the violation behind that comment was already fixed on the compare branch, so its grant is gone. Remove the comment, fix the violation, and run `--update` again.
+
+**Important**: do _not_ take your own branch's side, and don't hand-merge the JSON. Your side can contain entries that the compare branch removed, and validation rejects those as new entries before `--update` gets a chance to clean anything up, leaving you stuck until you re-resolve with the compare branch's version.
 
 ## Reference
 
