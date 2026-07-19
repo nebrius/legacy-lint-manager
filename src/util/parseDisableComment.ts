@@ -1,4 +1,5 @@
 import { ID_LENGTH } from './constants.js';
+import { InternalError } from './error.js';
 import { commaSeparatedStringToArray, escapeRegex } from './string.js';
 import type {
   Comment,
@@ -11,10 +12,12 @@ export function parseDisableComment({
   comment,
   pragma,
   validationErrors,
+  errorOnUnusedRules,
 }: {
   comment: Comment;
   pragma: string;
   validationErrors: ValidationError[];
+  errorOnUnusedRules: boolean;
 }): LegacyComment | NonLegacyComment | undefined {
   // If this is a regular ESLint/Oxlint disable comment and not a legacy pragma,
   // then ignore it.
@@ -22,9 +25,12 @@ export function parseDisableComment({
     return {
       type: 'nonlegacy',
       file: comment.file,
+      startIndex: comment.startIndex,
+      endIndex: comment.endIndex,
       startLine: comment.startLine,
       endLine: comment.endLine,
       rules: comment.rules,
+      descriptionStartIndex: comment.descriptionStartIndex,
     };
   }
 
@@ -58,18 +64,22 @@ export function parseDisableComment({
     return undefined;
   }
 
+  const unusedLegaciedRules = new Set<string>();
   const rulesInComment = commaSeparatedStringToArray(match[1]).filter(
     (rule) => {
       // Ensure that the rule in the comment also appears in the actual lint
       // disable, e.g. that rules on the RHS are also in the LHS
       if (!comment.rules.includes(rule)) {
-        validationErrors.push({
-          message: `Rule ${rule} in legacy comment is not in the actual lint disable list and should be removed.`,
-          location: {
-            file: comment.file,
-            line: comment.startLine,
-          },
-        });
+        unusedLegaciedRules.add(rule);
+        if (errorOnUnusedRules) {
+          validationErrors.push({
+            message: `Rule ${rule} in legacy comment is not in the actual lint disable list and should be removed.`,
+            location: {
+              file: comment.file,
+              line: comment.startLine,
+            },
+          });
+        }
         return false;
       }
       return true;
@@ -78,7 +88,7 @@ export function parseDisableComment({
   const id = match[2];
 
   // Make sure there is at least one valid rule in the legacy comment
-  if (!rulesInComment.length) {
+  if (!rulesInComment.length && errorOnUnusedRules) {
     validationErrors.push({
       message: 'Legacy comment has no valid rules and should be removed',
       location: {
@@ -89,15 +99,31 @@ export function parseDisableComment({
     return undefined;
   }
 
+  if (!comment.descriptionStartIndex) {
+    throw new InternalError(
+      'Legacy comment description index is unexpectedly missing'
+    );
+  }
+
+  // Index of the start of the legacy rules section (after the pragma and
+  // opening parenthesis, accounting for the opening comment token and the space
+  // and opening parens after the pragma
+  const legaciedRulesStartIndex = comment.startIndex + pragma.length + 4;
   return {
     type: 'legacy',
     file: comment.file,
+    descriptionStartIndex: comment.descriptionStartIndex,
+    startIndex: comment.startIndex,
+    endIndex: comment.endIndex,
     startLine: comment.startLine,
     endLine: comment.endLine,
+    legaciedRulesStartIndex,
+    legaciedRulesEndIndex: legaciedRulesStartIndex + match[1].length + 1, // +1 for the closing parenthesis
     legaciedRules: rulesInComment,
     nonLegaciedRules: comment.rules.filter(
       (rule) => !rulesInComment.includes(rule)
     ),
+    unusedLegaciedRules: Array.from(unusedLegaciedRules),
     id,
   };
 }

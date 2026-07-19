@@ -84,6 +84,7 @@ export function addLegacyStatements({
           // We don't care about validation errors here, since we're just
           // checking if this is a legacy comment or not
           validationErrors,
+          errorOnUnusedRules: true,
         });
         if (validationErrors.length > 0) {
           printValidationErrors({

@@ -5,8 +5,14 @@ export type CommonOptions = {
 
 type CommentBase = {
   file: string;
+  // Start index in the file, not include the opening comment token (e.g. `//` or `/*`)
+  startIndex: number;
   startLine: number;
+  // End index in the file, not include the closing block token if it exists (e.g. `*/`)
+  endIndex: number;
   endLine: number;
+  // The index of the `--` delimiter, or undefined if there isn't one
+  descriptionStartIndex: number | undefined;
   rules: string[];
 };
 
@@ -20,7 +26,16 @@ export type LegacyComment = Omit<CommentBase, 'rules'> & {
   type: 'legacy';
   legaciedRules: string[];
   nonLegaciedRules: string[];
+  // These are rules that appear in the legacy comment, but are not in the
+  // actual disable anymore
+  unusedLegaciedRules: string[];
   id: string;
+  // This index always exists for legacy comments
+  descriptionStartIndex: number;
+  // Index of the opening `(` in the legacy comment
+  legaciedRulesStartIndex: number;
+  // Index of the closing `)` in the legacy comment
+  legaciedRulesEndIndex: number;
 };
 
 export type NonLegacyComment = CommentBase & {

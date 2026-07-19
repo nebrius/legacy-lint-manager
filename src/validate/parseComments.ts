@@ -13,11 +13,13 @@ export function parseComments({
   nonDisableableRules,
   validationErrors,
   pragma,
+  errorOnUnusedRules,
 }: {
   files: string[];
   nonDisableableRules: string[];
   validationErrors: ValidationError[];
   pragma: string;
+  errorOnUnusedRules: boolean;
 }) {
   const legacyComments: LegacyComment[] = [];
   const nonLegacyComments: NonLegacyComment[] = [];
@@ -43,6 +45,7 @@ export function parseComments({
         comment,
         validationErrors,
         pragma,
+        errorOnUnusedRules,
       });
       if (parsedDisableComment) {
         if (parsedDisableComment.type === 'legacy') {

@@ -147,9 +147,13 @@ function parseCommentText({
   const rules = commaSeparatedStringToArray(commentParts[0]);
   const comment = commentParts[1]?.trim();
 
+  const legacyIndex = rawComment.value.indexOf('--');
+
   return {
     type: prefixType,
     rules,
+    descriptionStartIndex:
+      legacyIndex !== -1 ? rawComment.start + legacyIndex + 2 : undefined,
     disabledAll: rules.length === 0,
     comment,
     file: filePath,
@@ -157,10 +161,12 @@ function parseCommentText({
       index: rawComment.start,
       lineStartMapping,
     }),
+    startIndex: rawComment.start + 2,
     endLine: getLineFromIndex({
       index: rawComment.end,
       lineStartMapping,
     }),
+    endIndex: rawComment.end - (rawComment.type === 'Block' ? 2 : 0),
   };
 }
 

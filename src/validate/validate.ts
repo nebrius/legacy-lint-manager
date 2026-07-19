@@ -7,9 +7,14 @@ import { getFileList, getRepoRoot } from '../util/files.js';
 import { getPackageRootDirs } from '../util/getPackageRootDirs.js';
 import { error, info, setVerbose, time } from '../util/logging.js';
 import { printValidationErrors } from '../util/printValidationErrors.js';
-import type { CommonOptions, ValidationError } from '../util/types.js';
+import type {
+  CommonOptions,
+  LegacyComment,
+  ValidationError,
+} from '../util/types.js';
 import { compareWithBranch } from './compareWithBranch.js';
 import { parseComments } from './parseComments.js';
+import { updateLegacyComments } from './updateLegacyComments.js';
 import { validateDisableComments } from './validateDisableComments.js';
 
 export function validate({
@@ -58,26 +63,33 @@ export function validate({
     });
   });
 
+  const legacyComments: LegacyComment[] = [];
   if (packageRootDirs) {
     for (const packageRootDir of packageRootDirs) {
       const packageSpecificConfig = getPackageSpecificConfig({
         packageRootDir,
         config,
       });
-      validatePackage({
-        config: packageSpecificConfig,
-        packageRootDir,
-        databaseMap,
-        validationErrors,
-      });
+      legacyComments.push(
+        ...validatePackage({
+          config: packageSpecificConfig,
+          packageRootDir,
+          databaseMap,
+          validationErrors,
+          errorOnUnusedRules: !update,
+        })
+      );
     }
   } else {
-    validatePackage({
-      config,
-      packageRootDir: repoRootDir,
-      databaseMap,
-      validationErrors,
-    });
+    legacyComments.push(
+      ...validatePackage({
+        config,
+        packageRootDir: repoRootDir,
+        databaseMap,
+        validationErrors,
+        errorOnUnusedRules: !update,
+      })
+    );
   }
 
   // Print errors if any were found and exit with error code
@@ -94,9 +106,17 @@ export function validate({
   const wereErrorsFixed = Array.from(databaseMap.values()).some(
     ({ foundInCode }) => !foundInCode
   );
-  if (wereErrorsFixed) {
-    if (update) {
-      info('Legacied lint errors were fixed, updating database...');
+  const doLegacyStatementsNeedPruning = legacyComments.some(
+    (comment) =>
+      comment.unusedLegaciedRules.length > 0 ||
+      comment.legaciedRules.length === 0
+  );
+  if (update) {
+    if (doLegacyStatementsNeedPruning || wereErrorsFixed) {
+      info(
+        'Legacied lint errors were fixed, updating legacy statements and database...'
+      );
+      updateLegacyComments({ legacyComments });
       const currentIds = new Map<string, string[]>();
       for (const [id, { rules, foundInCode }] of databaseMap.entries()) {
         if (foundInCode) {
@@ -105,12 +125,12 @@ export function validate({
       }
       database.setIds(currentIds);
       database.save();
-    } else {
-      error(
-        'Legacied lint errors were fixed, good job! Run with --update to update the database.'
-      );
-      process.exit(1);
     }
+  } else if (wereErrorsFixed) {
+    error(
+      'Legacied lint errors were fixed, good job! Run with --update to update the database.'
+    );
+    process.exit(1);
   }
 }
 
@@ -119,11 +139,13 @@ function validatePackage({
   packageRootDir,
   databaseMap,
   validationErrors,
+  errorOnUnusedRules,
 }: {
   config: Config;
   packageRootDir: string;
   databaseMap: Map<string, { foundInCode: boolean; rules: string[] }>;
   validationErrors: ValidationError[];
+  errorOnUnusedRules: boolean;
 }) {
   const { pragma, nonDisableableRules } = config;
   const files = time('getting file list', () => getFileList(packageRootDir));
@@ -136,6 +158,7 @@ function validatePackage({
         nonDisableableRules,
         validationErrors,
         pragma,
+        errorOnUnusedRules,
       })
   );
 
@@ -149,4 +172,6 @@ function validatePackage({
       databaseMap,
     });
   });
+
+  return legacyComments;
 }
