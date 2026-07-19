@@ -521,16 +521,12 @@ describe('legacy-errors (integration)', () => {
       // rather than its absolute one.
       expect(
         infoSpy.mock.calls.some(([msg]) =>
-          String(msg).includes(
-            `Legacying errors in ${join('packages', 'a')}`
-          )
+          String(msg).includes(`Legacying errors in ${join('packages', 'a')}`)
         )
       ).toBe(true);
       expect(
         infoSpy.mock.calls.some(([msg]) =>
-          String(msg).includes(
-            `Legacying errors in ${join('packages', 'b')}`
-          )
+          String(msg).includes(`Legacying errors in ${join('packages', 'b')}`)
         )
       ).toBe(true);
     });
