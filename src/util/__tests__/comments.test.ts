@@ -29,10 +29,25 @@ function parseBoth(fileContents: string, filePath = 'test.ts') {
   return { comments, validationErrors };
 }
 
+// Measures the expected index fields for a comment directly from the source
+// text: startIndex/endIndex exclude the comment delimiters, and
+// descriptionStartIndex sits at the first `--` when there is one.
+function span(source: string, commentText = source, { block = false } = {}) {
+  const at = source.indexOf(commentText);
+  return {
+    startIndex: at + 2,
+    endIndex: at + commentText.length - (block ? 2 : 0),
+    descriptionStartIndex: commentText.includes('--')
+      ? at + commentText.indexOf('--')
+      : undefined,
+  };
+}
+
 describe('Comment parsing', () => {
   describe('line comments', () => {
     it('parses a single-rule eslint-disable-line comment', () => {
-      expect(parse('// eslint-disable-line no-console')).toEqual([
+      const source = '// eslint-disable-line no-console';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -40,13 +55,15 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source),
           type: 'same-line',
         },
       ]);
     });
 
     it('parses multiple comma-separated rules', () => {
-      expect(parse('// eslint-disable-line no-console, no-debugger')).toEqual([
+      const source = '// eslint-disable-line no-console, no-debugger';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console', 'no-debugger'],
           disabledAll: false,
@@ -54,15 +71,15 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source),
           type: 'same-line',
         },
       ]);
     });
 
     it('parses an explanatory comment after the -- separator', () => {
-      expect(
-        parse('// eslint-disable-line no-console -- because reasons')
-      ).toEqual([
+      const source = '// eslint-disable-line no-console -- because reasons';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -70,13 +87,16 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source),
           type: 'same-line',
         },
       ]);
     });
 
     it('preserves additional -- separators inside the explanation', () => {
-      expect(parse('// eslint-disable-line no-console -- a -- b')).toEqual([
+      // descriptionStartIndex sits at the first `--`; later ones are content
+      const source = '// eslint-disable-line no-console -- a -- b';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -84,6 +104,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source),
           type: 'same-line',
         },
       ]);
@@ -103,7 +124,8 @@ describe('Comment parsing', () => {
     });
 
     it('matches the longest prefix first (eslint-disable-next-line)', () => {
-      expect(parse('// eslint-disable-next-line no-console')).toEqual([
+      const source = '// eslint-disable-next-line no-console';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -111,13 +133,15 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source),
           type: 'next-line',
         },
       ]);
     });
 
     it('parses oxlint-disable-next-line', () => {
-      expect(parse('// oxlint-disable-next-line no-console')).toEqual([
+      const source = '// oxlint-disable-next-line no-console';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -125,13 +149,15 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source),
           type: 'next-line',
         },
       ]);
     });
 
     it('parses oxlint-disable-line', () => {
-      expect(parse('// oxlint-disable-line no-debugger')).toEqual([
+      const source = '// oxlint-disable-line no-debugger';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-debugger'],
           disabledAll: false,
@@ -139,13 +165,15 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source),
           type: 'same-line',
         },
       ]);
     });
 
     it('parses oxlint-disable', () => {
-      expect(parse('// oxlint-disable no-console')).toEqual([
+      const source = '// oxlint-disable no-console';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -153,13 +181,17 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source),
           type: 'block',
         },
       ]);
     });
 
     it('parses a disable comment trailing actual code', () => {
-      expect(parse('const x = 5; // eslint-disable-line no-console')).toEqual([
+      // The comment sits mid-line, so its indices are absolute file positions,
+      // not comment-relative ones
+      const source = 'const x = 5; // eslint-disable-line no-console';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -167,15 +199,15 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source, '// eslint-disable-line no-console'),
           type: 'same-line',
         },
       ]);
     });
 
     it('parses a trailing directive after a string literal containing //', () => {
-      expect(
-        parse("const u = 'http://x'; // eslint-disable-line no-console")
-      ).toEqual([
+      const source = "const u = 'http://x'; // eslint-disable-line no-console";
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -183,15 +215,15 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source, '// eslint-disable-line no-console'),
           type: 'same-line',
         },
       ]);
     });
 
     it('trims surrounding whitespace from the prefix and rules', () => {
-      expect(
-        parse('//    eslint-disable-line    no-console ,  no-debugger  ')
-      ).toEqual([
+      const source = '//    eslint-disable-line    no-console ,  no-debugger  ';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console', 'no-debugger'],
           disabledAll: false,
@@ -199,6 +231,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source),
           type: 'same-line',
         },
       ]);
@@ -236,6 +269,7 @@ describe('Comment parsing', () => {
           file: 'src/foo/bar.ts',
           startLine: 0,
           endLine: 0,
+          ...span(contents, '// eslint-disable-line no-console'),
           type: 'same-line',
         },
         {
@@ -245,6 +279,7 @@ describe('Comment parsing', () => {
           file: 'src/foo/bar.ts',
           startLine: 2,
           endLine: 2,
+          ...span(contents, '// eslint-disable-next-line no-debugger'),
           type: 'next-line',
         },
       ]);
@@ -253,7 +288,8 @@ describe('Comment parsing', () => {
 
   describe('block comments', () => {
     it('parses a single-line block comment', () => {
-      expect(parse('/* eslint-disable no-console */')).toEqual([
+      const source = '/* eslint-disable no-console */';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -261,13 +297,15 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source, source, { block: true }),
           type: 'block',
         },
       ]);
     });
 
     it('parses a single-line block comment with an explanation', () => {
-      expect(parse('/* eslint-disable no-console -- reason */')).toEqual([
+      const source = '/* eslint-disable no-console -- reason */';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -275,15 +313,16 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source, source, { block: true }),
           type: 'block',
         },
       ]);
     });
 
     it('parses a block comment whose explanation contains a URL', () => {
-      expect(
-        parse('/* eslint-disable no-console -- see http://example.com */')
-      ).toEqual([
+      const source =
+        '/* eslint-disable no-console -- see http://example.com */';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -291,6 +330,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source, source, { block: true }),
           type: 'block',
         },
       ]);
@@ -320,7 +360,8 @@ describe('Comment parsing', () => {
     });
 
     it('represents a bare disable-all directive with no specific rules', () => {
-      expect(parse('/* eslint-disable */')).toEqual([
+      const source = '/* eslint-disable */';
+      expect(parse(source)).toEqual([
         {
           rules: [],
           disabledAll: true,
@@ -328,6 +369,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source, source, { block: true }),
           type: 'block',
         },
       ]);
@@ -336,7 +378,8 @@ describe('Comment parsing', () => {
     it('honors a block-form eslint-disable-next-line', () => {
       // ESLint accepts -line / -next-line directives as either line or block
       // comments; only plain eslint-disable is block-only.
-      expect(parse('/* eslint-disable-next-line no-console */')).toEqual([
+      const source = '/* eslint-disable-next-line no-console */';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -344,13 +387,15 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source, source, { block: true }),
           type: 'next-line',
         },
       ]);
     });
 
     it('honors a block-form eslint-disable-line', () => {
-      expect(parse('/* eslint-disable-line no-console */')).toEqual([
+      const source = '/* eslint-disable-line no-console */';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -358,13 +403,15 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source, source, { block: true }),
           type: 'same-line',
         },
       ]);
     });
 
     it('honors a block-form oxlint-disable-next-line (Oxlint has no comment-form restriction)', () => {
-      expect(parse('/* oxlint-disable-next-line no-console */')).toEqual([
+      const source = '/* oxlint-disable-next-line no-console */';
+      expect(parse(source)).toEqual([
         {
           rules: ['no-console'],
           disabledAll: false,
@@ -372,6 +419,7 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source, source, { block: true }),
           type: 'next-line',
         },
       ]);
@@ -450,9 +498,8 @@ describe('Comment parsing', () => {
     it('does not flag a disable directive as a config comment', () => {
       // `/* eslint-disable ... */` starts with "eslint-", not "eslint ", so it
       // must parse as a disable and never be rejected as a config comment.
-      const { comments, validationErrors } = parseBoth(
-        '/* eslint-disable no-console */'
-      );
+      const source = '/* eslint-disable no-console */';
+      const { comments, validationErrors } = parseBoth(source);
       expect(validationErrors).toEqual([]);
       expect(comments).toEqual([
         {
@@ -462,9 +509,39 @@ describe('Comment parsing', () => {
           file: 'test.ts',
           startLine: 0,
           endLine: 0,
+          ...span(source, source, { block: true }),
           type: 'block',
         },
       ]);
+    });
+  });
+
+  // Hand-computed positions that pin the delimiter conventions the span()
+  // helper encodes: indices are absolute file offsets that exclude the comment
+  // tokens themselves.
+  describe('comment index fields', () => {
+    it('starts after the // token and ends at the end of a line comment', () => {
+      // 'const a = 1; ' is 13 characters, so the comment text starts at 15
+      const comment = parse(
+        'const a = 1; // eslint-disable-line no-console'
+      )[0];
+      expect(comment.startIndex).toBe(15);
+      expect(comment.endIndex).toBe(46);
+      expect(comment.descriptionStartIndex).toBeUndefined();
+    });
+
+    it('excludes the closing */ token of a block comment', () => {
+      const source = '/* eslint-disable no-console */';
+      const comment = parse(source)[0];
+      expect(comment.startIndex).toBe(2);
+      expect(comment.endIndex).toBe(source.length - 2);
+    });
+
+    it('points descriptionStartIndex at the first -- delimiter', () => {
+      const source = '// eslint-disable-line no-console -- a -- b';
+      const comment = parse(source)[0];
+      expect(comment.descriptionStartIndex).toBe(34);
+      expect(source.slice(34, 36)).toBe('--');
     });
   });
 

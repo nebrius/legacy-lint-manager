@@ -14,7 +14,10 @@ import type {
 } from '../util/types.js';
 import { compareWithBranch } from './compareWithBranch.js';
 import { parseComments } from './parseComments.js';
-import { updateLegacyComments } from './updateLegacyComments.js';
+import {
+  doesLegacyCommentNeedUpdate,
+  updateLegacyComments,
+} from './updateLegacyComments.js';
 import { validateDisableComments } from './validateDisableComments.js';
 
 export function validate({
@@ -107,9 +110,7 @@ export function validate({
     ({ foundInCode }) => !foundInCode
   );
   const doLegacyStatementsNeedPruning = legacyComments.some(
-    (comment) =>
-      comment.unusedLegaciedRules.length > 0 ||
-      comment.legaciedRules.length === 0
+    doesLegacyCommentNeedUpdate
   );
   if (update) {
     if (doLegacyStatementsNeedPruning || wereErrorsFixed) {
@@ -117,10 +118,19 @@ export function validate({
         'Legacied lint errors were fixed, updating legacy statements and database...'
       );
       updateLegacyComments({ legacyComments });
+      // We need to reconcile carefully here. Since we may have pruned legacy
+      // comments, we have to make sure we get the latest versions.
+      const keptRulesById = new Map(
+        legacyComments.map((comment): [string, string[]] => [
+          comment.id,
+          comment.legaciedRules,
+        ])
+      );
       const currentIds = new Map<string, string[]>();
-      for (const [id, { rules, foundInCode }] of databaseMap.entries()) {
-        if (foundInCode) {
-          currentIds.set(id, rules);
+      for (const id of databaseMap.keys()) {
+        const keptRules = keptRulesById.get(id);
+        if (keptRules?.length) {
+          currentIds.set(id, keptRules);
         }
       }
       database.setIds(currentIds);

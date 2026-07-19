@@ -352,6 +352,7 @@ describe('addLegacyStatements', () => {
         comment: comments[0],
         pragma: DEFAULT_PRAGMA,
         validationErrors: [],
+        errorOnUnusedRules: true,
       });
     }
 

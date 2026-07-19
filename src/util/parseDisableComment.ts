@@ -99,16 +99,18 @@ export function parseDisableComment({
     return undefined;
   }
 
+  /* v8 ignore start */
   if (!comment.descriptionStartIndex) {
     throw new InternalError(
       'Legacy comment description index is unexpectedly missing'
     );
   }
+  /* v8 ignore stop */
 
-  // Index of the start of the legacy rules section (after the pragma and
-  // opening parenthesis, accounting for the opening comment token and the space
-  // and opening parens after the pragma
-  const legaciedRulesStartIndex = comment.startIndex + pragma.length + 4;
+  // Index of the opening parenthesis of the legacy rules section, accounting
+  // for the `--`, pragma, spaces, and opening paren
+  const legaciedRulesStartIndex =
+    comment.descriptionStartIndex + pragma.length + 4;
   return {
     type: 'legacy',
     file: comment.file,
@@ -118,7 +120,7 @@ export function parseDisableComment({
     startLine: comment.startLine,
     endLine: comment.endLine,
     legaciedRulesStartIndex,
-    legaciedRulesEndIndex: legaciedRulesStartIndex + match[1].length + 1, // +1 for the closing parenthesis
+    legaciedRulesEndIndex: legaciedRulesStartIndex + match[1].length + 2,
     legaciedRules: rulesInComment,
     nonLegaciedRules: comment.rules.filter(
       (rule) => !rulesInComment.includes(rule)

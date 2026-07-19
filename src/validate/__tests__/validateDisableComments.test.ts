@@ -34,14 +34,22 @@ function foundIds(map: DatabaseMap): string[] {
     .sort();
 }
 
+// The index fields are arbitrary here: validateDisableComments never reads
+// them, they just satisfy the comment shape.
 function makeLegacy(overrides: Partial<LegacyComment> = {}): LegacyComment {
   return {
     type: 'legacy',
     file: 'test.ts',
     startLine: 1,
     endLine: 1,
+    startIndex: 2,
+    endIndex: 130,
+    descriptionStartIndex: 30,
+    legaciedRulesStartIndex: 80,
+    legaciedRulesEndIndex: 95,
     legaciedRules: ['no-console'],
     nonLegaciedRules: [],
+    unusedLegaciedRules: [],
     id: ID,
     ...overrides,
   };
@@ -55,6 +63,9 @@ function makeNonLegacy(
     file: 'test.ts',
     startLine: 1,
     endLine: 1,
+    startIndex: 2,
+    endIndex: 130,
+    descriptionStartIndex: undefined,
     rules: ['no-console'],
     ...overrides,
   };

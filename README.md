@@ -272,15 +272,20 @@ A legacy comment claims to legacy a rule that its database entry doesn't include
 
 A legacy comment no longer parses, usually from hand-editing or merge damage. Restore it to its original form from git history, or remove it and fix the violation.
 
-Related messages with the same cause and fix:
+Related message with the same cause and fix:
 - **"Legacy comment must use \*-disable-next-line"** - a legacy comment was converted to a block or same-line disable, which isn't supported
-- **"Legacy comment has no valid rules and should be removed"** - a legacy comment no longer lists any rules that are being legacied, e.g. `{pragma} () {id}`. Remove the entire legacy entry, i.e. delete everything in the comment from `--` to the end
 
 ### "Rule X in legacy comment is not in the actual lint disable list and should be removed."
 
-A rule in a legacy comment was removed from the actual lint disable comment, e.g. `// eslint-disable-next-line foo -- {pragma} (foo, bar) {id}`. You should remove the rule from the legacy rules list by hand; `validate --update` only ever updates the database, never comments.
+A rule in a legacy comment was removed from the actual lint disable comment, e.g. `// eslint-disable-next-line foo -- {pragma} (foo, bar) {id}`. This usually means the rule's violation was fixed and the disable was trimmed to match, congrats! Run:
 
-Note: this is the one and only time you should hand-edit a legacy comment.
+```sh
+npx legacy-lint-manager validate --update
+```
+
+and commit the result: the rule is pruned from the legacy rules list, and the database is updated to match.
+
+The same applies to **"Legacy comment has no valid rules and should be removed"**, where the legacy rules list has no rules left in the disable list at all, e.g. `{pragma} () {id}`. For those, `--update` removes everything in the comment from the `--` to the end, leaving a plain disable comment.
 
 ### "Errors parsing file"
 
@@ -316,7 +321,7 @@ The one happy failure: violations that were legacied no longer exist in the code
 npx legacy-lint-manager validate --update
 ```
 
-and commit the updated database. Shrinking the database means you're making progress on cleaning up the codebase, congrats!
+and commit the updated files. Shrinking the database means you're making progress on cleaning up the codebase, congrats!
 
 ## Reference
 
@@ -436,7 +441,7 @@ Checks the source tree against the database and the compare branch, reporting ev
 Flags:
 
 - `--config <file>`: the config file to read from. Default: `legacy-lint.config.jsonc` in the current directory.
-- `--update`: prune database entries whose violations were fixed. Note: only runs when validation otherwise passes.
+- `--update`: sync the bookkeeping with fixed violations. Specifically, it prunes rules from legacy comments that are no longer in their disable lists, removes the legacy portion of a disable comment entirely when no legacied rules remain, and shrinks the database to the surviving grants. Note: only runs when validation otherwise passes.
 - `--verbose`: enables verbose logging, including timing diagnostics.
 
 ## Known limitations

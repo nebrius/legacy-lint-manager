@@ -8,6 +8,11 @@ import type { Comment, ValidationError } from '../types.js';
 
 const ID = makeId(DEFAULT_ID_BASE);
 
+// The index defaults are synthetic but self-consistent: parseDisableComment
+// derives the legacy rules splice indices from descriptionStartIndex, and
+// legacyIndexes() below computes the matching expected values. That the
+// resulting indices land on real file text is proven end-to-end in
+// updateLegacyComments.test.ts, which splices real files with them.
 function makeComment(overrides: Partial<Comment> = {}): Comment {
   return {
     rules: [],
@@ -16,8 +21,25 @@ function makeComment(overrides: Partial<Comment> = {}): Comment {
     file: 'test.ts',
     startLine: 1,
     endLine: 1,
+    startIndex: 2,
+    endIndex: 130,
+    descriptionStartIndex: 30,
     type: 'next-line',
     ...overrides,
+  };
+}
+
+// The index fields expected on a legacy comment parsed from makeComment
+// defaults. The parens sit after the `--` (descriptionStartIndex), the two
+// delimiter characters, the space, the pragma, and another space.
+function legacyIndexes(pragma: string, parensText: string) {
+  const legaciedRulesStartIndex = 30 + pragma.length + 4;
+  return {
+    startIndex: 2,
+    endIndex: 130,
+    descriptionStartIndex: 30,
+    legaciedRulesStartIndex,
+    legaciedRulesEndIndex: legaciedRulesStartIndex + parensText.length + 2,
   };
 }
 
@@ -33,12 +55,16 @@ describe('parseDisableComment', () => {
         comment: makeComment({ comment: undefined }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(result).toEqual({
         type: 'nonlegacy',
         file: 'test.ts',
         startLine: 1,
         endLine: 1,
+        startIndex: 2,
+        endIndex: 130,
+        descriptionStartIndex: 30,
         rules: [],
       });
       expect(validationErrors).toEqual([]);
@@ -50,12 +76,16 @@ describe('parseDisableComment', () => {
         comment: makeComment({ comment: 'because reasons' }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(result).toEqual({
         type: 'nonlegacy',
         file: 'test.ts',
         startLine: 1,
         endLine: 1,
+        startIndex: 2,
+        endIndex: 130,
+        descriptionStartIndex: 30,
         rules: [],
       });
       expect(validationErrors).toEqual([]);
@@ -67,12 +97,16 @@ describe('parseDisableComment', () => {
         comment: makeComment({ comment: '' }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(result).toEqual({
         type: 'nonlegacy',
         file: 'test.ts',
         startLine: 1,
         endLine: 1,
+        startIndex: 2,
+        endIndex: 130,
+        descriptionStartIndex: 30,
         rules: [],
       });
       expect(validationErrors).toEqual([]);
@@ -86,6 +120,7 @@ describe('parseDisableComment', () => {
         }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(result?.type).toBe('nonlegacy');
       expect(validationErrors).toEqual([]);
@@ -97,12 +132,16 @@ describe('parseDisableComment', () => {
         comment: makeComment({ type: 'block', comment: 'because reasons' }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(result).toEqual({
         type: 'nonlegacy',
         file: 'test.ts',
         startLine: 1,
         endLine: 1,
+        startIndex: 2,
+        endIndex: 130,
+        descriptionStartIndex: 30,
         rules: [],
       });
       expect(validationErrors).toEqual([]);
@@ -114,12 +153,16 @@ describe('parseDisableComment', () => {
         comment: makeComment({ type: 'same-line', comment: undefined }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(result).toEqual({
         type: 'nonlegacy',
         file: 'test.ts',
         startLine: 1,
         endLine: 1,
+        startIndex: 2,
+        endIndex: 130,
+        descriptionStartIndex: 30,
         rules: [],
       });
       expect(validationErrors).toEqual([]);
@@ -134,12 +177,16 @@ describe('parseDisableComment', () => {
         }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(result).toEqual({
         type: 'nonlegacy',
         file: 'test.ts',
         startLine: 1,
         endLine: 1,
+        startIndex: 2,
+        endIndex: 130,
+        descriptionStartIndex: 30,
         rules: ['no-console', 'no-debugger'],
       });
       expect(validationErrors).toEqual([]);
@@ -172,14 +219,17 @@ describe('parseDisableComment', () => {
           }),
           pragma,
           validationErrors,
+          errorOnUnusedRules: true,
         });
         expect(result).toEqual({
           type: 'legacy',
           file: 'test.ts',
           startLine: 1,
           endLine: 1,
+          ...legacyIndexes(pragma, 'no-console'),
           legaciedRules: ['no-console'],
           nonLegaciedRules: [],
+          unusedLegaciedRules: [],
           id: ID,
         });
         expect(validationErrors).toEqual([]);
@@ -194,6 +244,7 @@ describe('parseDisableComment', () => {
           }),
           pragma,
           validationErrors,
+          errorOnUnusedRules: true,
         });
         expect(asLegacy(result).legaciedRules).toEqual([
           'no-console',
@@ -211,6 +262,7 @@ describe('parseDisableComment', () => {
           }),
           pragma,
           validationErrors,
+          errorOnUnusedRules: true,
         });
         expect(asLegacy(result).legaciedRules).toEqual([
           'no-console',
@@ -228,6 +280,7 @@ describe('parseDisableComment', () => {
           }),
           pragma,
           validationErrors,
+          errorOnUnusedRules: true,
         });
         expect(asLegacy(result).id).toBe(makeId('Ab2_Cd-4'));
         expect(validationErrors).toEqual([]);
@@ -245,14 +298,17 @@ describe('parseDisableComment', () => {
           }),
           pragma,
           validationErrors,
+          errorOnUnusedRules: true,
         });
         expect(result).toEqual({
           type: 'legacy',
           file: 'src/foo/bar.ts',
           startLine: 42,
           endLine: 42,
+          ...legacyIndexes(pragma, 'no-console'),
           legaciedRules: ['no-console'],
           nonLegaciedRules: [],
+          unusedLegaciedRules: [],
           id: ID,
         });
         expect(validationErrors).toEqual([]);
@@ -272,6 +328,7 @@ describe('parseDisableComment', () => {
           comment,
           pragma,
           validationErrors,
+          errorOnUnusedRules: true,
         });
         expect(result).toBeUndefined();
         expect(validationErrors).toEqual([
@@ -329,6 +386,7 @@ describe('parseDisableComment', () => {
           }),
           pragma,
           validationErrors,
+          errorOnUnusedRules: true,
         });
         expect(result).toBeUndefined();
         expect(validationErrors).toEqual([
@@ -393,6 +451,7 @@ describe('parseDisableComment', () => {
           }),
           pragma,
           validationErrors,
+          errorOnUnusedRules: true,
         });
         parseDisableComment({
           comment: makeComment({
@@ -403,6 +462,7 @@ describe('parseDisableComment', () => {
           }),
           pragma,
           validationErrors,
+          errorOnUnusedRules: true,
         });
         expect(validationErrors).toEqual([
           { message: 'pre-existing', location: { file: 'a.ts', line: 1 } },
@@ -442,14 +502,17 @@ describe('parseDisableComment', () => {
             }),
             pragma,
             validationErrors,
+            errorOnUnusedRules: true,
           });
           expect(result).toEqual({
             type: 'legacy',
             file: 'src/app.ts',
             startLine: 12,
             endLine: 12,
+            ...legacyIndexes(pragma, 'foo, bar'),
             legaciedRules: ['foo'],
             nonLegaciedRules: [],
+            unusedLegaciedRules: ['bar'],
             id: ID,
           });
           expect(validationErrors).toEqual([
@@ -469,6 +532,7 @@ describe('parseDisableComment', () => {
             }),
             pragma,
             validationErrors,
+            errorOnUnusedRules: true,
           });
           expect(asLegacy(result).legaciedRules).toEqual(['keep']);
           expect(validationErrors).toEqual([
@@ -494,6 +558,7 @@ describe('parseDisableComment', () => {
             }),
             pragma,
             validationErrors,
+            errorOnUnusedRules: true,
           });
           expect(asLegacy(result).legaciedRules).toEqual(['no-console']);
           expect(validationErrors).toEqual([]);
@@ -508,6 +573,7 @@ describe('parseDisableComment', () => {
             }),
             pragma,
             validationErrors,
+            errorOnUnusedRules: true,
           });
           expect(asLegacy(result).legaciedRules).toEqual([
             'no-console',
@@ -530,6 +596,7 @@ describe('parseDisableComment', () => {
             }),
             pragma,
             validationErrors,
+            errorOnUnusedRules: true,
           });
           expect(result).toBeUndefined();
           expect(validationErrors).toEqual([
@@ -551,6 +618,7 @@ describe('parseDisableComment', () => {
             comment: makeComment({ rules: [], comment: legacy('bar') }),
             pragma,
             validationErrors,
+            errorOnUnusedRules: true,
           });
           expect(result).toBeUndefined();
           expect(validationErrors).toEqual([
@@ -581,6 +649,7 @@ describe('parseDisableComment', () => {
         }),
         pragma,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(nonLegacy?.type).toBe('nonlegacy');
 
@@ -592,6 +661,7 @@ describe('parseDisableComment', () => {
         }),
         pragma,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(legacy?.type).toBe('legacy');
       expect(validationErrors).toEqual([]);
@@ -609,6 +679,7 @@ describe('parseDisableComment', () => {
         }),
         pragma,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(result?.type).toBe('legacy');
       expect(validationErrors).toEqual([]);
@@ -628,14 +699,17 @@ describe('parseDisableComment', () => {
         }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(result).toEqual({
         type: 'legacy',
         file: 'test.ts',
         startLine: 1,
         endLine: 1,
+        ...legacyIndexes(DEFAULT_PRAGMA, 'no-console'),
         legaciedRules: ['no-console'],
         nonLegaciedRules: ['no-debugger'],
+        unusedLegaciedRules: [],
         id: ID,
       });
       expect(validationErrors).toEqual([]);
@@ -650,6 +724,7 @@ describe('parseDisableComment', () => {
         }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(asLegacy(result).nonLegaciedRules).toEqual([]);
       expect(validationErrors).toEqual([]);
@@ -668,14 +743,17 @@ describe('parseDisableComment', () => {
         }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(result).toEqual({
         type: 'legacy',
         file: 'test.ts',
         startLine: 1,
         endLine: 1,
+        ...legacyIndexes(DEFAULT_PRAGMA, 'no-console,no-debugger'),
         legaciedRules: ['no-console'],
         nonLegaciedRules: [],
+        unusedLegaciedRules: ['no-debugger'],
         id: ID,
       });
       expect(validationErrors).toEqual([
@@ -698,6 +776,7 @@ describe('parseDisableComment', () => {
         comment: makeComment({ comment: legacyText('') }),
         pragma: DEFAULT_PRAGMA,
         validationErrors,
+        errorOnUnusedRules: true,
       });
       expect(result).toBeUndefined();
       expect(validationErrors).toEqual([
@@ -706,6 +785,80 @@ describe('parseDisableComment', () => {
           location: { file: 'test.ts', line: 1 },
         },
       ]);
+    });
+  });
+
+  // With errorOnUnusedRules disabled (aka `validate --update`), unused rules
+  // are not errors: the comment is returned instead, carrying the unused rules
+  // so that updateLegacyComments can prune or remove the legacy portion.
+  describe('with errorOnUnusedRules disabled (update mode)', () => {
+    it('collects a foreign rule into unusedLegaciedRules without recording an error', () => {
+      const validationErrors: ValidationError[] = [];
+      const result = parseDisableComment({
+        comment: makeComment({
+          rules: ['foo'],
+          comment: legacyText('foo, bar'),
+        }),
+        pragma: DEFAULT_PRAGMA,
+        validationErrors,
+        errorOnUnusedRules: false,
+      });
+      expect(result).toEqual({
+        type: 'legacy',
+        file: 'test.ts',
+        startLine: 1,
+        endLine: 1,
+        ...legacyIndexes(DEFAULT_PRAGMA, 'foo, bar'),
+        legaciedRules: ['foo'],
+        nonLegaciedRules: [],
+        unusedLegaciedRules: ['bar'],
+        id: ID,
+      });
+      expect(validationErrors).toEqual([]);
+    });
+
+    it('returns a comment with no legacied rules when every listed rule is foreign', () => {
+      const validationErrors: ValidationError[] = [];
+      const result = parseDisableComment({
+        comment: makeComment({ rules: [], comment: legacyText('bar, baz') }),
+        pragma: DEFAULT_PRAGMA,
+        validationErrors,
+        errorOnUnusedRules: false,
+      });
+      expect(result).toEqual({
+        type: 'legacy',
+        file: 'test.ts',
+        startLine: 1,
+        endLine: 1,
+        ...legacyIndexes(DEFAULT_PRAGMA, 'bar, baz'),
+        legaciedRules: [],
+        nonLegaciedRules: [],
+        unusedLegaciedRules: ['bar', 'baz'],
+        id: ID,
+      });
+      expect(validationErrors).toEqual([]);
+    });
+
+    it('returns a comment with empty rule lists for a hand-emptied `()` list', () => {
+      const validationErrors: ValidationError[] = [];
+      const result = parseDisableComment({
+        comment: makeComment({ comment: legacyText('') }),
+        pragma: DEFAULT_PRAGMA,
+        validationErrors,
+        errorOnUnusedRules: false,
+      });
+      expect(result).toEqual({
+        type: 'legacy',
+        file: 'test.ts',
+        startLine: 1,
+        endLine: 1,
+        ...legacyIndexes(DEFAULT_PRAGMA, ''),
+        legaciedRules: [],
+        nonLegaciedRules: [],
+        unusedLegaciedRules: [],
+        id: ID,
+      });
+      expect(validationErrors).toEqual([]);
     });
   });
 });

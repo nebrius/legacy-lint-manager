@@ -24,17 +24,20 @@ export type Comment = CommentBase & {
 
 export type LegacyComment = Omit<CommentBase, 'rules'> & {
   type: 'legacy';
+  // Rules in the legacy list that are listed in the actual disable list
   legaciedRules: string[];
+  // Rules in the actual disable list that are not in the legacy list, aka
+  // disables the user added alongside the legacy
   nonLegaciedRules: string[];
-  // These are rules that appear in the legacy comment, but are not in the
-  // actual disable anymore
+  // Rules in the legacy list that are not in the actual disable list anymore,
+  // aka rules whose violations were fixed
   unusedLegaciedRules: string[];
   id: string;
   // This index always exists for legacy comments
   descriptionStartIndex: number;
   // Index of the opening `(` in the legacy comment
   legaciedRulesStartIndex: number;
-  // Index of the closing `)` in the legacy comment
+  // Index just past the closing `)` in the legacy comment
   legaciedRulesEndIndex: number;
 };
 

@@ -27,6 +27,14 @@ function legacyComment({
     id,
     legaciedRules,
     nonLegaciedRules,
+    // buildDatabase never reads the index fields; arbitrary values satisfy the
+    // comment shape
+    unusedLegaciedRules: [],
+    startIndex: 2,
+    endIndex: 130,
+    descriptionStartIndex: 30,
+    legaciedRulesStartIndex: 80,
+    legaciedRulesEndIndex: 95,
     file,
     startLine,
     endLine,

@@ -225,6 +225,171 @@ describe('validate (integration)', () => {
     });
   });
 
+  // --update also prunes rules from legacy comments when their violations were
+  // fixed (aka rules missing from the actual disable list) and shrinks the
+  // database to the surviving grants, all in a single invocation.
+  describe('pruning stale legacy comments with --update', () => {
+    const STALE_ID = makeId('staleid');
+    const STALE_REL = join('src', 'stale.ts');
+
+    // A source whose legacy comment still lists no-debugger in its legacy list
+    // while the directive only disables no-console, aka the no-debugger
+    // violation was fixed by hand.
+    function seedStaleSource() {
+      seedSource('stale.ts', [
+        'export function logSomething(): void {',
+        `  // eslint-disable-next-line no-console -- ${DEFAULT_PRAGMA} (no-console, no-debugger) ${STALE_ID}`,
+        "  console.log('x');",
+        '}',
+        '',
+      ]);
+    }
+
+    function readStaleSource() {
+      return readFileSync(join(REPO_DIR, STALE_REL), 'utf-8');
+    }
+
+    it('fails a plain validate naming the stale rule', () => {
+      initRepo({
+        db: [[STALE_ID, ['no-console', 'no-debugger']]],
+        seed: seedStaleSource,
+      });
+      const exitSpy = mockExit();
+      const errorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      expect(() => {
+        runValidate();
+      }).toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Rule no-debugger in legacy comment is not in the actual lint disable list'
+        )
+      );
+    });
+
+    it('prunes the comment and shrinks the database entry in one --update run', () => {
+      initRepo({
+        db: [[STALE_ID, ['no-console', 'no-debugger']]],
+        seed: seedStaleSource,
+      });
+      vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+      runValidate(true);
+
+      expect(readStaleSource()).toContain(
+        `// eslint-disable-next-line no-console -- ${DEFAULT_PRAGMA} (no-console) ${STALE_ID}`
+      );
+      expect(readData()).toEqual([[STALE_ID, ['no-console']]]);
+      // The run converged: a follow-up plain validate passes.
+      expect(() => {
+        runValidate();
+      }).not.toThrow();
+    });
+
+    it('removes the whole legacy portion and drops the id when every legacied rule was fixed', () => {
+      initRepo({
+        db: [[STALE_ID, ['no-console']]],
+        seed: () => {
+          // The directive only disables a rule the pragma never legacied, so
+          // every legacied rule was fixed.
+          seedSource('stale.ts', [
+            'export function annoy(): void {',
+            `  // eslint-disable-next-line no-alert -- ${DEFAULT_PRAGMA} (no-console) ${STALE_ID}`,
+            '  alert(1);',
+            '}',
+            '',
+          ]);
+        },
+      });
+      vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+      runValidate(true);
+
+      // The plain disable comment survives; the legacy bookkeeping is gone.
+      expect(readStaleSource()).toContain(
+        '  // eslint-disable-next-line no-alert\n'
+      );
+      expect(readStaleSource()).not.toContain(DEFAULT_PRAGMA);
+      expect(readData()).toEqual([]);
+      expect(() => {
+        runValidate();
+      }).not.toThrow();
+    });
+
+    it('resolves an unused id and a stale comment in the same --update run', () => {
+      const fixedId = makeId('allfixed');
+      initRepo({
+        db: [
+          [STALE_ID, ['no-console', 'no-debugger']],
+          // fixedId has no comment anywhere, aka its violation is fully fixed
+          [fixedId, ['no-alert']],
+        ],
+        seed: seedStaleSource,
+      });
+      vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+      runValidate(true);
+
+      expect(readData()).toEqual([[STALE_ID, ['no-console']]]);
+      expect(() => {
+        runValidate();
+      }).not.toThrow();
+    });
+
+    it('updates nothing when the comments and database are already in sync', () => {
+      initRepo({
+        db: loadDbFixture('all-used.json'),
+        seed: seedFixtureSources,
+      });
+      const infoSpy = vi
+        .spyOn(console, 'info')
+        .mockImplementation(() => undefined);
+
+      const before = readData();
+      expect(() => {
+        runValidate(true);
+      }).not.toThrow();
+      // The update branch never ran: no message, and the database is untouched.
+      expect(infoSpy).not.toHaveBeenCalled();
+      expect(readData()).toEqual(before);
+    });
+
+    it('does not prune when another fatal validation error is present', () => {
+      // A duplicate id elsewhere fails the run before the update step, so the
+      // stale comment is left untouched (its own error stays suppressed in
+      // update mode, per --update only acting when validation otherwise
+      // passes).
+      initRepo({
+        db: [[STALE_ID, ['no-console', 'no-debugger']]],
+        seed: () => {
+          seedStaleSource();
+          seedSource('dup.ts', [
+            `// eslint-disable-next-line no-console -- ${DEFAULT_PRAGMA} (no-console) ${STALE_ID}`,
+            "console.log('x');",
+            '',
+          ]);
+        },
+      });
+      const exitSpy = mockExit();
+      const errorSpy = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+
+      const before = readStaleSource();
+      expect(() => {
+        runValidate(true);
+      }).toThrow('process.exit called');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Duplicate legacy ID')
+      );
+      expect(readStaleSource()).toBe(before);
+    });
+  });
+
   it('exits with an error when code references an unregistered id', () => {
     initRepo({
       db: loadDbFixture('unregistered.json'),

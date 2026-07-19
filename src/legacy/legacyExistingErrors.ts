@@ -144,6 +144,7 @@ async function legacyPackage({
       nonDisableableRules,
       validationErrors,
       pragma,
+      errorOnUnusedRules: true,
     })
   );
 
