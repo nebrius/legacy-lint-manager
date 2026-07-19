@@ -15,11 +15,30 @@ export function getPackageRootDirs({
   const { packages } = getPackagesSync(repoRootDir);
   const packageRootDirs = packages.map((pkg) => pkg.dir);
   for (const ignoredPackagePath of ignorePackagePaths) {
-    if (!packageRootDirs.includes(ignoredPackagePath)) {
+    // If this is a wildcard, it's required to come at the end, which simplifies
+    // our logic
+    if (ignoredPackagePath.endsWith('/*')) {
+      if (
+        !packageRootDirs.some((dir) =>
+          dir.startsWith(ignoredPackagePath.slice(0, -1))
+        )
+      ) {
+        validationErrors.push({
+          message: `Ignore package path wildcard "${ignoredPackagePath}" did not match any packages`,
+        });
+      }
+    } else if (!packageRootDirs.includes(ignoredPackagePath)) {
       validationErrors.push({
         message: `Unknown ignore package path "${ignoredPackagePath}"`,
       });
     }
   }
-  return packageRootDirs.filter((dir) => !ignorePackagePaths.includes(dir));
+  return packageRootDirs.filter(
+    (dir) =>
+      !ignorePackagePaths.some((ignorePath) =>
+        ignorePath.endsWith('/*')
+          ? dir.startsWith(ignorePath.slice(0, -1))
+          : dir === ignorePath
+      )
+  );
 }

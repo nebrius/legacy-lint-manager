@@ -412,9 +412,11 @@ describe('legacy-errors (integration)', () => {
     const PKG_A_DIR = join(WORK_DIR, 'packages', 'a');
     const PKG_B_DIR = join(WORK_DIR, 'packages', 'b');
     const PKG_C_DIR = join(WORK_DIR, 'packages', 'c');
+    const PKG_D_DIR = join(WORK_DIR, 'legacy', 'd');
     const PKG_A_INDEX = join(PKG_A_DIR, 'src', 'index.ts');
     const PKG_B_INDEX = join(PKG_B_DIR, 'src', 'index.ts');
     const PKG_C_INDEX = join(PKG_C_DIR, 'src', 'index.ts');
+    const PKG_D_INDEX = join(PKG_D_DIR, 'src', 'index.ts');
 
     function seedPackage(dir: string, name: string, source: string) {
       mkdirSync(join(dir, 'src'), { recursive: true });
@@ -436,7 +438,12 @@ describe('legacy-errors (integration)', () => {
     function initMonorepo({
       ignorePackagePaths = [],
       seedPackageC = false,
-    }: { ignorePackagePaths?: string[]; seedPackageC?: boolean } = {}) {
+      seedLegacyPackage = false,
+    }: {
+      ignorePackagePaths?: string[];
+      seedPackageC?: boolean;
+      seedLegacyPackage?: boolean;
+    } = {}) {
       rmSync(WORK_DIR, { recursive: true, force: true });
       mkdirSync(WORK_DIR, { recursive: true });
       writeFileSync(
@@ -445,7 +452,11 @@ describe('legacy-errors (integration)', () => {
           name: 'root',
           version: '1.0.0',
           private: true,
-          workspaces: ['packages/*'],
+          // The legacy/ group gives wildcard ignore paths a whole directory of
+          // packages to match without touching packages/.
+          workspaces: seedLegacyPackage
+            ? ['packages/*', 'legacy/*']
+            : ['packages/*'],
         })
       );
       writeFileSync(join(WORK_DIR, 'package-lock.json'), '{}');
@@ -468,6 +479,13 @@ describe('legacy-errors (integration)', () => {
           PKG_C_DIR,
           'c',
           "export function logC(): void {\n  console.log('c');\n}\n"
+        );
+      }
+      if (seedLegacyPackage) {
+        seedPackage(
+          PKG_D_DIR,
+          'd',
+          "export function logD(): void {\n  console.log('d');\n}\n"
         );
       }
       git(['init']);
@@ -499,15 +517,20 @@ describe('legacy-errors (integration)', () => {
         ])
       );
 
-      // Each package is announced as it is processed.
+      // Each package is announced as it is processed, by its repo-relative path
+      // rather than its absolute one.
       expect(
         infoSpy.mock.calls.some(([msg]) =>
-          String(msg).includes(`Legacying errors in ${PKG_A_DIR}`)
+          String(msg).includes(
+            `Legacying errors in ${join('packages', 'a')}`
+          )
         )
       ).toBe(true);
       expect(
         infoSpy.mock.calls.some(([msg]) =>
-          String(msg).includes(`Legacying errors in ${PKG_B_DIR}`)
+          String(msg).includes(
+            `Legacying errors in ${join('packages', 'b')}`
+          )
         )
       ).toBe(true);
     });
@@ -526,6 +549,24 @@ describe('legacy-errors (integration)', () => {
       expect(hasLegacyComment(PKG_A_INDEX, 'no-console')).toBe(true);
       expect(hasLegacyComment(PKG_B_INDEX, 'no-debugger')).toBe(true);
       expect(hasLegacyComment(PKG_C_INDEX, 'no-console')).toBe(false);
+      // Only the two scanned packages contribute ids to the shared database.
+      expect(readData()).toHaveLength(2);
+    });
+
+    it('does not legacy errors in packages matched by a wildcard ignore path', async () => {
+      initMonorepo({
+        ignorePackagePaths: ['legacy/*'],
+        seedLegacyPackage: true,
+      });
+
+      vi.spyOn(console, 'info').mockImplementation(() => undefined);
+      await legacyExistingErrors({ config: CONFIG_FILE, verbose: false });
+
+      // Packages a and b are legacied; the wildcard-ignored legacy/d package is
+      // never scanned, so its error is left untouched.
+      expect(hasLegacyComment(PKG_A_INDEX, 'no-console')).toBe(true);
+      expect(hasLegacyComment(PKG_B_INDEX, 'no-debugger')).toBe(true);
+      expect(hasLegacyComment(PKG_D_INDEX, 'no-console')).toBe(false);
       // Only the two scanned packages contribute ids to the shared database.
       expect(readData()).toHaveLength(2);
     });

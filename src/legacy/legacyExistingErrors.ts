@@ -4,7 +4,11 @@ import { isAbsolute, resolve } from 'node:path';
 import type { Config } from '../util/config.js';
 import { getPackageSpecificConfig, readConfig } from '../util/config.js';
 import { createDatabase } from '../util/db.js';
-import { getFileList, getRepoRoot } from '../util/files.js';
+import {
+  getFileList,
+  getRepoRoot,
+  getUnprefixedRelativeDir,
+} from '../util/files.js';
 import { getPackageRootDirs } from '../util/getPackageRootDirs.js';
 import { error, info, setVerbose, time } from '../util/logging.js';
 import { printValidationErrors } from '../util/printValidationErrors.js';
@@ -43,7 +47,12 @@ export async function legacyExistingErrors(options: CommonOptions) {
       process.exit(1);
     }
     for (const packageRootDir of packagePaths) {
-      info(`Legacying errors in ${packageRootDir}...`);
+      info(
+        `Legacying errors in ${getUnprefixedRelativeDir({
+          path: packageRootDir,
+          repoRootDir,
+        })}...`
+      );
       const packageSpecificConfig = getPackageSpecificConfig({
         packageRootDir,
         config,

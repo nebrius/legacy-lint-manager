@@ -91,6 +91,25 @@ export function parseConfig({
   if (data.monorepoConfig) {
     for (let i = 0; i < data.monorepoConfig.ignorePackagePaths.length; i++) {
       const ignorePath = data.monorepoConfig.ignorePackagePaths[i];
+      // If this is a wildcard path, make sure the wildcard is at the end
+      const firstWildcardIndex = ignorePath.indexOf('*');
+      if (
+        firstWildcardIndex !== -1 &&
+        firstWildcardIndex !== ignorePath.length - 1
+      ) {
+        error(
+          `Wildcards in ignore package paths must only be at the end: ${ignorePath}`
+        );
+        process.exit(1);
+      }
+      if (firstWildcardIndex !== -1 && !ignorePath.endsWith('/*')) {
+        error(
+          `Wildcard in ignore package path must be preceded by a forward slash, e.g. "ignored/*", not "ignored*": ${ignorePath}`
+        );
+        process.exit(1);
+      }
+
+      // Wildcard patterns are allowed in isAbsolute/resolve, so nothing special needed
       if (!isAbsolute(ignorePath)) {
         data.monorepoConfig.ignorePackagePaths[i] = resolve(
           dirname(configFilePath),

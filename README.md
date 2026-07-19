@@ -235,6 +235,10 @@ Only two settings can be overridden: `lintCommand`, which _replaces_ the repo-le
 
 **Ignoring packages.** While I strongly discourage you from opting packages out of validation, if you have a valid reason to do so, you can add workspace-relative paths to `monorepoConfig.ignorePackagePaths`. Ignored packages are skipped by both commands.
 
+An entry can also end in a simple wildcard, e.g. `"sandbox/*"`, which ignores every package under that directory. The `*` must be the last character and must come right after a slash, so `sandbox*` and `sand*/box` are both rejected when the config is read.
+
+**Important:** a wildcard also matches packages added under that directory in the future, without a config change for the ratchet to catch. Use it for directories that are ignored as a matter of policy, not as shorthand for today's list of exceptions.
+
 Note: a path that doesn't match any workspace package is a hard error during validation, and _adding_ new ignored packages is blocked by the compare-branch ratchet like any other enforcement loosening. Growing the ignore list requires you to go through the same steps as re-legacying a codebase.
 
 **Boundaries to be aware of:**
@@ -303,7 +307,7 @@ The database in your PR contains entries that don't exist on the compare branch,
 
 ### Config drift errors
 
-A family of errors of the form "…does not match… the compare config", covering the pragma, `ignoreWarnings`, the compare branch itself, removal of non-disableable rules (**"Non-disableable rules cannot be removed from the compare branch."**), newly ignored packages (**"New ignored packages cannot be added to the config."**, and **"Unknown ignore package path X"** for entries matching no package), and single↔monorepo conversion. All of them mean that enforcement settings changed relative to the compare branch, which is not allowed.
+A family of errors of the form "…does not match… the compare config", covering the pragma, `ignoreWarnings`, the compare branch itself, removal of non-disableable rules (**"Non-disableable rules cannot be removed from the compare branch."**), newly ignored packages (**"New ignored packages cannot be added to the config."**, plus **"Unknown ignore package path X"** and **"Ignore package path wildcard X did not match any packages"** for entries matching no package), and single↔monorepo conversion. All of them mean that enforcement settings changed relative to the compare branch, which is not allowed.
 
 The same ratchet covers [package config override files](#package-config-override-files): **"Package config override file X is missing non-disableable rules that were present in the compare branch"** means rules were removed from an override, and **"Package config override file X was deleted but it included non-disableable rules."** means an override that carried rules was deleted outright. Restore the rules (or the file).
 
@@ -386,7 +390,7 @@ The branch whose committed database and config are the ratchet baseline, usually
 
 #### monorepoConfig
 
-Presence of this object enables monorepo mode ([Monorepos](#monorepos)). Its one field, `ignorePackagePaths`, lists workspace packages to skip, resolved relative to the config file. Entries are validated to ensure each path matches a workspace package, and additions are blocked by the config-drift ratchet.
+Presence of this object enables monorepo mode ([Monorepos](#monorepos)). Its one field, `ignorePackagePaths`, lists workspace packages to skip, resolved relative to the config file. An entry ending in `/*` skips every package under that directory. Entries are validated to ensure each path matches at least one workspace package, and additions are blocked by the config-drift ratchet.
 
 ### Package config override files
 

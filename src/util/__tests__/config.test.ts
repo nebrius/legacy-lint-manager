@@ -220,6 +220,64 @@ describe('config', () => {
         });
       });
 
+      it('resolves a relative wildcard ignore path against the config directory, keeping the wildcard', () => {
+        createConfig({
+          data: {
+            ...VALID_CONFIG,
+            monorepoConfig: { ignorePackagePaths: ['packages/*'] },
+          },
+          filePath: CONFIG_FILE,
+        });
+        // The prefix is anchored at the config file's directory just like a
+        // non-wildcard path, and the trailing /* survives resolution so
+        // getPackageRootDirs can still see it.
+        expect(readConfig(CONFIG_FILE).monorepoConfig).toEqual({
+          ignorePackagePaths: [resolve(dirname(CONFIG_FILE), 'packages/*')],
+        });
+      });
+
+      it('exits when a wildcard is not at the end of an ignore path', () => {
+        createConfig({
+          data: {
+            ...VALID_CONFIG,
+            monorepoConfig: { ignorePackagePaths: ['packages/*/nested'] },
+          },
+          filePath: CONFIG_FILE,
+        });
+        const exitSpy = mockExit();
+        const errorSpy = vi
+          .spyOn(console, 'error')
+          .mockImplementation(() => undefined);
+
+        expect(() => readConfig(CONFIG_FILE)).toThrow('process.exit called');
+        expect(exitSpy).toHaveBeenCalledWith(1);
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining(
+            'Wildcards in ignore package paths must only be at the end'
+          )
+        );
+      });
+
+      it('exits when a trailing wildcard is not preceded by a forward slash', () => {
+        createConfig({
+          data: {
+            ...VALID_CONFIG,
+            monorepoConfig: { ignorePackagePaths: ['packages*'] },
+          },
+          filePath: CONFIG_FILE,
+        });
+        const exitSpy = mockExit();
+        const errorSpy = vi
+          .spyOn(console, 'error')
+          .mockImplementation(() => undefined);
+
+        expect(() => readConfig(CONFIG_FILE)).toThrow('process.exit called');
+        expect(exitSpy).toHaveBeenCalledWith(1);
+        expect(errorSpy).toHaveBeenCalledWith(
+          expect.stringContaining('must be preceded by a forward slash')
+        );
+      });
+
       it('rejects a monorepoConfig with an unknown field', () => {
         // The nested monorepoConfig schema is additionalProperties: false.
         writeFileSync(

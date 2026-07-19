@@ -36,14 +36,18 @@ function writePackageJson(
 // Build a two-package npm workspace and return its root. manypkg only recognizes
 // a workspace when a lockfile marker is present; a bare `workspaces` field alone
 // falls back to a single root package. An empty npm lockfile is the lightest
-// marker that makes it resolve as an npm monorepo.
-function makeWorkspace(): string {
+// marker that makes it resolve as an npm monorepo. The extra group adds a
+// packages-extra/c package so a wildcard ignore can match some packages but not
+// all, including a sibling directory that shares the "packages" name prefix.
+function makeWorkspace({ extraGroup = false }: { extraGroup?: boolean } = {}) {
   const root = makeTempDir('lint-legacies-workspace-');
   writePackageJson(root, {
     name: 'root',
     version: '1.0.0',
     private: true,
-    workspaces: ['packages/*'],
+    workspaces: extraGroup
+      ? ['packages/*', 'packages-extra/*']
+      : ['packages/*'],
   });
   writeFileSync(join(root, 'package-lock.json'), '{}');
   writePackageJson(join(root, 'packages', 'a'), {
@@ -54,6 +58,12 @@ function makeWorkspace(): string {
     name: 'b',
     version: '1.0.0',
   });
+  if (extraGroup) {
+    writePackageJson(join(root, 'packages-extra', 'c'), {
+      name: 'c',
+      version: '1.0.0',
+    });
+  }
   return root;
 }
 
@@ -134,6 +144,64 @@ describe('getPackageRootDirs', () => {
     expect(result.sort()).toEqual(
       [join(root, 'packages', 'a'), join(root, 'packages', 'b')].sort()
     );
+  });
+
+  it('omits every package under a wildcard ignore path, but not a prefix-sharing sibling', () => {
+    const root = makeWorkspace({ extraGroup: true });
+    const validationErrors: ValidationError[] = [];
+
+    const result = run({
+      repoRootDir: root,
+      ignorePackagePaths: [join(root, 'packages', '*')],
+      validationErrors,
+    });
+
+    // Both packages under packages/ are dropped. packages-extra/c survives even
+    // though its directory name starts with "packages": the wildcard only
+    // matches past the trailing slash. A matching wildcard is not an error.
+    expect(result).toEqual([join(root, 'packages-extra', 'c')]);
+    expect(validationErrors).toEqual([]);
+  });
+
+  it('records a validation error for a wildcard that matches no packages', () => {
+    const root = makeWorkspace();
+    const validationErrors: ValidationError[] = [];
+
+    const result = run({
+      repoRootDir: root,
+      ignorePackagePaths: [join(root, 'nomatch', '*')],
+      validationErrors,
+    });
+
+    // The unmatched wildcard is reported, and the real packages are still
+    // returned.
+    expect(validationErrors).toEqual([
+      {
+        message: `Ignore package path wildcard "${join(root, 'nomatch', '*')}" did not match any packages`,
+      },
+    ]);
+    expect(result.sort()).toEqual(
+      [join(root, 'packages', 'a'), join(root, 'packages', 'b')].sort()
+    );
+  });
+
+  it('applies wildcard and exact ignore paths together', () => {
+    const root = makeWorkspace({ extraGroup: true });
+    const validationErrors: ValidationError[] = [];
+
+    const result = run({
+      repoRootDir: root,
+      ignorePackagePaths: [
+        join(root, 'packages', '*'),
+        join(root, 'packages-extra', 'c'),
+      ],
+      validationErrors,
+    });
+
+    // The wildcard drops a and b, the exact path drops c, and neither ignore is
+    // an error.
+    expect(result).toEqual([]);
+    expect(validationErrors).toEqual([]);
   });
 
   it('reports only the unknown paths when known and unknown ignores are mixed', () => {
