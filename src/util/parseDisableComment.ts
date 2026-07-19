@@ -1,4 +1,4 @@
-import { ID_LENGTH } from './constants.js';
+import { DEFAULT_UPDATE_COMMAND, ID_LENGTH } from './constants.js';
 import { InternalError } from './error.js';
 import { commaSeparatedStringToArray, escapeRegex } from './string.js';
 import type {
@@ -73,7 +73,7 @@ export function parseDisableComment({
         unusedLegaciedRules.add(rule);
         if (errorOnUnusedRules) {
           validationErrors.push({
-            message: `Rule ${rule} in legacy comment is not in the actual lint disable list and should be removed.`,
+            message: `Rule ${rule} in legacy comment is not in the actual lint disable list. Run \`${DEFAULT_UPDATE_COMMAND}\` to remove it.`,
             location: {
               file: comment.file,
               line: comment.startLine,

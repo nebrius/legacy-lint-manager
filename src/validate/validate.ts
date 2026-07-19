@@ -2,6 +2,7 @@ import { isAbsolute, resolve } from 'node:path';
 
 import type { Config } from '../util/config.js';
 import { getPackageSpecificConfig, readConfig } from '../util/config.js';
+import { DEFAULT_UPDATE_COMMAND } from '../util/constants.js';
 import { readDatabase } from '../util/db.js';
 import { getFileList, getRepoRoot } from '../util/files.js';
 import { getPackageRootDirs } from '../util/getPackageRootDirs.js';
@@ -138,7 +139,7 @@ export function validate({
     }
   } else if (wereErrorsFixed) {
     error(
-      'Legacied lint errors were fixed, good job! Run with --update to update the database.'
+      `Legacied lint errors were fixed, good job! Run \`${DEFAULT_UPDATE_COMMAND}\` to update the database.`
     );
     process.exit(1);
   }

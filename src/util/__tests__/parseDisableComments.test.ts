@@ -485,7 +485,7 @@ describe('parseDisableComment', () => {
       // trailing/double comma, or whitespace) are dropped silently instead. If
       // nothing survives, the whole comment is rejected.
       const NOT_IN_LIST = (rule: string) =>
-        `Rule ${rule} in legacy comment is not in the actual lint disable list and should be removed.`;
+        `Rule ${rule} in legacy comment is not in the actual lint disable list. Run \`npx legacy-lint-manager validate --update\` to remove it.`;
       const NO_VALID_RULES =
         'Legacy comment has no valid rules and should be removed';
 
@@ -759,7 +759,7 @@ describe('parseDisableComment', () => {
       expect(validationErrors).toEqual([
         {
           message:
-            'Rule no-debugger in legacy comment is not in the actual lint disable list and should be removed.',
+            'Rule no-debugger in legacy comment is not in the actual lint disable list. Run `npx legacy-lint-manager validate --update` to remove it.',
           location: { file: 'test.ts', line: 1 },
         },
       ]);

@@ -275,7 +275,7 @@ A legacy comment no longer parses, usually from hand-editing or merge damage. Re
 Related message with the same cause and fix:
 - **"Legacy comment must use \*-disable-next-line"** - a legacy comment was converted to a block or same-line disable, which isn't supported
 
-### "Rule X in legacy comment is not in the actual lint disable list and should be removed."
+### "Rule X in legacy comment is not in the actual lint disable list."
 
 A rule in a legacy comment was removed from the actual lint disable comment, e.g. `// eslint-disable-next-line foo -- {pragma} (foo, bar) {id}`. This usually means the rule's violation was fixed and the disable was trimmed to match, congrats! Run:
 
