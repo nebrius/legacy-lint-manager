@@ -107,7 +107,13 @@ chance to reconcile, which is the wedged state.
   and fix the violation.
 - **"Legacy ID X does not exist in the database on BRANCH"** or **"New
   rules cannot be added to existing legacy entries."** The database file
-  grew relative to the compare branch. Revert the database changes.
+  grew relative to the compare branch. Revert the database changes. One
+  exception: when the change also removes a package from
+  `ignorePackagePaths`, new entries whose legacy comments live in that
+  package are sanctioned onboarding and pass validation. Seeing this
+  error anyway means the flagged entry does not belong to the
+  un-ignored package, or its database entry lists rules beyond what its
+  legacy comment declares.
 - **"... does not match ... the compare config"**, **"Non-disableable rules
   cannot be removed from the compare branch."**, **"New ignored packages
   cannot be added to the config."**, or a package config override error:

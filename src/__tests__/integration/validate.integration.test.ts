@@ -819,6 +819,48 @@ describe('validate (integration)', () => {
       }).not.toThrow();
     });
 
+    it('accepts new database entries for a package removed from ignorePackagePaths', () => {
+      // Baseline: package b is ignored, so it holds a raw violation with no
+      // legacy comment and no database entry. The feature branch onboards it:
+      // the ignore entry is removed, the violation gets its legacy comment, and
+      // the database gains b's entry, all in one change.
+      initMonorepo({
+        db: [[CONSOLE_ID, ['no-console']]],
+        ignorePackagePaths: ['packages/b'],
+        seedPackages: () => {
+          seedConsolePackage();
+          seedPackageSource('b', 'uses.ts', [
+            'export function debugSomething(): void {',
+            '  debugger;',
+            '}',
+            '',
+          ]);
+        },
+      });
+      writeFileSync(
+        join(REPO_DIR, CONFIG_REL),
+        JSON.stringify(makeConfig([], { ignorePackagePaths: [] }))
+      );
+      seedDebuggerPackage();
+      writeFileSync(
+        WORKING_DATA,
+        JSON.stringify([
+          [CONSOLE_ID, ['no-console']],
+          [DEBUGGER_ID, ['no-debugger']],
+        ])
+      );
+
+      expect(() => {
+        runValidate();
+      }).not.toThrow();
+      // Validation passed without rewriting anything, so the database keeps
+      // both packages' entries.
+      expect(readData()).toEqual([
+        [CONSOLE_ID, ['no-console']],
+        [DEBUGGER_ID, ['no-debugger']],
+      ]);
+    });
+
     it('exits with an error when an ignore path is not a package', () => {
       initMonorepo({
         db: [

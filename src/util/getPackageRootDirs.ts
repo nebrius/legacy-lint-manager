@@ -34,11 +34,17 @@ export function getPackageRootDirs({
     }
   }
   return packageRootDirs.filter(
-    (dir) =>
-      !ignorePackagePaths.some((ignorePath) =>
-        ignorePath.endsWith('/*')
-          ? dir.startsWith(ignorePath.slice(0, -1))
-          : dir === ignorePath
-      )
+    (dir) => !matchesIgnorePackagePaths(dir, ignorePackagePaths)
+  );
+}
+
+export function matchesIgnorePackagePaths(
+  dir: string,
+  ignorePackagePaths: string[]
+) {
+  return ignorePackagePaths.some((ignorePath) =>
+    ignorePath.endsWith('/*')
+      ? dir.startsWith(ignorePath.slice(0, -1))
+      : dir === ignorePath
   );
 }

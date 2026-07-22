@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 1.1.0
+
+- Added the ability to migrate an ignored package to legacy w/o it tripping validate
+
 ## 1.0.0 (2026-07-19)
 
 - Published initial release

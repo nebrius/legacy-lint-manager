@@ -56,17 +56,6 @@ export function validate({
       })
     : undefined;
 
-  time(`Comparing with the compare branch`, () => {
-    compareWithBranch({
-      currentDatabase: database,
-      currentConfig: config,
-      configFilePath,
-      validationErrors,
-      repoRootDir,
-      packageRootDirs,
-    });
-  });
-
   const legacyComments: LegacyComment[] = [];
   if (packageRootDirs) {
     for (const packageRootDir of packageRootDirs) {
@@ -95,6 +84,21 @@ export function validate({
       })
     );
   }
+
+  // This runs after the per-package validation because it needs the parsed
+  // legacy comments to graft newly onboarded packages into the compare
+  // database
+  time(`Comparing with the compare branch`, () => {
+    compareWithBranch({
+      currentDatabase: database,
+      currentConfig: config,
+      configFilePath,
+      validationErrors,
+      repoRootDir,
+      packageRootDirs,
+      legacyComments,
+    });
+  });
 
   // Print errors if any were found and exit with error code
   if (validationErrors.length > 0) {

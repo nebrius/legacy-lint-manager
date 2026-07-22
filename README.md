@@ -241,13 +241,27 @@ Only two settings can be overridden: `lintCommand`, which _replaces_ the repo-le
 
 `nonDisableableRules` entries in a package config override are enforced like they are in the repo root config. Removing rules from an override, or deleting an override file that contains rules, fails validation just like removing repo-level rules does. See [Package config override files](#package-config-override-files) for the full reference.
 
-**Ignoring packages.** While I strongly discourage you from opting packages out of validation, if you have a valid reason to do so, you can add workspace-relative paths to `monorepoConfig.ignorePackagePaths`. Ignored packages are skipped by both commands.
+**Ignoring packages.** While I strongly discourage you from opting packages out of validation, if you have a valid reason to do so, you can add workspace-relative paths to `monorepoConfig.ignorePackagePaths`. Ignored packages are skipped by both commands. One sanctioned and useful use-case for ignoring packages is to onboard packages one at a time in a monorepo. See ([Monorepos](#monorepos)) for more information.
 
 An entry can also end in a simple wildcard, e.g. `"sandbox/*"`, which ignores every package under that directory. The `*` must be the last character and must come right after a slash, so `sandbox*` and `sand*/box` are both rejected when the config is read.
 
 **Important:** a wildcard also matches packages added under that directory in the future, without a config change for the ratchet to catch. Use it for directories that are ignored as a matter of policy, not as shorthand for today's list of exceptions.
 
 Note: a path that doesn't match any workspace package is a hard error during validation, and _adding_ new ignored packages is blocked by the compare-branch ratchet like any other enforcement loosening. Growing the ignore list requires you to go through the same steps as re-legacying a codebase.
+
+**Un-ignoring packages for staged adoption.** Removing entries is a different story, and it's the sanctioned way to adopt a monorepo in stages. Sometimes some packages are in bad enough shape that it doesn't make sense to legacy them yet. Some examples:
+
+- The lint config is not fully functional, leading to non-lint-rule errors.
+    - For example, there may not be a parser available to parse a file, or a TypeScript file isn't included in the default tsconfig.
+- There might be a lot of fixes that can be applied with `--fix`, and it makes more sense to fix them than legacy them
+
+In these cases, I recommend adding them to `ignorePackagePaths`, setting up CI after legacying non-ignored packages, and then onboarding them one at a time. To onboard a package: delete the package's entry, run `legacy-errors` to generate its comments and database entries, and put the whole thing up as one PR.
+
+If you plan to onboard packages one at a time, I recommend that you list them individually instead of using a wildcard. When you use a wildcard, you can only onboard all packages covered by the wildcard, thus coupling them together.
+
+Validation allows new database entries when their legacy comments live in a package that was just removed from the ignore list, so onboarding a package doesn't require the CI coordination dance described in [Re-legacying after adding rules](#re-legacying-after-adding-rules).
+
+This workflow is safe to follow and doesn't loosen the ratchet. Since additions to the ignore list are blocked, each package can go through this one-way onboarding flow exactly once.
 
 **Boundaries to be aware of:**
 
@@ -314,6 +328,8 @@ Note: this is also listed under [Known limitations](#known-limitations).
 ### "Legacy ID X does not exist in the database on BRANCH. New legacy entries cannot be added."
 
 The database in your PR contains entries that don't exist on the compare branch, meaning the database grew. The fix is to revert your database changes. The same applies to **"New rules cannot be added to existing legacy entries."**, which is the database-file edit variant of the same drift.
+
+There is one exception: entries whose legacy comments live in a package that your PR removed from `ignorePackagePaths` are allowed, because that package is being onboarded ([Monorepos](#monorepos)). If you did exactly that and still see this error, either the flagged entry doesn't belong to the package you un-ignored, or its database entry lists rules beyond what its legacy comment declares.
 
 ### Config drift errors
 
@@ -446,7 +462,7 @@ The branch whose committed database and config are the ratchet baseline, usually
 
 #### monorepoConfig
 
-Presence of this object enables monorepo mode ([Monorepos](#monorepos)). Its one field, `ignorePackagePaths`, lists workspace packages to skip, resolved relative to the config file. An entry ending in `/*` skips every package under that directory. Entries are validated to ensure each path matches at least one workspace package, and additions are blocked by the config-drift ratchet.
+Presence of this object enables monorepo mode ([Monorepos](#monorepos)). Its one field, `ignorePackagePaths`, lists workspace packages to skip, resolved relative to the config file. An entry ending in `/*` skips every package under that directory. Entries are validated to ensure each path matches at least one workspace package, and additions are blocked by the config-drift ratchet. Removing an entry is allowed, and lets the same PR seed that package's legacy comments and database entries, which is the staged-adoption path described in [Monorepos](#monorepos).
 
 ### Package config override files
 

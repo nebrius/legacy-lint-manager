@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '../../util/config.js';
 import type { Database } from '../../util/db.js';
 import { createDatabase } from '../../util/db.js';
-import type { ValidationError } from '../../util/types.js';
+import type { LegacyComment, ValidationError } from '../../util/types.js';
 import { compareWithBranch } from '../../validate/compareWithBranch.js';
 
 // compareWithBranch shells out to git (`git show <branch>:<path>`) to read the
@@ -98,10 +98,12 @@ function runCompare({
   currentConfig,
   currentDatabase,
   packageRootDirs,
+  legacyComments = [],
 }: {
   currentConfig: Config;
   currentDatabase: Database;
   packageRootDirs?: string[];
+  legacyComments?: LegacyComment[];
 }): ValidationError[] {
   const validationErrors: ValidationError[] = [];
   compareWithBranch({
@@ -111,8 +113,39 @@ function runCompare({
     validationErrors,
     repoRootDir: REPO_DIR,
     packageRootDirs,
+    legacyComments,
   });
   return validationErrors;
+}
+
+// compareWithBranch only reads a legacy comment's id, file, and rule lists; the
+// positional fields exist to satisfy the type and hold dummy offsets.
+function makeLegacyComment({
+  id,
+  file,
+  legaciedRules,
+  unusedLegaciedRules = [],
+}: {
+  id: string;
+  file: string;
+  legaciedRules: string[];
+  unusedLegaciedRules?: string[];
+}): LegacyComment {
+  return {
+    type: 'legacy',
+    id,
+    file,
+    legaciedRules,
+    nonLegaciedRules: [],
+    unusedLegaciedRules,
+    startIndex: 0,
+    startLine: 0,
+    endIndex: 0,
+    endLine: 0,
+    descriptionStartIndex: 0,
+    legaciedRulesStartIndex: 0,
+    legaciedRulesEndIndex: 0,
+  };
 }
 
 // Build the in-memory "current" database the same way the real code does.
@@ -334,6 +367,9 @@ describe('compareWithBranch (integration)', () => {
   // The monorepo shape of the config is itself load-bearing: it cannot silently
   // appear/disappear between branches, and its ignore list can only shrink — a
   // new ignored package would hide errors that the compare branch still enforces.
+  // The onboarding graft (tested in the next describe) is one-shot safe only
+  // because additions stay blocked here: a package that leaves the ignore list
+  // can never come back for a second round of new entries.
   describe('monorepo config drift', () => {
     it('records an error when the current config is a monorepo but the compare branch is not', () => {
       initRepo({ config: BASE_CONFIG, db: [] });
@@ -391,6 +427,190 @@ describe('compareWithBranch (integration)', () => {
       // Removing an ignored package is allowed (it only re-enables enforcement),
       // so an identical list — and a shorter one — must not be flagged.
       expect(errors).toEqual([]);
+    });
+  });
+
+  // Removing a package from ignorePackagePaths onboards it: the package's
+  // legacy comments are its initial database entries, grafted into the compare
+  // database so the ratchet checks treat them as if they had been inited on the
+  // compare branch. Anything not attributable to a newly covered package is
+  // still rejected by those same, unchanged checks.
+  describe('onboarding a package removed from the ignore list', () => {
+    const ONBOARDED = join(REPO_DIR, 'packages', 'onboarded');
+
+    it('allows new database entries for a package removed from the ignore list', () => {
+      initRepo({ config: withMonorepo(BASE_CONFIG, [ONBOARDED]), db: [] });
+
+      const errors = runCompare({
+        currentConfig: withMonorepo(BASE_CONFIG, []),
+        currentDatabase: makeDatabase([['new', ['no-console']]]),
+        packageRootDirs: [ONBOARDED],
+        legacyComments: [
+          makeLegacyComment({
+            id: 'new',
+            file: join(ONBOARDED, 'src', 'uses.ts'),
+            legaciedRules: ['no-console'],
+          }),
+        ],
+      });
+
+      expect(errors).toEqual([]);
+    });
+
+    it('covers every package matched by a removed wildcard entry', () => {
+      const pkgA = join(REPO_DIR, 'sandbox', 'a');
+      const pkgB = join(REPO_DIR, 'sandbox', 'b');
+      initRepo({
+        config: withMonorepo(BASE_CONFIG, [join(REPO_DIR, 'sandbox', '*')]),
+        db: [],
+      });
+
+      const errors = runCompare({
+        currentConfig: withMonorepo(BASE_CONFIG, []),
+        currentDatabase: makeDatabase([
+          ['ida', ['no-console']],
+          ['idb', ['no-debugger']],
+        ]),
+        packageRootDirs: [pkgA, pkgB],
+        legacyComments: [
+          makeLegacyComment({
+            id: 'ida',
+            file: join(pkgA, 'src', 'a.ts'),
+            legaciedRules: ['no-console'],
+          }),
+          makeLegacyComment({
+            id: 'idb',
+            file: join(pkgB, 'src', 'b.ts'),
+            legaciedRules: ['no-debugger'],
+          }),
+        ],
+      });
+
+      expect(errors).toEqual([]);
+    });
+
+    it('grafts the full legacy list so an entry with a just-fixed rule still matches', () => {
+      initRepo({ config: withMonorepo(BASE_CONFIG, [ONBOARDED]), db: [] });
+
+      // no-debugger sits in the comment's legacy list but not its disable list
+      // (its violation was fixed), so the database entry legitimately carries a
+      // rule the disable list no longer has. The unused-rule machinery owns
+      // that flow; the compare check must not reject it as a new rule.
+      const errors = runCompare({
+        currentConfig: withMonorepo(BASE_CONFIG, []),
+        currentDatabase: makeDatabase([['new', ['no-console', 'no-debugger']]]),
+        packageRootDirs: [ONBOARDED],
+        legacyComments: [
+          makeLegacyComment({
+            id: 'new',
+            file: join(ONBOARDED, 'src', 'uses.ts'),
+            legaciedRules: ['no-console'],
+            unusedLegaciedRules: ['no-debugger'],
+          }),
+        ],
+      });
+
+      expect(errors).toEqual([]);
+    });
+
+    it('still flags a new id whose comment lives in a package that was never ignored', () => {
+      const covered = join(REPO_DIR, 'packages', 'covered');
+      initRepo({ config: withMonorepo(BASE_CONFIG, [ONBOARDED]), db: [] });
+
+      const errors = runCompare({
+        currentConfig: withMonorepo(BASE_CONFIG, []),
+        currentDatabase: makeDatabase([['sneaked', ['no-console']]]),
+        packageRootDirs: [ONBOARDED, covered],
+        legacyComments: [
+          makeLegacyComment({
+            id: 'sneaked',
+            file: join(covered, 'src', 'uses.ts'),
+            legaciedRules: ['no-console'],
+          }),
+        ],
+      });
+
+      expect(errors).toEqual([
+        {
+          message:
+            'Legacy ID "sneaked" does not exist in the database on main. New legacy entries cannot be added.',
+        },
+      ]);
+    });
+
+    it('still flags a new id that has no legacy comment anywhere', () => {
+      initRepo({ config: withMonorepo(BASE_CONFIG, [ONBOARDED]), db: [] });
+
+      const errors = runCompare({
+        currentConfig: withMonorepo(BASE_CONFIG, []),
+        currentDatabase: makeDatabase([['orphan', ['no-console']]]),
+        packageRootDirs: [ONBOARDED],
+      });
+
+      expect(errors).toEqual([
+        {
+          message:
+            'Legacy ID "orphan" does not exist in the database on main. New legacy entries cannot be added.',
+        },
+      ]);
+    });
+
+    it('still flags database rules beyond what the onboarded comment declares', () => {
+      initRepo({ config: withMonorepo(BASE_CONFIG, [ONBOARDED]), db: [] });
+
+      // The grafted entry contains exactly the comment's legacy list, so a
+      // database entry padded with an extra rule cannot bank headroom for a
+      // future suppression.
+      const errors = runCompare({
+        currentConfig: withMonorepo(BASE_CONFIG, []),
+        currentDatabase: makeDatabase([['new', ['no-console', 'no-eval']]]),
+        packageRootDirs: [ONBOARDED],
+        legacyComments: [
+          makeLegacyComment({
+            id: 'new',
+            file: join(ONBOARDED, 'src', 'uses.ts'),
+            legaciedRules: ['no-console'],
+          }),
+        ],
+      });
+
+      expect(errors).toEqual([
+        {
+          message:
+            'Rule "no-eval" for legacy ID "new" is not defined in the database on main. New rules cannot be added to existing legacy entries.',
+        },
+      ]);
+    });
+
+    it('does not graft over an id that already exists on the compare branch', () => {
+      // A file moved from a covered package into the onboarded one keeps its
+      // id on both sides, and its original rule set must stay ratcheted.
+      initRepo({
+        config: withMonorepo(BASE_CONFIG, [ONBOARDED]),
+        db: [['moved', ['no-console']]],
+      });
+
+      const errors = runCompare({
+        currentConfig: withMonorepo(BASE_CONFIG, []),
+        currentDatabase: makeDatabase([
+          ['moved', ['no-console', 'no-debugger']],
+        ]),
+        packageRootDirs: [ONBOARDED],
+        legacyComments: [
+          makeLegacyComment({
+            id: 'moved',
+            file: join(ONBOARDED, 'src', 'uses.ts'),
+            legaciedRules: ['no-console', 'no-debugger'],
+          }),
+        ],
+      });
+
+      expect(errors).toEqual([
+        {
+          message:
+            'Rule "no-debugger" for legacy ID "moved" is not defined in the database on main. New rules cannot be added to existing legacy entries.',
+        },
+      ]);
     });
   });
 

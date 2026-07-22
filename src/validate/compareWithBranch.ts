@@ -1,6 +1,6 @@
 import { execSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 import type { Config } from '../util/config.js';
 import {
@@ -12,8 +12,9 @@ import { DEFAULT_CONFIG_FILE_NAME } from '../util/constants.js';
 import type { Database } from '../util/db.js';
 import { createDatabase } from '../util/db.js';
 import { getUnprefixedRelativeDir } from '../util/files.js';
+import { matchesIgnorePackagePaths } from '../util/getPackageRootDirs.js';
 import { error } from '../util/logging.js';
-import type { ValidationError } from '../util/types.js';
+import type { LegacyComment, ValidationError } from '../util/types.js';
 
 export function compareWithBranch({
   currentDatabase,
@@ -22,6 +23,7 @@ export function compareWithBranch({
   validationErrors,
   repoRootDir,
   packageRootDirs,
+  legacyComments,
 }: {
   currentDatabase: Database;
   currentConfig: Config;
@@ -29,6 +31,7 @@ export function compareWithBranch({
   validationErrors: ValidationError[];
   repoRootDir: string;
   packageRootDirs: string[] | undefined;
+  legacyComments: LegacyComment[];
 }) {
   const { compareDatabase, compareConfig, resolvedCompareBranchName } =
     getCompareInfo({
@@ -36,6 +39,54 @@ export function compareWithBranch({
       configFilePath,
       repoRootDir,
     });
+  const {
+    nonDisableableRules: currentNonDisableableRules,
+    ignoreWarnings: currentIgnoreWarnings,
+    pragma: currentPragma,
+    compareBranch: currentCompareBranch,
+    monorepoConfig: currentMonorepoConfig,
+  } = currentConfig;
+  const {
+    nonDisableableRules: compareNonDisableableRules,
+    ignoreWarnings: compareIgnoreWarnings,
+    pragma: comparePragma,
+    compareBranch: compareCompareBranch,
+    monorepoConfig: compareMonorepoConfig,
+  } = compareConfig;
+
+  // A package that the compare branch ignores but the current config does not
+  // is being onboarded by this change, and its legacy comments are its initial
+  // database entries. Graft them into the compare database as if the package
+  // had been inited on the compare branch, so that every ratchet check below
+  // applies to it unchanged. This is one-shot safe only because packages can
+  // never be added to ignorePackagePaths (enforced below): once onboarded, a
+  // package can never leave the ratchet again.
+  if (compareMonorepoConfig && packageRootDirs) {
+    const newlyCoveredPackageDirs = packageRootDirs.filter((dir) =>
+      matchesIgnorePackagePaths(dir, compareMonorepoConfig.ignorePackagePaths)
+    );
+    const compareIds = compareDatabase.getIds();
+    for (const comment of legacyComments) {
+      // Existing compare entries are never overwritten, so a file moved into
+      // the onboarded package keeps its original rule ratchet
+      if (
+        !compareIds.has(comment.id) &&
+        newlyCoveredPackageDirs.some((dir) =>
+          comment.file.startsWith(dir + sep)
+        )
+      ) {
+        // The grafted entry is the comment's full legacy list, including
+        // unused rules, so that --update can prune a just-fixed rule without
+        // tripping the new-rules check. The unused-rule machinery handles the
+        // fixed-rule flow on its own.
+        compareIds.set(comment.id, [
+          ...comment.legaciedRules,
+          ...comment.unusedLegaciedRules,
+        ]);
+      }
+    }
+  }
+
   for (const [id, rules] of currentDatabase.getIds()) {
     const compareRules = compareDatabase.getIds().get(id);
     if (!compareRules) {
@@ -61,20 +112,6 @@ export function compareWithBranch({
   }
 
   // Ensure that load-bearing config options have not changed
-  const {
-    nonDisableableRules: currentNonDisableableRules,
-    ignoreWarnings: currentIgnoreWarnings,
-    pragma: currentPragma,
-    compareBranch: currentCompareBranch,
-    monorepoConfig: currentMonorepoConfig,
-  } = currentConfig;
-  const {
-    nonDisableableRules: compareNonDisableableRules,
-    ignoreWarnings: compareIgnoreWarnings,
-    pragma: comparePragma,
-    compareBranch: compareCompareBranch,
-    monorepoConfig: compareMonorepoConfig,
-  } = compareConfig;
 
   // Check that the compare branch is the same
   if (currentCompareBranch !== compareCompareBranch) {
