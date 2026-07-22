@@ -1,6 +1,6 @@
 {
   "name": "legacy-lint-manager",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A monorepo-aware tool for enabling ESLint/Oxlint rules on codebases with legacy errors",
   "homepage": "https://github.com/nebrius/legacy-lint-manager#readme",
   "bugs": {
