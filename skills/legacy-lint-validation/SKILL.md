@@ -5,11 +5,13 @@ description: >
   errors like "cannot be disabled", "New legacy entries cannot be added",
   "Duplicate legacy ID", "Unregistered legacy error", "Malformed legacy
   comment", "is not defined in the database", or "does not match ... the
-  compare config". Also use when resolving a merge conflict on the legacy
-  lint database file (default `legacy-lint.data.json`). Explains which
-  failures mean fix-the-code, when to run validate --update, which
-  resolutions are forbidden, and how to resolve database merge conflicts
-  safely.
+  compare config". Also use when ESLint reports "Unused eslint-disable
+  directive" for a legacy comment after you fix its violation, and when
+  resolving a merge conflict on the legacy lint database file (default
+  `legacy-lint.data.json`). Explains the two halves of a legacy comment,
+  which failures mean fix-the-code, how to retire a grant you fixed, when to
+  run validate --update, which resolutions are forbidden, and how to resolve
+  database merge conflicts safely.
 license: MIT
 ---
 
@@ -23,7 +25,15 @@ the set of legacied errors can shrink, but it can never grow. Three
 artifacts work together:
 
 - Generated legacy comments in source, of the form
-  `// eslint-disable-next-line rule1 -- <pragma> (rule1) <id>`
+  `// eslint-disable-next-line rule1 -- <pragma> (rule1) <id>`. Every legacy
+  comment has two halves, split at the `--`, and the distinction is critical:
+  - **Before `--`** is an ordinary ESLint directive
+    (`// eslint-disable-next-line rule1`). This half is plain ESLint, not
+    bookkeeping — you may edit it by hand (e.g. to remove a rule you fixed).
+  - **After `--`** is the *legacy statement* (`<pragma> (rule1) <id>`): the
+    tool's bookkeeping that ties this grant to the database. Never hand-edit
+    this half. `validate --update` owns it and rewrites it to match the
+    directive.
 - A database file (default `legacy-lint.data.json`) mapping each ID to its
   legacied rules
 - A config file (default `legacy-lint.config.jsonc`) with enforcement
@@ -41,9 +51,12 @@ locally. They defeat the ratchet, and CI validates against the compare
 branch, so they fail there anyway:
 
 1. Never hand-edit the database file.
-2. Never write a new legacy comment, copy an existing one, or edit one by
-   hand. The pragma says "DO NOT COPY" and it means it: each legacy comment
-   is a one-time grant for one specific violation.
+2. Never write a new legacy comment or copy an existing one — the pragma says
+   "DO NOT COPY", and each grant is one-time, for one violation. Never
+   hand-edit the *legacy statement* (the half after `--`).
+   - But you MAY edit the *directive* half (before `--`) to remove a rule whose
+     violation you fixed — that retires the grant (see "Retiring a grant after
+     you fix its violation"); `--update` then syncs the legacy statement.
 3. Never relax the config relative to the compare branch: do not remove
    entries from `nonDisableableRules`, add to `ignorePackagePaths`, change
    `pragma` or `compareBranch`, or delete package config override files.
@@ -52,15 +65,72 @@ branch, so they fail there anyway:
 
 ## When the fix is one command
 
-These messages mean legacied violations were fixed, so the generated
-artifacts are now stale. This is the happy path:
+These messages come from `validate` itself and mean legacied violations were
+fixed, so the generated artifacts are now stale. This is the happy path:
 
 - "Legacied lint errors were fixed, good job!"
 - "Rule X in legacy comment is not in the actual lint disable list."
 - "Legacy comment has no valid rules and should be removed"
 
 Run `npx legacy-lint-manager validate --update`, then commit the modified
-files. Do not edit the comments or the database yourself.
+files. Do not edit the legacy statements or the database yourself.
+
+(The related ESLint error "Unused eslint-disable directive" is a *different*
+check and is not fixed by `--update` alone — see "Retiring a grant after you
+fix its violation" below.)
+
+## Retiring a grant after you fix its violation
+
+Any change that makes a legacied violation stop firing turns its grant into
+dead weight — the directive is now suppressing nothing. Common triggers:
+
+- Deleting the offending code outright.
+- Adding the consumer that makes a `no-unused-exports` / `no-test-only-imports`
+  grant unnecessary.
+- Replacing an `any` with a concrete type, clearing a legacied
+  `no-explicit-any` — one edit often clears several downstream `any` errors,
+  and every grant it retires must be reconciled.
+
+ESLint's own `--report-unused-disable-directives` (a separate check from
+`validate`) then fails with:
+
+    error  Unused eslint-disable directive (no problems were reported from 'rule1')
+
+`validate --update` will NOT resolve this on its own. It never consults live
+lint results and never decides which rules are still needed — it only rewrites
+the legacy statement (after `--`) to match the rules left in the directive
+(before `--`), and prunes database entries for comments that no longer exist.
+So the flow is directive-first: you retire the grant, the tool follows.
+
+1. Edit the DIRECTIVE (the half before `--`) to drop the fixed rule:
+
+   - If the directive lists other rules, remove just the fixed one:
+
+         before:  // eslint-disable-next-line foo, bar -- <pragma> (foo, bar) <id>
+         after:   // eslint-disable-next-line bar      -- <pragma> (foo, bar) <id>
+
+   - If it was the only rule, delete the entire comment line — nothing is left
+     to suppress:
+
+         before:  // eslint-disable-next-line foo -- <pragma> (foo) <id>
+         after:   (comment removed)
+
+2. Run `validate --update`. For a trimmed directive it reconciles the legacy
+   statement to match the rules left — `(foo, bar)` → `(bar)`:
+
+       result:  // eslint-disable-next-line bar      -- <pragma> (bar) <id>
+
+   For a comment you deleted whole, it prunes that ID from the database.
+
+3. Commit the edited source and the database together.
+
+Common mistake: skipping step 1 and expecting `--update` to notice the fix.
+It won't — it does not read lint results, so with the directive untouched the
+statement still matches it and `--update` is a no-op. Editing the directive
+half is expected and allowed (it is ordinary ESLint); hand-editing the legacy
+statement or the database is not (Hard rules 1-2). Deleting a whole comment
+plus `--update` is what prunes its database entry in sync — never delete the
+entry by hand.
 
 ## Resolving database merge conflicts
 
