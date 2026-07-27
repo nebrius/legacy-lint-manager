@@ -177,13 +177,21 @@ chance to reconcile, which is the wedged state.
   and fix the violation.
 - **"Legacy ID X does not exist in the database on BRANCH"** or **"New
   rules cannot be added to existing legacy entries."** The database file
-  grew relative to the compare branch. Revert the database changes. One
-  exception: when the change also removes a package from
-  `ignorePackagePaths`, new entries whose legacy comments live in that
-  package are sanctioned onboarding and pass validation. Seeing this
-  error anyway means the flagged entry does not belong to the
-  un-ignored package, or its database entry lists rules beyond what its
-  legacy comment declares.
+  grew relative to the compare branch. Two causes:
+  - You actually added the entries — revert the database changes. One
+    exception: when the change also removes a package from `ignorePackagePaths`,
+    new entries whose legacy comments live in that package are sanctioned
+    onboarding and pass validation. Seeing this error anyway means the flagged
+    entry does not belong to the un-ignored package, or its database entry
+    lists rules beyond what its legacy comment declares.
+  - **Your branch is stale.** The flagged IDs were *removed* on the compare
+    branch (someone else fixed those violations) while your out-of-date branch
+    still carries them, so they read as "new" against the now-newer compare
+    branch. The tell is a cluster of unfamiliar IDs you never touched. Fix:
+    rebase or merge the latest compare branch, then re-run — the removed
+    entries drop out and validation passes. (This is not the code being wrong;
+    it is the compare point being ahead of you. Don't hand-delete the entries
+    to silence it — rebase.)
 - **"... does not match ... the compare config"**, **"Non-disableable rules
   cannot be removed from the compare branch."**, **"New ignored packages
   cannot be added to the config."**, or a package config override error:
